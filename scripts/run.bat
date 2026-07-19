@@ -1,7 +1,15 @@
 @echo off
-REM Run script - starts the project locally.
-REM Customize this for the project's chosen language/framework (see .claude\project_config.md).
-REM Examples: python main.py, npm start, dotnet run.
+echo Starting Claude Projects Interface...
+echo.
 
-echo Run script not yet configured for this project.
-echo Edit scripts\run.bat to add the command that starts this project.
+REM Kill stale process on port 5173
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
+echo Port 5173 cleared.
+
+echo.
+cd /d "%~dp0..\src"
+echo Running npm run dev...
+call npm run dev
+echo.
+echo npm run dev exited (errorlevel %errorlevel%)
+pause

@@ -8,24 +8,9 @@ Append entries only.
 
 ## Completed Tickets
 
-Example
-
 TICKET-0001
-
-Created initial project.
-
----
-
-TICKET-0002
-
-Added settings window.
-
----
-
-TICKET-0003
-
-Improved rendering performance.
-
----
-
-Continue adding completed tickets in chronological order.
+2026-07-19
+Bootstrapped Claude Projects Interface (CPI) — Electron + React + Tailwind + Vite + SQLite scaffold,
+IPC bridge, DBService with full schema, AgentService (spawn claude/codex CLI subprocesses),
+LoadBalancer, OptimizationAdvisor, all renderer views (AgentView, AuditView, TokenView, SettingsView),
+Sidebar project switcher, ModelSelector component, Zustand store, setup/run/build scripts, README, CHANGELOG.

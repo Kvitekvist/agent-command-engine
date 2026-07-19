@@ -1,75 +1,47 @@
-# AI Project Bootstrap Template
+# Claude Projects Interface (CPI)
 
-## Overview
-
-This is a copy-pasteable starting point for new AI-assisted software projects.
-It provides a standardized structure, workflow, and long-term memory system so
-that any project built from it stays maintainable over months of AI-assisted
-development, rather than accumulating undocumented, untracked changes.
+A specialized Electron desktop application for managing Claude and OpenAI Codex agents across multiple projects. Built to benchmark AI project frameworks by tracking speed, token usage, and documentation quality.
 
 ---
 
-## How to Use This Template
+## Features
 
-1. Copy this entire folder to a new location and rename it for the new project.
-2. Open the project in Claude Code.
-3. Answer `.claude/prompts/project_questionnaire.md` (project name, stack,
-   git details, quality requirements, etc.).
-4. Let Claude follow `.claude/prompts/project_init.md` to fill in
-   `.claude/project_config.md`, the memory files, scripts, and root
-   documentation for the new project.
-5. Start requesting features and bug fixes — every change is tracked through
-   the ticket system described below.
+- **Project Switcher** — open and switch between any number of project folders
+- **Multi-Agent Runner** — launch multiple Claude CLI or OpenAI Codex agents simultaneously within a project; each gets its own terminal pane with live streaming output
+- **Full Audit Log** — every prompt sent and every response received is stored in SQLite for auditing and result reproduction
+- **Token Dashboard** — per-prompt, per-task, and per-project token tracking with bar charts, line charts, and cost estimates by model
+- **Model Selector** — dropdown to choose Claude or Codex model per agent
+- **Load Balancing** — automatically falls back to OpenAI Codex when Claude token usage exceeds a configurable hourly threshold
+- **Optimization Advisor** — one-click analysis of recent prompts with actionable suggestions for reducing token spend
 
 ---
 
-## How It Works
+## Stack
 
-* **`.claude/CLAUDE.md`** — the operating instructions Claude follows in this
-  repository: when to create tickets, what to update before every commit, and
-  the git workflow to use.
-* **`.claude/PROJECT_RULES.md`** — the definition of done for any ticket.
-* **`.claude/PROJECT_SKELETON.md`** — the canonical folder/file layout for any
-  project built from this template.
-* **`.claude/memory/`** — persistent, continuously-updated project memory
-  (architecture, tech stack, coding conventions, project status,
-  ticket history). Read at the start of every session.
-* **`.claude/prompts/`** — step-by-step workflows for features, bug fixes,
-  refactors, releases, and initializing a brand-new project.
-* **`.claude/templates/`** — reusable templates for README, CHANGELOG, and
-  ticket files.
-* **`tickets/`** — every feature and bug fix is tracked as a ticket
-  (`open/`, `closed/`, `archived/`), based on `tickets/TEMPLATE.md`.
-* **`scripts/`** — helper batch scripts (`setup`, `build`, `run`,
-  `git_commit`, `clear_cache`, `release`), customized per project's stack.
+| Layer | Technology |
+|---|---|
+| Desktop shell | Electron |
+| UI | React 18 + Tailwind CSS |
+| Bundler | Vite |
+| Database | SQLite via better-sqlite3 |
+| Charts | Recharts |
+| State | Zustand |
+| AI providers | Claude CLI, OpenAI CLI |
 
 ---
 
-## Project Structure
+## Quick Start
 
-See `.claude/PROJECT_SKELETON.md` for the full, authoritative layout.
+```
+scripts\setup.bat   # install dependencies (run once)
+scripts\run.bat     # start in development mode
+scripts\build.bat   # build for production
+```
 
----
-
-## Development Workflow
-
-* Every feature or bug fix requires a ticket before code is written.
-* Documentation (README, architecture, changelog) is updated
-  alongside the code change, not after the fact.
-* Commits follow the format `[TICKET-####] Short description`.
-* Memory files are the source of truth for project context across sessions.
+Requires: Node.js 20+, Claude Code CLI (`claude`), OpenAI CLI (`openai`) installed and authenticated.
 
 ---
 
 ## Version
 
-Framework Version: 1.0.0
-
-See `.claude/framework_version.md` for framework-level version history and
-migration rules.
-
----
-
-## License
-
-No license has been chosen yet — see `LICENSE`.
+0.1.0 — Milestone 1: Core Infrastructure
