@@ -32,12 +32,20 @@ Bootstrap Electron + React app with project switcher, multi-agent runner, audit 
 ---
 
 ## Technical Debt
-- None yet
+- README/package.json say `better-sqlite3`, but DBService actually uses `sql.js`
+  (WASM SQLite) — native module builds were apparently swapped out at some point.
+  README stack table not yet corrected.
+- `package.json` lives in `src/`, not the repo root — `node_modules` is at
+  `src/node_modules`. Scripts/tests that shell out to `node` need to run from
+  `src/` (or reference `src/node_modules`) or `require('electron')` etc. won't
+  resolve.
 
 ---
 
 ## Known Issues
-- None yet
+- TICKET-0011 (restore stopped agents + Delete button) is implemented but its
+  manual UI verification step (stop an agent, switch projects, confirm cards +
+  history reappear) hasn't been run yet.
 
 ---
 

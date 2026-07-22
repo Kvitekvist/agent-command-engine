@@ -23,7 +23,7 @@ A specialized Electron desktop application for managing Claude and OpenAI Codex 
 | Desktop shell | Electron |
 | UI | React 18 + Tailwind CSS |
 | Bundler | Vite |
-| Database | SQLite via better-sqlite3 |
+| Database | SQLite via sql.js (WASM) |
 | Charts | Recharts |
 | State | Zustand |
 | AI providers | Claude CLI, OpenAI CLI |

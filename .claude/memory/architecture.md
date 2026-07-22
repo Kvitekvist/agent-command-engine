@@ -17,7 +17,7 @@ Claude Projects Interface (CPI) is an Electron desktop application with a React 
 
 ### Main Process (Node.js / Electron)
 - Manages child processes for `claude` CLI and `openai` CLI
-- Reads/writes SQLite via better-sqlite3
+- Reads/writes SQLite via sql.js (WASM SQLite, not better-sqlite3 — see Dependencies)
 - Handles file system dialogs (project folder picker)
 - Exposes IPC handlers to renderer
 
@@ -58,7 +58,7 @@ src/
 | vite + @vitejs/plugin-react | Renderer bundling |
 | react 18 + react-dom | UI framework |
 | tailwindcss | Utility-first styling |
-| better-sqlite3 | Synchronous SQLite (main process) |
+| sql.js | WASM SQLite (main process) — no native build step; DBService persists to disk manually via `db.export()` after every write, since sql.js keeps the DB in memory |
 | recharts | Token usage charts |
 | zustand | Renderer state management |
 | electron-builder | Package to .exe |
@@ -72,6 +72,15 @@ src/
 - Claude and Codex implement the same provider interface
 
 ---
+
+## Gotchas
+- **sql.js `db.export()` resets `last_insert_rowid()` to 0.** DBService's
+  `prepare(sql).run()` calls `save()` (which calls `export()`) after every
+  write. Any code that needs the id of a just-inserted row must read
+  `last_insert_rowid()` *inside* `run()`, before `save()` runs — not in a
+  separate query afterwards, which will always get `0`. This caused
+  TICKET-0013 (agent responses never persisted) and was very likely the
+  dominant cause of TICKET-0012 (token stats never persisted) too.
 
 ## Future Improvements
 - WebSocket-based agent output stream

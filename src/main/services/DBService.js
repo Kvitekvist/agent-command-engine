@@ -35,8 +35,13 @@ function prepare(sql) {
     },
     run(...params) {
       db.run(sql, params)
+      // last_insert_rowid() must be read before save() — sql.js's export()
+      // (called inside save()) resets the connection's rowid counter to 0,
+      // so reading it afterwards (as logPrompt used to, via a separate
+      // query) always returned 0 instead of the real inserted id.
+      const lastInsertRowid = toRows(db.exec('SELECT last_insert_rowid() as id'))[0]?.id ?? null
       save()
-      return { changes: db.getRowsModified() }
+      return { changes: db.getRowsModified(), lastInsertRowid }
     },
   }
 }
@@ -57,6 +62,7 @@ const DBService = {
     }
     db = new SQL.Database(buffer)
     this._createSchema()
+    this._migrateSchema()
     save()
   },
 
@@ -76,6 +82,8 @@ const DBService = {
         provider TEXT NOT NULL DEFAULT 'claude',
         model TEXT NOT NULL DEFAULT 'claude-sonnet-5',
         status TEXT NOT NULL DEFAULT 'idle',
+        permission_mode TEXT NOT NULL DEFAULT 'safe',
+        session_id TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (project_id) REFERENCES projects(id)
       );
@@ -109,6 +117,18 @@ const DBService = {
     `)
   },
 
+  // CREATE TABLE IF NOT EXISTS leaves pre-existing DB files on old schemas
+  // untouched, so add any columns introduced after their creation by hand.
+  _migrateSchema() {
+    const cols = toRows(db.exec('PRAGMA table_info(agents)')).map((c) => c.name)
+    if (!cols.includes('permission_mode')) {
+      db.run("ALTER TABLE agents ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'safe'")
+    }
+    if (!cols.includes('session_id')) {
+      db.run('ALTER TABLE agents ADD COLUMN session_id TEXT')
+    }
+  },
+
   // Projects
   getProjects: () => prepare('SELECT * FROM projects ORDER BY created_at DESC').all(),
   addProject: (name, folderPath) =>
@@ -117,23 +137,44 @@ const DBService = {
 
   // Agents
   getAgentsByProject: (projectId) =>
-    prepare('SELECT * FROM agents WHERE project_id = ? ORDER BY created_at DESC').all(projectId),
-  upsertAgent: ({ id, project_id, label, provider, model, status }) =>
+    prepare('SELECT * FROM agents WHERE project_id = ? ORDER BY created_at ASC').all(projectId),
+  upsertAgent: ({ id, project_id, label, provider, model, status, permission_mode }) =>
     prepare(`
-      INSERT INTO agents (id, project_id, label, provider, model, status)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO agents (id, project_id, label, provider, model, status, permission_mode)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET status = excluded.status, model = excluded.model
-    `).run(id, project_id, label, provider, model, status),
+    `).run(id, project_id, label, provider, model, status, permission_mode || 'safe'),
   updateAgentStatus: (id, status) =>
     prepare('UPDATE agents SET status = ? WHERE id = ?').run(status, id),
+  updateAgentSession: (id, sessionId) =>
+    prepare('UPDATE agents SET session_id = ? WHERE id = ?').run(sessionId, id),
+  // Removes the agent row only — prompt/audit history is kept for the
+  // audit log and token stats, which are keyed by project, not by a live agent.
+  deleteAgent: (id) =>
+    prepare('DELETE FROM agents WHERE id = ?').run(id),
+
+  // Wipe an agent's persisted history — the only thing that should ever do this
+  // is the user's explicit "Clear Context" action.
+  clearAgentHistory: (id) => {
+    prepare('DELETE FROM prompts WHERE agent_id = ?').run(id)
+    prepare('UPDATE agents SET session_id = NULL WHERE id = ?').run(id)
+  },
 
   // Prompts
-  logPrompt: ({ agent_id, project_id, task_label, prompt_text, response_text, provider, model, input_tokens, output_tokens, duration_ms }) =>
-    prepare(`
+  logPrompt: ({ agent_id, project_id, task_label, prompt_text, response_text, provider, model, input_tokens, output_tokens, duration_ms }) => {
+    const { lastInsertRowid } = prepare(`
       INSERT INTO prompts (agent_id, project_id, task_label, prompt_text, response_text,
         provider, model, input_tokens, output_tokens, duration_ms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(agent_id, project_id, task_label, prompt_text, response_text, provider, model, input_tokens, output_tokens, duration_ms),
+    `).run(agent_id, project_id, task_label, prompt_text, response_text, provider, model, input_tokens, output_tokens, duration_ms)
+    return lastInsertRowid
+  },
+
+  updatePromptTokens: (id, { response_text, input_tokens, output_tokens, duration_ms }) =>
+    prepare(`
+      UPDATE prompts SET response_text = ?, input_tokens = ?, output_tokens = ?, duration_ms = ?
+      WHERE id = ?
+    `).run(response_text, input_tokens, output_tokens, duration_ms, id),
 
   getPrompts: ({ projectId, agentId, limit = 100, offset = 0 } = {}) => {
     let sql = 'SELECT * FROM prompts WHERE 1=1'

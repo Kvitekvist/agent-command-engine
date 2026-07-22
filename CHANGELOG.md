@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Delete button on stopped agent panes (TICKET-0011) — removes the agent from the interface without touching its audit history
+
+### Fixed
+- Agent responses and token counts never actually being saved to the database (TICKET-0012, TICKET-0013) — `DBService`'s write wrapper called `db.export()` (to persist to disk) immediately after every insert, and sql.js resets `last_insert_rowid()` to 0 as a side effect of `export()`. `logPrompt` read that id in a separate query *after* the export had already zeroed it, so every completed prompt's response/token update targeted a nonexistent row and was silently dropped. Fixed by reading the id before `export()` runs. A secondary bug in `AgentService` (stdout chunks not buffered across `data` events, dropping a split final `result` line) was fixed alongside it.
+- Stopped agent panes disappearing entirely instead of showing history + the Delete button (TICKET-0011) — a redundant `removeAgent()` call was undoing the status update, and project/app restarts only restored agents that were still `running`
+
 ## [0.1.0] - 2026-07-19
 
 ### Added

@@ -10,7 +10,10 @@ contextBridge.exposeInMainWorld('cpi', {
   // Agents
   getAgents: (projectId) => ipcRenderer.invoke('agents:getByProject', projectId),
   startAgent: (opts) => ipcRenderer.invoke('agents:start', opts),
+  restoreAgent: (row) => ipcRenderer.invoke('agents:restore', row),
   stopAgent: (agentId) => ipcRenderer.invoke('agents:stop', agentId),
+  deleteAgent: (agentId) => ipcRenderer.invoke('agents:delete', agentId),
+  clearContext: (agentId) => ipcRenderer.invoke('agents:clearContext', agentId),
   sendPrompt: (agentId, prompt) => ipcRenderer.invoke('agents:sendPrompt', agentId, prompt),
 
   // Audit log
@@ -28,8 +31,13 @@ contextBridge.exposeInMainWorld('cpi', {
   getOptimizationAdvice: (projectId) => ipcRenderer.invoke('optimize:analyze', projectId),
 
   // Events from main -> renderer
-  onAgentOutput: (cb) => ipcRenderer.on('agent:output', (_, data) => cb(data)),
-  onAgentStatus: (cb) => ipcRenderer.on('agent:status', (_, data) => cb(data)),
-  offAgentOutput: () => ipcRenderer.removeAllListeners('agent:output'),
-  offAgentStatus: () => ipcRenderer.removeAllListeners('agent:status'),
+  onAgentOutput:            (cb) => ipcRenderer.on('agent:output',             (_, d) => cb(d)),
+  onAgentStatus:            (cb) => ipcRenderer.on('agent:status',             (_, d) => cb(d)),
+  onAgentPromptDone:        (cb) => ipcRenderer.on('agent:prompt-done',        (_, d) => cb(d)),
+  onAgentToolUse:           (cb) => ipcRenderer.on('agent:tool-use',           (_, d) => cb(d)),
+
+  offAgentOutput:            () => ipcRenderer.removeAllListeners('agent:output'),
+  offAgentStatus:            () => ipcRenderer.removeAllListeners('agent:status'),
+  offAgentPromptDone:        () => ipcRenderer.removeAllListeners('agent:prompt-done'),
+  offAgentToolUse:           () => ipcRenderer.removeAllListeners('agent:tool-use'),
 })
