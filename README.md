@@ -40,8 +40,19 @@ scripts\build.bat   # build for production
 
 Requires: Node.js 20+, Claude Code CLI (`claude`), OpenAI CLI (`openai`) installed and authenticated.
 
+Automated checks:
+
+```
+cd src
+npm test
+npm run build
+npm run package
+```
+
+Application build output is written to `src/dist`; installers are written to `releases`.
+
 ---
 
 ## Version
 
-0.1.0 — Milestone 1: Core Infrastructure
+0.1.1 — Reliability alpha

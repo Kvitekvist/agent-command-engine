@@ -41,3 +41,11 @@ Verified with a standalone DB round-trip script (logPrompt → updatePromptToken
 getPrompts): promptId was 0 and response_text stayed null before the fix; both are
 correct after. Also confirmed a clean `npm run build` and a crash-free `npm run dev`
 launch. This same DBService bug is the likely dominant cause of TICKET-0012 as well.
+
+TICKET-0014
+2026-07-24
+Completed the reliability-alpha pass: corrected production packaging, added
+execution-scoped audit tracking, rejected overlapping turns, surfaced CLI
+launch failures, made database replacement atomic, added four automated stream
+and permission-policy tests, and reconciled version and architecture docs.
+Verified tests, production build, and Windows NSIS installer creation.

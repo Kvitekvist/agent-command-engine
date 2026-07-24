@@ -114,6 +114,10 @@ function buildChildEnv() {
   return env
 }
 
+function createExecutionId() {
+  return randomUUID()
+}
+
 class AgentService extends EventEmitter {
   constructor() {
     super()
@@ -161,11 +165,11 @@ class AgentService extends EventEmitter {
     if (!agent) return { error: 'Agent not found' }
 
     if (agent.activeProc) {
-      try { agent.activeProc.kill('SIGTERM') } catch (_) {}
-      agent.activeProc = null
+      return { error: 'This agent is already processing a prompt' }
     }
 
     const { meta } = agent
+    const executionId = createExecutionId()
 
     let args
     if (meta.provider === 'claude') {
@@ -184,8 +188,11 @@ class AgentService extends EventEmitter {
 
     const proc = spawn(meta.provider === 'claude' ? 'claude' : 'openai', args, {
       cwd: meta.projectPath,
-      shell: true,
+      // Windows CLI installations are commonly .cmd shims and require a shell.
+      // Arguments are selected by the application; prompt text is sent over stdin.
+      shell: process.platform === 'win32',
       env: buildChildEnv(),
+      windowsHide: true,
     })
 
     agent.activeProc = proc
@@ -258,7 +265,10 @@ class AgentService extends EventEmitter {
       this._emit('agent:output', { agentId, text: `⚠ ${msg}`, stream: 'stderr' })
     })
 
-    proc.on('close', (code) => {
+    let finished = false
+    const finish = (code, error = null) => {
+      if (finished) return
+      finished = true
       if (lineBuffer.trim()) {
         processLine(lineBuffer.trim())
         lineBuffer = ''
@@ -268,7 +278,9 @@ class AgentService extends EventEmitter {
       }
       this._emit('agent:prompt-done', {
         agentId,
+        executionId,
         exitCode: code,
+        error: error ? error.message : null,
         response: textBuffer,
         tokens: {
           input: agent.inputTokens - turnStartInput,
@@ -276,9 +288,20 @@ class AgentService extends EventEmitter {
         },
         sessionId: agent.sessionId,
       })
+    }
+
+    proc.on('error', (error) => {
+      this._emit('agent:output', {
+        agentId,
+        text: `Unable to start ${meta.provider}: ${error.message}`,
+        stream: 'stderr',
+      })
+      finish(null, error)
     })
 
-    return { ok: true }
+    proc.on('close', (code) => finish(code))
+
+    return { ok: true, executionId }
   }
 
   // Drop the resumed session so the next prompt starts a brand-new conversation
@@ -324,4 +347,13 @@ class AgentService extends EventEmitter {
   }
 }
 
-module.exports = { AgentService: new AgentService() }
+module.exports = {
+  AgentService: new AgentService(),
+  AgentServiceClass: AgentService,
+  buildPermissionArgs,
+  parsePermissionDenials,
+  parseSessionId,
+  parseText,
+  parseTokens,
+  parseToolUse,
+}

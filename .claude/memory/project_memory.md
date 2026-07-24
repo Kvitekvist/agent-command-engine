@@ -9,15 +9,15 @@ A specialized Electron desktop application that provides a powerful interface fo
 ---
 
 ## Current Milestone
-**Milestone 1 — Core Infrastructure**
-Bootstrap Electron + React app with project switcher, multi-agent runner, audit log, and token tracking.
+**Milestone 2 — Reliability Alpha**
+Make process execution, persistence, packaging, and provider behavior dependable.
 
 ---
 
 ## Active Priorities
-* Scaffold Electron + React + SQLite project (TICKET-0001)
-* Build project switcher sidebar (TICKET-0002)
-* Build multi-agent runner with Claude CLI subprocess (TICKET-0003)
+* Verify restored stopped-agent behavior manually (TICKET-0011)
+* Add end-to-end provider contract tests for Claude and Codex
+* Replace whole-database export-on-write if audit volume causes UI stalls
 
 ---
 
@@ -25,16 +25,13 @@ Bootstrap Electron + React app with project switcher, multi-agent runner, audit 
 - Electron (main process)
 - React 18 + Tailwind CSS (renderer process)
 - Vite (bundler for renderer)
-- better-sqlite3 (local SQLite database)
+- sql.js (local SQLite database persisted in Electron userData)
 - Recharts (token usage visualization)
 - Node.js child_process (spawn claude CLI and openai codex CLI)
 
 ---
 
 ## Technical Debt
-- README/package.json say `better-sqlite3`, but DBService actually uses `sql.js`
-  (WASM SQLite) — native module builds were apparently swapped out at some point.
-  README stack table not yet corrected.
 - `package.json` lives in `src/`, not the repo root — `node_modules` is at
   `src/node_modules`. Scripts/tests that shell out to `node` need to run from
   `src/` (or reference `src/node_modules`) or `require('electron')` etc. won't
@@ -61,5 +58,5 @@ Bootstrap Electron + React app with project switcher, multi-agent runner, audit 
 - User has Claude Code CLI and OpenAI Codex CLI installed
 - Load balance: route to Codex when Claude credits are exhausted
 - All token counts parsed from CLI stdout (JSON output mode)
-- One SQLite DB per project folder (.cpi/db.sqlite inside each project)
+- One SQLite DB for the application in Electron's userData directory
 - Current template project: the AI Project Bootstrap in this repo

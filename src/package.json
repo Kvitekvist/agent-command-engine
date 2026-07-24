@@ -1,17 +1,17 @@
 {
   "name": "claude-projects-interface",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A specialized Electron interface for managing Claude & OpenAI Codex agents across multiple projects",
-  "main": "main/index.js",
+  "main": "dist/main/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
     "dev:renderer": "vite --config vite.renderer.config.mjs",
     "dev:main": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
     "build:renderer": "vite build --config vite.renderer.config.mjs",
-    "build:main": "vite build --config vite.main.config.mjs",
+    "build:main": "node scripts/build-main.js",
     "build": "npm run build:renderer && npm run build:main",
     "package": "npm run build && electron-builder",
-    "lint": "eslint src --ext .js,.jsx"
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "recharts": "^2.12.7",
@@ -39,7 +39,8 @@
       "output": "../releases"
     },
     "files": [
-      "dist/**/*"
+      "dist/**/*",
+      "node_modules/sql.js/**/*"
     ],
     "win": {
       "target": "nsis"

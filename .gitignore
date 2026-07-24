@@ -13,6 +13,7 @@ Thumbs.db
 /releases/*
 !/releases/.gitkeep
 /dist/
+/src/dist/
 
 # Python
 __pycache__/

@@ -2,19 +2,19 @@
 
 ## Current Version
 
-0.0.1
+0.1.1
 
 ---
 
 ## Current Milestone
 
-Not Started
+Reliability Alpha
 
 ---
 
 ## Progress
 
-0%
+Core prototype complete; reliability work in progress
 
 ---
 
@@ -26,13 +26,13 @@ main
 
 ## Open Feature Tickets
 
-0
+1
 
 ---
 
 ## Open Bug Tickets
 
-0
+4
 
 ---
 
@@ -44,28 +44,28 @@ main
 
 ## Build Status
 
-Unknown
+Passing (`npm run build`; installer produced)
 
 ---
 
 ## Test Status
 
-Unknown
+Passing (4 automated tests)
 
 ---
 
 ## Last Commit
 
-None
+85d9907
 
 ---
 
 ## Next Priority
 
-Define first feature.
+Manually verify TICKET-0011 and add provider end-to-end tests.
 
 ---
 
 ## Notes
 
-Project initialized.
+TICKET-0014 reliability pass completed on 2026-07-24.

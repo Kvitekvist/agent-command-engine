@@ -82,7 +82,8 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc) {
     return result
   })
 
-  // Track in-flight prompts: agentId -> { promptId, startedAt }
+  // Track each process invocation independently. Keying by execution rather
+  // than agent prevents an old close event from completing a newer prompt.
   const inFlight = new Map()
 
   ipcMain.handle('agents:sendPrompt', async (_, agentId, prompt) => {
@@ -104,9 +105,17 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc) {
       output_tokens: 0,
       duration_ms: 0,
     })
-    inFlight.set(agentId, { promptId, startedAt })
-
     const result = AgentSvc.sendPrompt(agentId, prompt)
+    if (result.error) {
+      DB.updatePromptTokens(promptId, {
+        response_text: result.error,
+        input_tokens: 0,
+        output_tokens: 0,
+        duration_ms: Date.now() - startedAt,
+      })
+      return result
+    }
+    inFlight.set(result.executionId, { promptId, startedAt })
     return result
   })
 
@@ -115,11 +124,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc) {
     if (data.sessionId) {
       DB.updateAgentSession(data.agentId, data.sessionId)
     }
-    const flight = inFlight.get(data.agentId)
+    const flight = inFlight.get(data.executionId)
     if (!flight || flight.promptId == null) return
-    inFlight.delete(data.agentId)
+    inFlight.delete(data.executionId)
     DB.updatePromptTokens(flight.promptId, {
-      response_text: data.response || null,
+      response_text: data.response || data.error || null,
       input_tokens: data.tokens?.input || 0,
       output_tokens: data.tokens?.output || 0,
       duration_ms: Date.now() - flight.startedAt,

@@ -1,208 +1,43 @@
 # Technology Stack
 
-This document is the authoritative reference for the project's technical environment.
-
-Update it whenever the technology stack changes.
-
----
-
-# Project Information
-
-**Project Name:**
-
-**Version:**
-
-**Created:**
-
----
-
-# Programming Language
-
-Language:
-
-Version:
-
----
-
-# Framework
-
-Name:
-
-Version:
-
-Purpose:
-
----
-
-# Runtime
-
-Example:
-
-* Python
-* .NET
-* Node.js
-* Java Runtime
-* Native Executable
-
----
-
-# Package Manager
-
-Example:
-
-* pip
-* npm
-* pnpm
-* yarn
-* NuGet
-* Cargo
-
-Version:
-
----
-
-# Build System
-
-Describe how the project is built.
-
-Example:
-
-* PyInstaller
-* CMake
-* MSBuild
-* Gradle
-* Make
-* Electron Builder
-
----
-
-# Development Environment
-
-Operating System:
-
-IDE:
-
-Compiler:
-
-SDK:
-
----
-
-# Dependencies
-
-List major dependencies.
-
-Example:
-
-| Library | Version | Purpose |
-| ------- | ------- | ------- |
-|         |         |         |
-|         |         |         |
-|         |         |         |
-
----
-
-# External Services
-
-Document services used by the project.
-
-Examples:
-
-* GitHub
-* OpenAI API
-* Anthropic API
-* Firebase
-* Supabase
-* SQLite
-* PostgreSQL
-
----
-
-# Storage
-
-Document data storage.
-
-Example:
-
-* SQLite
-* JSON
-* Local Files
-* PostgreSQL
-* Redis
-
----
-
-# APIs
-
-Document external APIs.
-
-Include:
-
-* Authentication method
-* Rate limits
-* Important endpoints
-* Documentation links
-
----
-
-# Build Output
-
-Describe what is produced.
-
-Examples:
-
-* Executable
-* Installer
-* Docker Image
-* Library
-* Website
-
----
-
-# Deployment
-
-Describe deployment method.
-
-Examples:
-
-* Manual
-* GitHub Releases
-* Docker
-* Cloud
-* Windows Installer
-
----
-
-# Required Tools
-
-List required software.
-
-Examples:
-
-* Git
-* Python
-* Node.js
-* Visual Studio
-* VS Code
-* CMake
-
----
-
-# Environment Variables
-
-Document required environment variables.
-
-Example:
-
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-|          |          |             |
-|          |          |             |
-
-Do **not** store secrets in this file.
-
----
-
-# Notes
-
-Record important information about the project's technical ecosystem that will help future development sessions.
+## Project
+
+- Name: Claude Projects Interface
+- Version: 0.1.1
+- Created: 2026-07-19
+- Target: Windows desktop; Electron also supports macOS packaging
+
+## Runtime and UI
+
+| Component | Version | Purpose |
+| --- | --- | --- |
+| Node.js | 20+ | Development runtime |
+| Electron | 31.7 | Desktop shell and main process |
+| React | 18.3 | Renderer UI |
+| Tailwind CSS | 3.4 | Styling |
+| Zustand | 4.5 | Renderer state |
+| Recharts | 2.12 | Usage charts |
+| sql.js | 1.12 | In-process SQLite |
+
+## Build and Package Management
+
+- Package manager: npm
+- Renderer build: Vite
+- Main-process build: `src/scripts/build-main.js`
+- Installer: Electron Builder with NSIS
+- Application output: `src/dist`
+- Installer output: `releases`
+
+## Storage
+
+The application keeps one SQLite database in Electron's userData directory.
+`sql.js` holds the database in memory; DBService persists it to disk after
+mutations using temporary-file replacement.
+
+## External Tools
+
+- Claude CLI (`claude`), authenticated by the CLI
+- OpenAI CLI (`openai`), authenticated by the CLI
+- Git
+
+No application-specific environment variables or hosted services are required.

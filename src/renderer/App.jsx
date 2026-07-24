@@ -14,7 +14,7 @@ export default function App() {
 
   useEffect(() => {
     window.cpi.onAgentOutput((data) => {
-      if (data.stream === 'text' || data.stream === 'permission-denied') {
+      if (['text', 'stderr', 'permission-denied'].includes(data.stream)) {
         appendOutput(data.agentId, data.text)
       }
     })

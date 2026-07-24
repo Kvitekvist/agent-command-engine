@@ -18,7 +18,9 @@ function toRows(results) {
 function save() {
   if (!db || !dbPath) return
   const data = db.export()
-  fs.writeFileSync(dbPath, Buffer.from(data))
+  const tempPath = `${dbPath}.tmp`
+  fs.writeFileSync(tempPath, Buffer.from(data))
+  fs.renameSync(tempPath, dbPath)
 }
 
 // Thin wrapper to mimic better-sqlite3's prepared statement API

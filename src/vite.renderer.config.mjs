@@ -10,7 +10,7 @@ export default defineConfig({
   root: path.join(__dirname, 'renderer'),
   base: './',
   build: {
-    outDir: path.join(__dirname, '../dist/renderer'),
+    outDir: path.join(__dirname, 'dist/renderer'),
     emptyOutDir: true,
   },
   server: {
