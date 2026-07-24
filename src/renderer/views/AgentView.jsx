@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import useStore from '../store/useStore'
 import ModelSelector from '../components/ModelSelector'
+import { generateAgentName } from '../utils/agentNames'
 
 const CLAUDE_MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-5','claude-opus-4-8','claude-fable-5']
 const CODEX_MODELS  = ['codex-mini-latest', 'o3', 'o4-mini']
@@ -12,7 +13,7 @@ const PERMISSION_MODES = [
 
 export default function AgentView() {
   const { activeProject, agents, agentOutputs, agentThinking, removeAgent, setAgentThinking } = useStore()
-  const [label, setLabel]                   = useState('Agent 1')
+  const [label, setLabel]                   = useState(() => generateAgentName())
   const [provider, setProvider]             = useState('claude')
   const [model, setModel]                   = useState('claude-sonnet-5')
   const [permissionMode, setPermissionMode] = useState('safe')
@@ -23,8 +24,7 @@ export default function AgentView() {
     setLaunching(true)
     try {
       await window.cpi.startAgent({ projectId: activeProject.id, projectPath: activeProject.path, label, provider, model, permissionMode })
-      const num = parseInt(label.replace(/\D/g, '') || '1', 10)
-      setLabel('Agent ' + (num + 1))
+      setLabel(generateAgentName(useStore.getState().agents.map((a) => a.label)))
     } finally { setLaunching(false) }
   }
 

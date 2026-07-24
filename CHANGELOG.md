@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- New agents default to a randomly generated human first name instead of a numbered "Agent N" label (TICKET-0016)
+
 ## [0.1.1] - 2026-07-24
 
 ### Added
