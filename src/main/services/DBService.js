@@ -51,7 +51,11 @@ function prepare(sql) {
 const DBService = {
   async init() {
     // sql.js uses a WASM binary — locate it relative to the module
-    const sqlJsPath = path.join(__dirname, '..', '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.js')
+    // Resolve through Node's module loader. This file is copied from
+    // main/services to dist/main/services during a build, so deriving the
+    // package location from __dirname would incorrectly target
+    // dist/node_modules. require.resolve also works inside a packaged app.
+    const sqlJsPath = require.resolve('sql.js/dist/sql-wasm.js')
     const initSqlJs = require(sqlJsPath)
     const wasmPath = path.join(path.dirname(sqlJsPath), 'sql-wasm.wasm')
 

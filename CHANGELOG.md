@@ -5,6 +5,9 @@
 ### Added
 - New agents default to a randomly generated human first name instead of a numbered "Agent N" label (TICKET-0016)
 
+### Fixed
+- `DBService.init()` locating the sql.js WASM binary via a `__dirname`-relative path, which broke once the file was copied to `dist/` at build time — now resolved via `require.resolve('sql.js/dist/sql-wasm.js')` (TICKET-0017)
+
 ## [0.1.1] - 2026-07-24
 
 ### Added

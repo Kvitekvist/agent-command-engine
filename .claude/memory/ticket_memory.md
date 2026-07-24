@@ -49,3 +49,14 @@ execution-scoped audit tracking, rejected overlapping turns, surfaced CLI
 launch failures, made database replacement atomic, added four automated stream
 and permission-policy tests, and reconciled version and architecture docs.
 Verified tests, production build, and Windows NSIS installer creation.
+
+TICKET-0017
+2026-07-24
+Fixed DBService.init() locating the sql.js WASM binary via a __dirname-relative
+path — broke once DBService.js was copied to dist/ at build time, since the
+derived path pointed at a nonexistent dist/node_modules. Fixed by resolving the
+package through require.resolve('sql.js/dist/sql-wasm.js') instead, which
+survives being copied and works inside a packaged app. Found already applied,
+uncommitted, in the working tree at the start of this session — no ticket
+previously documented it, so this ticket formalizes it. Verified via
+npm run build and the existing automated test suite.
