@@ -3,6 +3,7 @@ const test = require('node:test')
 
 const {
   buildPermissionArgs,
+  computeTokscaleDelta,
   parsePermissionDenials,
   parseSessionId,
   parseText,
@@ -54,4 +55,22 @@ test('permission modes are conservative by default', () => {
   ])
   assert.deepEqual(buildPermissionArgs('auto'), ['--dangerously-skip-permissions'])
   assert.ok(buildPermissionArgs('ask').includes('Bash'))
+})
+
+test('tokscale reconciliation diffs cumulative session usage into a turn delta', () => {
+  const baseline = { inputTokens: 100, outputTokens: 50, cacheReadTokens: 1000, cacheCreationTokens: 200, costUsd: 0.5 }
+  const usage = { inputTokens: 140, outputTokens: 90, cacheReadTokens: 1800, cacheCreationTokens: 260, costUsd: 0.9 }
+
+  assert.deepEqual(computeTokscaleDelta(usage, baseline), {
+    input: 40, output: 40, cacheRead: 800, cacheCreation: 60, cost: 0.4,
+  })
+})
+
+test('tokscale reconciliation clamps a backwards-moving reading to zero instead of a negative delta', () => {
+  const baseline = { inputTokens: 500, outputTokens: 300, cacheReadTokens: 9000, cacheCreationTokens: 400, costUsd: 2 }
+  const usage = { inputTokens: 500, outputTokens: 300, cacheReadTokens: 8000, cacheCreationTokens: 400, costUsd: 1.5 }
+
+  assert.deepEqual(computeTokscaleDelta(usage, baseline), {
+    input: 0, output: 0, cacheRead: 0, cacheCreation: 0, cost: 0,
+  })
 })

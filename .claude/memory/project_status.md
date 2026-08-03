@@ -24,21 +24,21 @@ main
 
 ---
 
-## Open Feature Tickets
+## Open Feature/Enhancement Tickets
 
-1
+3 (TICKET-0011, TICKET-0015, TICKET-0016)
 
 ---
 
 ## Open Bug Tickets
 
-4
+0
 
 ---
 
 ## Completed Tickets
 
-0
+6 (TICKET-0001, 0012, 0013, 0014, 0017, 0018)
 
 ---
 
@@ -50,22 +50,28 @@ Passing (`npm run build`; installer produced)
 
 ## Test Status
 
-Passing (4 automated tests)
+Passing (9 automated tests)
 
 ---
 
 ## Last Commit
 
-85d9907
+09e3ec9
 
 ---
 
 ## Next Priority
 
-Manually verify TICKET-0011 and add provider end-to-end tests.
+Manually verify TICKET-0011; give Codex real session resumption so its
+token usage can be reconciled (currently the one known tokscale gap from
+TICKET-0018).
 
 ---
 
 ## Notes
 
-TICKET-0014 reliability pass completed on 2026-07-24.
+TICKET-0018 (accurate token tracking via tokscale) completed on 2026-08-03.
+TICKET-0015 (.NET migration) is open but appears stale/abandoned — drafted
+uncommitted, with an empty app/ folder and no trace in this memory system
+until now; the active app remains the Electron one under src/. Flag to the
+user before resuming or discarding it.

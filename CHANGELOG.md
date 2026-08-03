@@ -7,6 +7,10 @@
 
 ### Fixed
 - `DBService.init()` locating the sql.js WASM binary via a `__dirname`-relative path, which broke once the file was copied to `dist/` at build time — now resolved via `require.resolve('sql.js/dist/sql-wasm.js')` (TICKET-0017)
+- Token tracking: Codex agents always showed 0 tokens (never got a JSON output mode to parse), Claude turns undercounted real usage (cache tokens were never read), and cost was a hardcoded, drifting pricing table. Fixed by adopting `tokscale` to read Claude's own local session transcripts for authoritative token + cost totals, reconciled asynchronously against each turn shortly after it completes so it never delays the response. Codex reconciliation is a known, deliberate gap — see architecture.md (TICKET-0018)
+
+### Added
+- `prompts.cache_read_tokens`, `prompts.cache_creation_tokens`, `prompts.cost_usd` columns; Token Dashboard now shows real cache token counts and prefers tokscale's real cost over the static estimate wherever available (TICKET-0018)
 
 ## [0.1.1] - 2026-07-24
 

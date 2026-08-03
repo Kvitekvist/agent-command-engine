@@ -18,6 +18,7 @@ Make process execution, persistence, packaging, and provider behavior dependable
 * Verify restored stopped-agent behavior manually (TICKET-0011)
 * Add end-to-end provider contract tests for Claude and Codex
 * Replace whole-database export-on-write if audit volume causes UI stalls
+* Give Codex real session resumption so its token usage can be reconciled too (see TICKET-0018 Notes)
 
 ---
 
@@ -28,6 +29,7 @@ Make process execution, persistence, packaging, and provider behavior dependable
 - sql.js (local SQLite database persisted in Electron userData)
 - Recharts (token usage visualization)
 - Node.js child_process (spawn claude CLI and openai codex CLI)
+- tokscale (reads Claude Code's/Codex's own local session transcripts for accurate token/cost usage — see [[architecture]] Token Tracking)
 
 ---
 
@@ -43,6 +45,9 @@ Make process execution, persistence, packaging, and provider behavior dependable
 - TICKET-0011 (restore stopped agents + Delete button) is implemented but its
   manual UI verification step (stop an agent, switch projects, confirm cards +
   history reappear) hasn't been run yet.
+- Codex agents still show 0 tokens/cost — TICKET-0018 fixed Claude's token
+  accuracy via tokscale reconciliation but deliberately left Codex out (no
+  stable per-turn session id to reconcile against; see architecture.md).
 
 ---
 

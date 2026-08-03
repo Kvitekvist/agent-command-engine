@@ -119,19 +119,41 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc) {
     return result
   })
 
-  // When a prompt completes, update the DB row with real token counts + response
+  // When a prompt completes, update the DB row with the fast stdout-parsed
+  // token counts + response. Kept in `inFlight` a while longer (instead of
+  // deleting here) so the async 'agent:tokens-reconciled' correction below
+  // — which lands a moment later, once tokscale resolves — still has the
+  // promptId to apply itself to.
   AgentSvc.on('agent:prompt-done', (data) => {
     if (data.sessionId) {
       DB.updateAgentSession(data.agentId, data.sessionId)
     }
     const flight = inFlight.get(data.executionId)
     if (!flight || flight.promptId == null) return
-    inFlight.delete(data.executionId)
     DB.updatePromptTokens(flight.promptId, {
       response_text: data.response || data.error || null,
       input_tokens: data.tokens?.input || 0,
       output_tokens: data.tokens?.output || 0,
       duration_ms: Date.now() - flight.startedAt,
+    })
+    // Reconciliation either lands or is skipped (e.g. codex, tokscale
+    // unavailable) well within this window; whichever happens first, the
+    // entry must not leak for the lifetime of the app.
+    setTimeout(() => inFlight.delete(data.executionId), 30_000)
+  })
+
+  // Corrects a prompt row's token/cost columns once TokscaleService's
+  // reconciliation resolves (see AgentService._reconcileTokens). Never fires
+  // for codex — it has no stable session id to reconcile against.
+  AgentSvc.on('agent:tokens-reconciled', (data) => {
+    const flight = inFlight.get(data.executionId)
+    if (!flight || flight.promptId == null) return
+    DB.updatePromptUsage(flight.promptId, {
+      input_tokens: data.tokens.input,
+      output_tokens: data.tokens.output,
+      cache_read_tokens: data.tokens.cacheRead,
+      cache_creation_tokens: data.tokens.cacheCreation,
+      cost_usd: data.costUsd,
     })
   })
 

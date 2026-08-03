@@ -105,6 +105,9 @@ const DBService = {
         model TEXT,
         input_tokens INTEGER DEFAULT 0,
         output_tokens INTEGER DEFAULT 0,
+        cache_read_tokens INTEGER DEFAULT 0,
+        cache_creation_tokens INTEGER DEFAULT 0,
+        cost_usd REAL DEFAULT 0,
         duration_ms INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (project_id) REFERENCES projects(id)
@@ -132,6 +135,16 @@ const DBService = {
     }
     if (!cols.includes('session_id')) {
       db.run('ALTER TABLE agents ADD COLUMN session_id TEXT')
+    }
+    const promptCols = toRows(db.exec('PRAGMA table_info(prompts)')).map((c) => c.name)
+    if (!promptCols.includes('cache_read_tokens')) {
+      db.run('ALTER TABLE prompts ADD COLUMN cache_read_tokens INTEGER DEFAULT 0')
+    }
+    if (!promptCols.includes('cache_creation_tokens')) {
+      db.run('ALTER TABLE prompts ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0')
+    }
+    if (!promptCols.includes('cost_usd')) {
+      db.run('ALTER TABLE prompts ADD COLUMN cost_usd REAL DEFAULT 0')
     }
   },
 
@@ -182,6 +195,17 @@ const DBService = {
       WHERE id = ?
     `).run(response_text, input_tokens, output_tokens, duration_ms, id),
 
+  // Applied once TokscaleService reconciliation resolves, some time after
+  // updatePromptTokens already ran with the fast stdout-parsed estimate.
+  // Only touches the numeric usage columns — response_text/duration_ms were
+  // already written and must not be clobbered here.
+  updatePromptUsage: (id, { input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd }) =>
+    prepare(`
+      UPDATE prompts SET input_tokens = ?, output_tokens = ?,
+        cache_read_tokens = ?, cache_creation_tokens = ?, cost_usd = ?
+      WHERE id = ?
+    `).run(input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, id),
+
   getPrompts: ({ projectId, agentId, limit = 100, offset = 0 } = {}) => {
     let sql = 'SELECT * FROM prompts WHERE 1=1'
     const params = []
@@ -202,6 +226,9 @@ const DBService = {
         SUM(input_tokens) as total_input,
         SUM(output_tokens) as total_output,
         SUM(input_tokens + output_tokens) as total_tokens,
+        SUM(cache_read_tokens) as total_cache_read,
+        SUM(cache_creation_tokens) as total_cache_creation,
+        SUM(cost_usd) as total_cost_usd,
         AVG(duration_ms) as avg_duration_ms,
         date(created_at) as day
       FROM prompts

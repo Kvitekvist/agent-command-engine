@@ -24,13 +24,45 @@ Claude Projects Interface (CPI) is an Electron desktop application with a React 
 ### Database (SQLite — cpi.db in Electron userData)
 - `projects` — id, name, path, created_at
 - `agents` — id, project_id, label, provider, model, status
-- `prompts` — id, agent_id, project_id, task_label, prompt_text, response_text, provider, model, input_tokens, output_tokens, duration_ms, created_at
+- `prompts` — id, agent_id, project_id, task_label, prompt_text, response_text, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, duration_ms, created_at
 - `settings` — key, value
+
+### Token Tracking (TICKET-0018)
+Two-phase per turn, so tokscale's ~1-2s subprocess spawn never delays the
+response the user is waiting on:
+1. **Fast path (synchronous, unchanged from TICKET-0012/0013)**: `AgentService`
+   parses Claude's `stream-json` `result` event for `input_tokens`/
+   `output_tokens` and writes them immediately via `DBService.updatePromptTokens`.
+2. **Reconciliation (async, fire-and-forget)**: once the fast path's
+   `agent:prompt-done` fires, `AgentService._reconcileTokens` calls
+   `TokscaleService.getUsageMap(['claude'])`, which spawns `tokscale --json
+   --client claude --group-by client,session,model` and reads Claude Code's
+   own local session transcript (`~/.claude/projects/**/*.jsonl`) — the
+   authoritative source, including cache tokens and real cost, that Claude's
+   own CLI never streams over stdout. The returned per-session cumulative
+   totals are matched against the agent's own Claude session id (the same
+   id captured via `parseSessionId`), diffed against a per-agent baseline
+   (`computeTokscaleDelta`) to get this turn's real delta, and applied via
+   `DBService.updatePromptUsage` once it resolves. Result: the fast path
+   still logs a same-turn best guess, and it gets silently corrected to the
+   real figures moments later.
+- **Codex is not reconciled.** CPI spawns `codex --print` stateless (no
+  `--resume`), so there is no stable per-turn session id to match a tokscale
+  row against — matching by "most recently written codex session file"
+  would misattribute tokens whenever two Codex agents finish close together,
+  which this app's multi-agent design allows. Codex token counts stay at
+  the (inaccurate) stdout-parsed value, effectively always `0` today, until
+  a future ticket gives codex real session resumption.
+- `TokenView.jsx` prefers the reconciled `cost_usd` from the DB when present
+  and only falls back to the static `COST_PER_M` estimate table for rows
+  that were never reconciled (Codex, or a Claude turn rendered before its
+  correction lands).
 
 ### Services (main process)
 - **AgentService**: spawns/kills CLI processes, streams output via IPC
 - **DBService**: all SQLite reads/writes
 - **AgentService stream parsers**: parse responses, sessions, tools, denials, and token counts from CLI JSON output
+- **TokscaleService**: spawns the `tokscale` npm package to read Claude Code's/Codex's own local session transcript files and return authoritative per-session token + cost totals — see Token Tracking below
 - **LoadBalancer**: decides provider based on credit status
 
 ---
@@ -61,6 +93,7 @@ src/
 | react 18 + react-dom | UI framework |
 | tailwindcss | Utility-first styling |
 | sql.js | WASM SQLite (main process) — no native build step; DBService persists to disk manually via `db.export()` after every write, since sql.js keeps the DB in memory |
+| tokscale | Reads Claude Code's/Codex's own local session transcript files for authoritative token + cost usage — see Token Tracking above. Ships a Node shim (`bin.js`) that resolves the right native platform binary as an optional dependency; spawned via `ELECTRON_RUN_AS_NODE=1` since Electron's own binary isn't plain Node. Packaged with `asarUnpack` (native binary can't run from inside an .asar) |
 | recharts | Token usage charts |
 | zustand | Renderer state management |
 | electron-builder | Package to .exe |

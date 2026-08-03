@@ -60,3 +60,31 @@ survives being copied and works inside a packaged app. Found already applied,
 uncommitted, in the working tree at the start of this session — no ticket
 previously documented it, so this ticket formalizes it. Verified via
 npm run build and the existing automated test suite.
+
+TICKET-0018
+2026-08-03
+Fixed unreliable token tracking (Codex always 0; Claude undercounted by
+ignoring cache tokens; cost was a hand-maintained static table) by adopting
+tokscale, following the same technique as the user's reference project
+(token-monitor): read Claude Code's/Codex's own local session transcript
+files instead of trusting live CLI stdout. New TokscaleService spawns
+tokscale (`ELECTRON_RUN_AS_NODE=1` shim trick) and returns per-session
+cumulative usage keyed by client+sessionId — verified against a real
+`tokscale --json --client claude --group-by client,session,model` run,
+whose sessionId matched the exact id AgentService already captures via
+parseSessionId. Since a synchronous tokscale call measured ~1-2s (too slow
+to gate the response path), the fast stdout-parsed numbers still post
+immediately on 'agent:prompt-done'; a fire-and-forget reconciliation
+(_reconcileTokens/computeTokscaleDelta) corrects the DB row moments later
+via a new 'agent:tokens-reconciled' event once tokscale resolves, adding
+cache_read_tokens/cache_creation_tokens/cost_usd (new prompts columns,
+migrated) and replacing the estimated cost with tokscale's real figure.
+Codex reconciliation was explicitly scoped out: codex is spawned stateless
+(no --resume), so there's no stable per-turn session id to match against a
+tokscale row, and guessing via "newest codex session file" would misattribute
+tokens once multiple Codex agents finish close together (this app allows
+that). Verified: real tokscale spawn + parse against this machine's actual
+Claude session history, a simulated pre-migration sql.js DB run through the
+schema migration + updated queries, 9 automated tests (new
+tokscale-service.test.js + reconciliation-delta tests in
+agent-service.test.js), and a clean npm run build.

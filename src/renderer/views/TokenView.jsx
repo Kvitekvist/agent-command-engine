@@ -22,6 +22,17 @@ function estimateCost(model, inputTokens, outputTokens) {
   return (inputTokens / 1_000_000) * rates.input + (outputTokens / 1_000_000) * rates.output
 }
 
+// tokscale reconciliation (see AgentService._reconcileTokens) writes a real,
+// CLI-reported cost onto reconciled rows; only fall back to the static
+// estimate above where that never happened — unreconciled Codex rows, or a
+// Claude turn whose reconciliation hasn't landed yet (self-corrects on the
+// next refresh).
+function rowCost(row) {
+  return row.total_cost_usd > 0
+    ? row.total_cost_usd
+    : estimateCost(row.model, row.total_input || 0, row.total_output || 0)
+}
+
 export default function TokenView() {
   const { activeProject, tokenStats, setTokenStats } = useStore()
   const [loading, setLoading] = useState(false)
@@ -41,11 +52,12 @@ export default function TokenView() {
   const byDay = Object.values(
     tokenStats.reduce((acc, row) => {
       const d = row.day || 'unknown'
-      if (!acc[d]) acc[d] = { day: d, input: 0, output: 0, cost: 0, prompts: 0 }
-      acc[d].input   += row.total_input   || 0
-      acc[d].output  += row.total_output  || 0
-      acc[d].prompts += row.prompt_count  || 0
-      acc[d].cost    += estimateCost(row.model, row.total_input || 0, row.total_output || 0)
+      if (!acc[d]) acc[d] = { day: d, input: 0, output: 0, cacheRead: 0, cost: 0, prompts: 0 }
+      acc[d].input     += row.total_input        || 0
+      acc[d].output    += row.total_output       || 0
+      acc[d].cacheRead += row.total_cache_read   || 0
+      acc[d].prompts   += row.prompt_count       || 0
+      acc[d].cost      += rowCost(row)
       return acc
     }, {})
   ).sort((a, b) => a.day.localeCompare(b.day))
@@ -57,7 +69,7 @@ export default function TokenView() {
       if (!acc[m]) acc[m] = { model: m, input: 0, output: 0, cost: 0 }
       acc[m].input  += row.total_input  || 0
       acc[m].output += row.total_output || 0
-      acc[m].cost   += estimateCost(m, row.total_input || 0, row.total_output || 0)
+      acc[m].cost   += rowCost(row)
       return acc
     }, {})
   )
@@ -69,7 +81,7 @@ export default function TokenView() {
       if (!acc[t]) acc[t] = { task: t, input: 0, output: 0, cost: 0 }
       acc[t].input  += row.total_input  || 0
       acc[t].output += row.total_output || 0
-      acc[t].cost   += estimateCost(row.model, row.total_input || 0, row.total_output || 0)
+      acc[t].cost   += rowCost(row)
       return acc
     }, {})
   )
@@ -77,6 +89,7 @@ export default function TokenView() {
   const totalTokens = byDay.reduce((s, d) => s + d.input + d.output, 0)
   const totalCost   = byDay.reduce((s, d) => s + d.cost, 0)
   const totalPrompts = byDay.reduce((s, d) => s + d.prompts, 0)
+  const totalCacheRead = byDay.reduce((s, d) => s + d.cacheRead, 0)
 
   const chartColors = { input: '#7c6af7', output: '#22c55e', cost: '#f59e0b' }
 
@@ -88,10 +101,11 @@ export default function TokenView() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <StatCard label="Total Tokens" value={totalTokens.toLocaleString()} sub="all time" />
+        <StatCard label="Cache Read Tokens" value={totalCacheRead.toLocaleString()} sub="Claude prompt cache" />
         <StatCard label="Total Prompts" value={totalPrompts.toLocaleString()} sub="logged" />
-        <StatCard label="Est. Cost" value={`$${totalCost.toFixed(4)}`} sub="approximate" color="text-warning" />
+        <StatCard label="Est. Cost" value={`$${totalCost.toFixed(4)}`} sub="from tokscale where reconciled" color="text-warning" />
       </div>
 
       {/* View tabs */}

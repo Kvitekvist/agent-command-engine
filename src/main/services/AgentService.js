@@ -1,6 +1,7 @@
 const { spawn } = require('child_process')
 const { randomUUID } = require('crypto')
 const { EventEmitter } = require('events')
+const { TokscaleService } = require('./TokscaleService')
 
 // Parses token counts from Claude CLI JSON output lines. Only the final
 // 'result' event's usage is read — it's the authoritative total for the
@@ -15,6 +16,20 @@ function parseTokens(line) {
     }
   } catch (_) {}
   return null
+}
+
+// Diffs tokscale's cumulative session usage against the last-seen baseline
+// to get this turn's actual delta (cache tokens + real cost included),
+// clamped to 0 in case tokscale's own numbers ever settle backwards between
+// calls (e.g. a cache/index rebuild) rather than surfacing a negative delta.
+function computeTokscaleDelta(usage, baseline) {
+  return {
+    input: Math.max(0, usage.inputTokens - baseline.inputTokens),
+    output: Math.max(0, usage.outputTokens - baseline.outputTokens),
+    cacheRead: Math.max(0, usage.cacheReadTokens - baseline.cacheReadTokens),
+    cacheCreation: Math.max(0, usage.cacheCreationTokens - baseline.cacheCreationTokens),
+    cost: Math.max(0, usage.costUsd - baseline.costUsd),
+  }
 }
 
 // Extracts the Claude CLI session id (present on every stream-json event) so
@@ -138,7 +153,7 @@ class AgentService extends EventEmitter {
   start({ projectId, projectPath, label, provider = 'claude', model = 'claude-sonnet-5', permissionMode = 'safe' }) {
     const agentId = randomUUID()
     const meta = { agentId, projectId, projectPath, label, provider, model, permissionMode, startedAt: Date.now() }
-    this.agents.set(agentId, { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: null })
+    this.agents.set(agentId, { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: null, tokscaleBaseline: null })
     this._emit('agent:status', { agentId, status: 'running', meta })
     return { agentId, meta }
   }
@@ -156,8 +171,21 @@ class AgentService extends EventEmitter {
   restore({ agentId, projectId, projectPath, label, provider, model, permissionMode, sessionId }) {
     if (this.agents.has(agentId)) return { agentId, meta: this.agents.get(agentId).meta }
     const meta = { agentId, projectId, projectPath, label, provider, model, permissionMode, startedAt: Date.now() }
-    this.agents.set(agentId, { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: sessionId || null })
+    const agent = { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: sessionId || null, tokscaleBaseline: null }
+    this.agents.set(agentId, agent)
+    // Best-effort, non-blocking: without this, the first turn after a restore
+    // would diff against a null baseline and see the *entire* session's
+    // pre-restore usage as if it all belonged to that one turn.
+    if (sessionId && provider === 'claude') {
+      this._seedTokscaleBaseline(agent).catch(() => {})
+    }
     return { agentId, meta }
+  }
+
+  async _seedTokscaleBaseline(agent) {
+    const usageMap = await TokscaleService.getUsageMap([agent.meta.provider])
+    const usage = usageMap.get(`${agent.meta.provider}:${agent.sessionId}`)
+    if (usage && !agent.tokscaleBaseline) agent.tokscaleBaseline = usage
   }
 
   sendPrompt(agentId, prompt) {
@@ -276,18 +304,24 @@ class AgentService extends EventEmitter {
       if (agent.activeProc === proc) {
         agent.activeProc = null
       }
+      const stdoutDelta = {
+        input: agent.inputTokens - turnStartInput,
+        output: agent.outputTokens - turnStartOutput,
+      }
       this._emit('agent:prompt-done', {
         agentId,
         executionId,
         exitCode: code,
         error: error ? error.message : null,
         response: textBuffer,
-        tokens: {
-          input: agent.inputTokens - turnStartInput,
-          output: agent.outputTokens - turnStartOutput,
-        },
+        tokens: stdoutDelta,
         sessionId: agent.sessionId,
       })
+      // Fire-and-forget: corrects the numbers above (adds cache tokens + real
+      // cost, sourced from tokscale reading Claude's own session transcript)
+      // once it resolves a moment later, instead of delaying the response
+      // the user is waiting on. Claude only — see class doc on sessionId.
+      this._reconcileTokens(agent, agentId, executionId, stdoutDelta).catch(() => {})
     }
 
     proc.on('error', (error) => {
@@ -304,6 +338,38 @@ class AgentService extends EventEmitter {
     return { ok: true, executionId }
   }
 
+  // Reconciles one turn's stdout-parsed token estimate against tokscale's
+  // authoritative reading of the CLI's own session transcript. Only possible
+  // for providers where a stable session id is captured (Claude, via
+  // --resume/session_id) — codex is spawned stateless with no equivalent id
+  // to match a tokscale row against, so it's skipped rather than guessed at.
+  async _reconcileTokens(agent, agentId, executionId, stdoutDelta) {
+    if (!agent.sessionId || agent.meta.provider !== 'claude') return
+
+    const usageMap = await TokscaleService.getUsageMap([agent.meta.provider])
+    const usage = usageMap.get(`${agent.meta.provider}:${agent.sessionId}`)
+    if (!usage) return
+
+    const baseline = agent.tokscaleBaseline || {
+      inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0,
+    }
+    const delta = computeTokscaleDelta(usage, baseline)
+    agent.tokscaleBaseline = usage
+
+    // The lifetime counters already absorbed stdoutDelta when this turn's
+    // stdout lines were parsed — correct them to the accurate figure instead
+    // of double-counting.
+    agent.inputTokens += delta.input - stdoutDelta.input
+    agent.outputTokens += delta.output - stdoutDelta.output
+
+    this._emit('agent:tokens-reconciled', {
+      agentId,
+      executionId,
+      tokens: { input: delta.input, output: delta.output, cacheRead: delta.cacheRead, cacheCreation: delta.cacheCreation },
+      costUsd: delta.cost,
+    })
+  }
+
   // Drop the resumed session so the next prompt starts a brand-new conversation
   clearContext(agentId) {
     const agent = this.agents.get(agentId)
@@ -316,6 +382,7 @@ class AgentService extends EventEmitter {
     agent.sessionId = null
     agent.inputTokens = 0
     agent.outputTokens = 0
+    agent.tokscaleBaseline = null
 
     this._emit('agent:context-cleared', { agentId })
     return { ok: true }
@@ -350,6 +417,7 @@ class AgentService extends EventEmitter {
 module.exports = {
   AgentService: new AgentService(),
   AgentServiceClass: AgentService,
+  computeTokscaleDelta,
   buildPermissionArgs,
   parsePermissionDenials,
   parseSessionId,
