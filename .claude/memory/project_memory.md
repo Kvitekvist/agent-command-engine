@@ -15,10 +15,19 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
+* Finish manually verifying the per-agent embedded terminal (TICKET-0019
+  correction): confirm a launched Codex agent boots correctly too, type a
+  follow-up prompt directly into a running terminal and confirm it
+  responds, get a real pixel screenshot of the CLI banner rendering
+* Decide whether agent terminal sessions need to survive a project
+  switch (currently they don't — see TICKET-0019 Notes) — open a follow-up
+  ticket if so
+* Rebuild token tracking for the new per-agent terminal path (it currently
+  only works for the now-unused headless `AgentService.sendPrompt` path —
+  see TICKET-0019 Notes and [[architecture]] Token Tracking)
 * Verify restored stopped-agent behavior manually (TICKET-0011)
 * Add end-to-end provider contract tests for Claude and Codex
 * Replace whole-database export-on-write if audit volume causes UI stalls
-* Give Codex real session resumption so its token usage can be reconciled too (see TICKET-0018 Notes)
 
 ---
 
@@ -30,6 +39,7 @@ Make process execution, persistence, packaging, and provider behavior dependable
 - Recharts (token usage visualization)
 - Node.js child_process (spawn claude CLI and openai codex CLI)
 - tokscale (reads Claude Code's/Codex's own local session transcripts for accurate token/cost usage — see [[architecture]] Token Tracking)
+- node-pty + xterm.js (real interactive terminal embedded per agent card, forked into its own `ptyHost.js` process — see [[architecture]] Terminal)
 
 ---
 
@@ -42,12 +52,28 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Known Issues
+- TICKET-0019 (per-agent embedded terminal — every launched agent's card is
+  now a real interactive `claude`/`codex` terminal, not a headless chat
+  thread; the original standalone floating panel was removed) is verified
+  at the process level and via live-window DOM/IPC automation: PTY host
+  forks and reports ready, a standalone spike confirmed the shell's real OS
+  process is actually killed (not just IPC-resolved) on graceful shutdown,
+  and driving a real dev window over the Chrome DevTools Protocol confirmed
+  launching an agent produces a card with a live terminal and no leftover
+  chat UI, and Stop actually disposes that terminal's PTY session. Still
+  open: a pixel-level screenshot check that the CLI banner renders, testing
+  a Codex agent specifically, and typing a follow-up prompt into a running
+  terminal.
+- Terminal sessions do not currently survive switching away from a
+  project and back, or an app restart — each is tied to its agent card's
+  mount lifecycle. See TICKET-0019 Notes.
+- Audit Log / Token Usage no longer gain new rows for agents launched via
+  the embedded terminal (only the old headless path wrote them, and
+  nothing calls it anymore) — historical data still displays correctly.
+  See TICKET-0019 Notes and [[architecture]] Token Tracking.
 - TICKET-0011 (restore stopped agents + Delete button) is implemented but its
   manual UI verification step (stop an agent, switch projects, confirm cards +
   history reappear) hasn't been run yet.
-- Codex agents still show 0 tokens/cost — TICKET-0018 fixed Claude's token
-  accuracy via tokscale reconciliation but deliberately left Codex out (no
-  stable per-turn session id to reconcile against; see architecture.md).
 
 ---
 

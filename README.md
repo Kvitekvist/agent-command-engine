@@ -7,9 +7,9 @@ A specialized Electron desktop application for managing Claude and OpenAI Codex 
 ## Features
 
 - **Project Switcher** — open and switch between any number of project folders
-- **Multi-Agent Runner** — launch multiple Claude CLI or OpenAI Codex agents simultaneously within a project; each gets its own terminal pane with live streaming output
-- **Full Audit Log** — every prompt sent and every response received is stored in SQLite for auditing and result reproduction
-- **Token Dashboard** — per-prompt, per-task, and per-project token tracking with bar charts, line charts, and cost estimates by model
+- **Multi-Agent Runner** — launch multiple Claude CLI or OpenAI Codex agents simultaneously within a project; each gets its own real interactive terminal (opens in the project's folder, runs the actual CLI) rather than a scripted chat pane
+- **Full Audit Log** — every prompt sent and every response received through the (currently unused by the UI) headless agent path is stored in SQLite for auditing and result reproduction; historical only until a future update reconciles it against the interactive terminal path too
+- **Token Dashboard** — per-prompt, per-task, and per-project token tracking with bar charts, line charts, and cost estimates by model; same historical-only caveat as the audit log above
 - **Model Selector** — dropdown to choose Claude or Codex model per agent
 - **Load Balancing** — automatically falls back to OpenAI Codex when Claude token usage exceeds a configurable hourly threshold
 - **Optimization Advisor** — one-click analysis of recent prompts with actionable suggestions for reducing token spend
@@ -26,6 +26,7 @@ A specialized Electron desktop application for managing Claude and OpenAI Codex 
 | Database | SQLite via sql.js (WASM) |
 | Charts | Recharts |
 | State | Zustand |
+| Terminal | node-pty + xterm.js |
 | AI providers | Claude CLI, OpenAI CLI |
 
 ---

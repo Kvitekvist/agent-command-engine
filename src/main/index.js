@@ -16,11 +16,12 @@ process.on('unhandledRejection', (reason) => {
   } catch (_) {}
 })
 
-let DBService, AgentService, registerHandlers
+let DBService, AgentService, TerminalService, registerHandlers
 
 try {
   DBService = require('./services/DBService').DBService
   AgentService = require('./services/AgentService').AgentService
+  TerminalService = require('./services/TerminalService').TerminalService
   registerHandlers = require('./ipc/handlers').registerHandlers
 } catch (err) {
   console.error('MODULE LOAD ERROR:', err)
@@ -66,7 +67,8 @@ app.whenReady().then(async () => {
     console.log('DBService ready. Creating window...')
     createWindow()
     AgentService.init(mainWindow)
-    registerHandlers(ipcMain, mainWindow, DBService, AgentService)
+    TerminalService.init(mainWindow)
+    registerHandlers(ipcMain, mainWindow, DBService, AgentService, TerminalService)
     console.log('Startup complete.')
   } catch (err) {
     console.error('STARTUP ERROR:', err)
@@ -78,7 +80,8 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
   if (AgentService) AgentService.killAll()
+  if (TerminalService) await TerminalService.shutdown()
   if (process.platform !== 'darwin') app.quit()
 })

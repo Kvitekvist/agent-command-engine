@@ -30,6 +30,28 @@ contextBridge.exposeInMainWorld('cpi', {
   // Optimization advisor
   getOptimizationAdvice: (projectId) => ipcRenderer.invoke('optimize:analyze', projectId),
 
+  // Terminal
+  terminal: {
+    spawn: (opts) => ipcRenderer.invoke('terminal:spawn', opts),
+    write: (id, data) => ipcRenderer.send('terminal:write', { id, data }),
+    resize: (id, cols, rows) => ipcRenderer.send('terminal:resize', { id, cols, rows }),
+    dispose: (id) => ipcRenderer.send('terminal:dispose', { id }),
+    onData: (cb) => {
+      const handler = (_, d) => cb(d)
+      ipcRenderer.on('terminal:data', handler)
+      return () => ipcRenderer.removeListener('terminal:data', handler)
+    },
+    onExit: (cb) => {
+      const handler = (_, d) => cb(d)
+      ipcRenderer.on('terminal:exit', handler)
+      return () => ipcRenderer.removeListener('terminal:exit', handler)
+    },
+    onHostRestarted: (cb) => {
+      ipcRenderer.on('terminal:hostRestarted', cb)
+      return () => ipcRenderer.removeListener('terminal:hostRestarted', cb)
+    },
+  },
+
   // Events from main -> renderer
   onAgentOutput:            (cb) => ipcRenderer.on('agent:output',             (_, d) => cb(d)),
   onAgentStatus:            (cb) => ipcRenderer.on('agent:status',             (_, d) => cb(d)),

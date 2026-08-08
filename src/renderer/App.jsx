@@ -7,17 +7,9 @@ import TokenView from './views/TokenView'
 import SettingsView from './views/SettingsView'
 
 export default function App() {
-  const {
-    activeView, addAgent, updateAgentStatus,
-    appendOutput, startAgentMessage, finalizeAgentMessage, setAgentThinking,
-  } = useStore()
+  const { activeView, addAgent, updateAgentStatus } = useStore()
 
   useEffect(() => {
-    window.cpi.onAgentOutput((data) => {
-      if (['text', 'stderr', 'permission-denied'].includes(data.stream)) {
-        appendOutput(data.agentId, data.text)
-      }
-    })
     window.cpi.onAgentStatus((data) => {
       if (data.status === 'running') {
         addAgent({ agentId: data.agentId, ...data.meta, status: 'running' })
@@ -25,14 +17,8 @@ export default function App() {
         updateAgentStatus(data.agentId, data.status, { tokenSummary: data.tokenSummary })
       }
     })
-    window.cpi.onAgentPromptDone((data) => {
-      finalizeAgentMessage(data.agentId)
-      setAgentThinking(data.agentId, false)
-    })
     return () => {
-      window.cpi.offAgentOutput()
       window.cpi.offAgentStatus()
-      window.cpi.offAgentPromptDone()
     }
   }, [])
 

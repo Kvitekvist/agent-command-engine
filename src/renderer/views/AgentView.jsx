@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import useStore from '../store/useStore'
 import ModelSelector from '../components/ModelSelector'
+import AgentTerminal from '../components/AgentTerminal'
 import { generateAgentName } from '../utils/agentNames'
 
 const CLAUDE_MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-5','claude-opus-4-8','claude-fable-5']
@@ -12,7 +13,7 @@ const PERMISSION_MODES = [
 ]
 
 export default function AgentView() {
-  const { activeProject, agents, agentOutputs, agentThinking, removeAgent, setAgentThinking } = useStore()
+  const { activeProject, agents, removeAgent } = useStore()
   const [label, setLabel]                   = useState(() => generateAgentName())
   const [provider, setProvider]             = useState('claude')
   const [model, setModel]                   = useState('claude-sonnet-5')
@@ -40,11 +41,13 @@ export default function AgentView() {
     removeAgent(agentId)
   }
 
-  // Restore agents + replay their persisted history when a project is
-  // (re)selected — e.g. after the app is closed and reopened. Only "Clear
-  // Context" should ever wipe this history; switching projects must not.
-  // Every persisted agent is restored here, running or stopped — a stopped
-  // agent still needs its card back so its history and Delete button show up.
+  // Restore agent cards when a project is (re)selected — e.g. after the app
+  // is closed and reopened, or after switching away and back. Every
+  // persisted agent is restored here, running or stopped — a stopped agent
+  // still needs its card back so its Delete button shows up. A restored
+  // 'running' agent gets a brand-new terminal session (AgentTerminal always
+  // starts fresh on mount); its previous interactive session does not
+  // survive the switch — see AgentTerminal.jsx.
   useEffect(() => {
     if (!activeProject) return
     let cancelled = false
@@ -70,9 +73,6 @@ export default function AgentView() {
           }
         }
         useStore.getState().addAgent({ ...meta, agentId: row.id, status: row.status })
-        const prompts = await window.cpi.getPrompts({ agentId: row.id, limit: 500 })
-        if (cancelled) return
-        useStore.getState().restoreAgentThread(row.id, [...prompts].reverse())
       }
     })()
     return () => { cancelled = true }
@@ -126,11 +126,8 @@ export default function AgentView() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {agents.map((agent) => (
               <AgentPane key={agent.agentId} agent={agent}
-                output={agentOutputs[agent.agentId] || []}
-                thinking={agentThinking[agent.agentId] || false}
                 onStop={() => stopAgent(agent.agentId)}
-                onDelete={() => deleteAgent(agent.agentId)}
-                onSetThinking={(v) => setAgentThinking(agent.agentId, v)} />
+                onDelete={() => deleteAgent(agent.agentId)} />
             ))}
           </div>
         )}
@@ -139,102 +136,17 @@ export default function AgentView() {
   )
 }
 
-// ── Inline markdown renderer ──────────────────────────────────────────────────
-
-function inlineFormat(text) {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/)
-  return parts.map((part, i) => {
-    if (part.startsWith('**') && part.endsWith('**'))
-      return React.createElement('strong', { key: i, className: 'text-gray-100 font-semibold' }, part.slice(2,-2))
-    if (part.startsWith('`') && part.endsWith('`'))
-      return React.createElement('code', { key: i, className: 'bg-black/40 text-green-300 px-1 rounded font-mono text-xs' }, part.slice(1,-1))
-    return part
-  })
-}
-
-function MarkdownText({ text }) {
-  if (!text) return null
-  const lines = text.split('\n')
-  const elements = []
-  let i = 0
-  while (i < lines.length) {
-    const line = lines[i]
-    if (line.startsWith('```')) {
-      const lang = line.slice(3).trim()
-      const code = []
-      i++
-      while (i < lines.length && !lines[i].startsWith('```')) { code.push(lines[i]); i++ }
-      elements.push(<pre key={'cb'+i} className="bg-black/40 rounded p-2 my-1 overflow-x-auto text-xs text-green-300 font-mono">{lang && <span className="text-muted text-xs block mb-1">{lang}</span>}{code.join('\n')}</pre>)
-      i++; continue
-    }
-    const hm = line.match(/^(#{1,3})\s+(.+)/)
-    if (hm) {
-      const cls = hm[1].length === 1 ? 'text-base font-bold text-gray-100 mt-2' : hm[1].length === 2 ? 'text-sm font-semibold text-gray-200 mt-2' : 'text-xs font-semibold text-gray-300 mt-1'
-      elements.push(<div key={i} className={cls}>{hm[2]}</div>); i++; continue
-    }
-    const nm = line.match(/^(\d+)\.\s+(.+)/)
-    if (nm) {
-      elements.push(<div key={i} className="flex gap-2 text-xs text-gray-300 my-0.5"><span className="text-accent font-bold shrink-0">{nm[1]}.</span><span>{inlineFormat(nm[2])}</span></div>)
-      i++; continue
-    }
-    const bm = line.match(/^[-*]\s+(.+)/)
-    if (bm) {
-      elements.push(<div key={i} className="flex gap-2 text-xs text-gray-300 my-0.5"><span className="text-muted shrink-0">•</span><span>{inlineFormat(bm[1])}</span></div>)
-      i++; continue
-    }
-    if (!line.trim()) { elements.push(<div key={i} className="h-1" />); i++; continue }
-    elements.push(<div key={i} className="text-xs text-gray-300 leading-relaxed">{inlineFormat(line)}</div>)
-    i++
-  }
-  return React.createElement(React.Fragment, null, ...elements)
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function extractQuestions(text) {
-  const questions = []
-  const matches = text.matchAll(/^\d+\.\s+\*\*(.+?)\*\*/gm)
-  for (const m of matches) questions.push(m[1])
-  return questions
-}
-
 // ── AgentPane ─────────────────────────────────────────────────────────────────
+// Each running agent's card embeds a real interactive terminal (see
+// AgentTerminal.jsx) running the actual `claude`/`codex` CLI, rather than a
+// headless chat thread -- the terminal itself takes keystrokes when
+// focused, so there's no separate prompt input/quick-reply/clear-context UI
+// here anymore; Claude Code's own interactive UI (visible inside the
+// terminal) handles all of that.
 
-function AgentPane({ agent, output, thinking, onStop, onDelete, onSetThinking }) {
-  const [prompt, setPrompt]   = useState('')
-  const [clearing, setClearing] = useState(false)
-  const bottomRef = useRef(null)
-  const inputRef  = useRef(null)
-
+function AgentPane({ agent, onStop, onDelete }) {
   function handleDelete() {
     if (window.confirm(`Delete "${agent.label}"? This removes it from the interface.`)) onDelete()
-  }
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [output])
-
-  const lastAgentMsg = [...(output || [])].reverse().find((m) => m.role === 'agent' && m.done)
-  const quickReplies = lastAgentMsg ? extractQuestions(lastAgentMsg.content) : []
-
-  async function send(text) {
-    const trimmed = (text || prompt).trim()
-    if (!trimmed || thinking) return
-    onSetThinking(true)
-    useStore.getState().addUserMessage(agent.agentId, trimmed)
-    useStore.getState().startAgentMessage(agent.agentId)
-    await window.cpi.sendPrompt(agent.agentId, trimmed)
-    setPrompt('')
-    inputRef.current?.focus()
-  }
-
-  function onSubmit(e) { e.preventDefault(); send() }
-
-  async function clearContext() {
-    if (clearing || thinking) return
-    setClearing(true)
-    try {
-      await window.cpi.clearContext(agent.agentId)
-      useStore.getState().clearAgentThread(agent.agentId)
-    } finally { setClearing(false) }
   }
 
   const permIcon    = ({ safe: '🔒', ask: '🛡️', auto: '⚡' })[agent.permissionMode] || '🔒'
@@ -243,7 +155,7 @@ function AgentPane({ agent, output, thinking, onStop, onDelete, onSetThinking })
     : <span className="badge-gray">○ Stopped</span>
 
   return (
-    <div className="card flex flex-col" style={{ height: '28rem' }}>
+    <div className="card flex flex-col" style={{ height: '32rem' }}>
       <div className="flex items-center justify-between mb-2 shrink-0">
         <div className="flex items-center gap-2">
           {statusBadge}
@@ -252,10 +164,6 @@ function AgentPane({ agent, output, thinking, onStop, onDelete, onSetThinking })
           <span className="text-xs" title={'Permission: ' + agent.permissionMode}>{permIcon}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={clearContext} disabled={clearing || thinking} title="Start a fresh conversation — forgets everything said so far"
-            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border/30 transition-colors disabled:opacity-50">
-            {clearing ? '…' : '🧹 Clear Context'}
-          </button>
           {agent.status === 'running' ? (
             <button onClick={onStop} className="btn-danger text-xs py-0.5">Stop</button>
           ) : (
@@ -267,52 +175,11 @@ function AgentPane({ agent, output, thinking, onStop, onDelete, onSetThinking })
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-        {(!output || output.length === 0) && (
-          <div className="text-center text-muted text-xs pt-8">Type a prompt below to start.</div>
-        )}
-        {(output || []).map((item, i) => {
-          return (
-            <div key={i} className={'flex ' + (item.role === 'user' ? 'justify-end' : 'justify-start')}>
-              {item.role === 'user' ? (
-                <div className="bg-accent/20 border border-accent/30 rounded-lg px-3 py-2 max-w-[85%] text-xs text-gray-200">{item.content}</div>
-              ) : (
-                <div className="bg-panel border border-border rounded-lg px-3 py-2 max-w-[95%] w-full">
-                  <MarkdownText text={item.content} />
-                  {!item.done && <span className="inline-block w-1.5 h-3 bg-accent ml-0.5 animate-pulse align-middle" />}
-                </div>
-              )}
-            </div>
-          )
-        })}
-        <div ref={bottomRef} />
-      </div>
-
-      {quickReplies.length > 0 && !thinking && agent.status === 'running' && (
-        <div className="flex flex-wrap gap-1.5 mt-2 shrink-0">
-          {quickReplies.map((q, i) => (
-            <button key={i} onClick={() => send((i+1) + '. Yes')} className="text-xs px-2 py-1 rounded border border-accent/50 text-accent hover:bg-accent/10 transition-colors">{i+1}. Yes</button>
-          ))}
-          {quickReplies.map((q, i) => (
-            <button key={'no'+i} onClick={() => send((i+1) + '. No')} className="text-xs px-2 py-1 rounded border border-border text-muted hover:bg-border/30 transition-colors">{i+1}. No</button>
-          ))}
-        </div>
-      )}
-
-      {agent.status === 'running' && (
-        <form onSubmit={onSubmit} className="flex gap-2 mt-2 shrink-0">
-          <input ref={inputRef} className="input text-xs flex-1"
-            placeholder={thinking ? 'Waiting for response…' : 'Send a prompt…'}
-            value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={thinking} />
-          <button type="submit" disabled={thinking} className="btn-primary text-xs px-3">
-            {thinking ? '…' : 'Send'}
-          </button>
-        </form>
-      )}
-
-      {agent.tokenSummary && (
-        <div className="text-xs text-muted mt-1">
-          Tokens — in: {agent.tokenSummary.input.toLocaleString()} / out: {agent.tokenSummary.output.toLocaleString()}
+      {agent.status === 'running' ? (
+        <AgentTerminal agent={agent} />
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-muted text-xs">
+          Stopped — Delete to remove, or launch a new agent above.
         </div>
       )}
     </div>

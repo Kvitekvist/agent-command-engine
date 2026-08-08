@@ -2,9 +2,10 @@ const { dialog } = require('electron')
 const { LoadBalancer } = require('../services/LoadBalancer')
 const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 
-function registerHandlers(ipcMain, mainWindow, DB, AgentSvc) {
+function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keep window ref updated
   AgentSvc.setWindow(mainWindow)
+  if (TerminalSvc) TerminalSvc.setWindow(mainWindow)
 
   // ── Projects ────────────────────────────────────────────────────────────────
   ipcMain.handle('projects:getAll', () => DB.getProjects())
@@ -173,6 +174,15 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc) {
 
   // ── Optimization advisor ────────────────────────────────────────────────────
   ipcMain.handle('optimize:analyze', (_, projectId) => OptimizationAdvisor.analyze(projectId))
+
+  // ── Terminal (TICKET-0019) ──────────────────────────────────────────────────
+  // Keystrokes/resize/dispose are fire-and-forget (ipcMain.on) -- there's no
+  // meaningful single response to a keystroke. Spawn is the one call with a
+  // real result (did it start, what's its id/pid), so it's the one invoke().
+  ipcMain.handle('terminal:spawn', (_, opts) => TerminalSvc.spawn(opts))
+  ipcMain.on('terminal:write', (_, { id, data } = {}) => TerminalSvc.write(id, data))
+  ipcMain.on('terminal:resize', (_, { id, cols, rows } = {}) => TerminalSvc.resize(id, cols, rows))
+  ipcMain.on('terminal:dispose', (_, { id } = {}) => TerminalSvc.dispose(id))
 }
 
 module.exports = { registerHandlers }
