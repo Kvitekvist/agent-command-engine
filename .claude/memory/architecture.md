@@ -279,6 +279,63 @@ interactively — replacing what AgentPane used to render as a headless
   11) and `ptyHost.js` doesn't override `useConpty` — confirmed via
   node-pty's own `WindowsPtyAgent` default logic, not just assumed.
 
+### Screenshots (TICKET-0034, reworked from TICKET-0032)
+Interactive drag-to-select screen capture, saved into the active project's
+own folder so the real `claude`/`codex` CLI running in its terminal can
+read it straight from disk by a relative path:
+- **`ScreenshotService.captureRegion(projectRoot)`** (main process): grabs
+  the primary display via `desktopCapturer` at its full pixel resolution
+  (`display.bounds` × `display.scaleFactor`), hands the frame to a
+  selection overlay (`_runOverlay`), crops the user's drag-selected rect
+  into that frame's own pixel space, and saves it as a timestamped PNG
+  under `<projectRoot>/.cpi/screenshots/`. `ensureGitignored` appends
+  `.cpi/` to the project's `.gitignore` (creating the file if missing,
+  idempotent) so this data never gets committed to the user's own repo.
+  The saved file's path *relative to the project root* (not absolute,
+  since that's the same root the agent's terminal already runs from as its
+  cwd) is written to the OS clipboard. Resolves `{ ok:false,
+  reason:'cancelled' }` rather than throwing if the user backs out
+  (Esc/right-click/a too-small selection) — not an error case.
+- **Deliberately does not hide CPI's own window before capturing.** An
+  earlier version did; removed after live feedback ("when i click the
+  screenshot button the app hides, that cant happen because sometimes i
+  need to screenshot the app") — the feature's whole point includes
+  visual UI debugging/feedback on CPI itself, which auto-hiding made
+  impossible. Matches how standard capture tools (Snipping Tool,
+  Greenshot) behave: they don't hide their own invoking window either. If
+  the user wants to exclude CPI, they can move/minimize it first, same as
+  with those tools.
+- **Selection overlay** (`_runOverlay`, `src/main/overlay/`): a frameless,
+  transparent, always-on-top `BrowserWindow` sized to exactly the primary
+  display, painted with the already-captured frame as a data URL, letting
+  the user drag a selection rectangle over it (Esc or right-click
+  cancels). Kept as its own `BrowserWindow` (not part of the main window)
+  so it can sit above literally everything on screen — same isolation
+  reasoning as `ptyHost.js` living in its own process, just for window
+  layering instead of process crashes. Its own preload
+  (`screenshot-overlay-preload.js`) is scoped to that window's
+  `webContents.ipc`, not global `ipcMain`, so a second capture started
+  before the first settles can never cross-wire.
+- **`screenshots:captureRegion`** IPC handler / `window.cpi.
+  screenshots.captureRegion(projectPath)` (preload) wire it to a 📸 button
+  on each running agent's card (`AgentView.jsx`), which shows a status
+  message (saved / cancelled / error) for 4s and disables the button
+  (swapping the icon for `…`) while a capture is in progress.
+- **Known UX trap, carried forward from TICKET-0032's clipboard-paste
+  version and still relevant here:** the status message itself must stay
+  non-selectable (`select-none`). Worded around "path copied," it's a
+  natural (and destructive) target for the user to select/copy instead of
+  pressing Ctrl+V — silently overwriting the real path the capture just
+  placed on the clipboard.
+- **Supersedes TICKET-0032's clipboard-paste model** (read whatever image
+  was already on the OS clipboard, saved per-agent under Electron's
+  `userData` dir). Rationale for the rework: clipboard-paste required a
+  separate screenshot tool already running, and left files disconnected
+  from the project; direct in-app region capture is one step instead of
+  two, and project-scoped files make sense given prompts run with the
+  project as cwd. TICKET-0032 stays closed as shipped-then-superseded
+  rather than reopened.
+
 ### File Explorer / Editor (TICKET-0021)
 A VS Code-style file tree in the Sidebar plus a Monaco editor, so the user
 can browse and edit a project's files directly rather than only through an
@@ -324,6 +381,7 @@ agent:
 - **TokscaleService**: spawns the `tokscale` npm package to read Claude Code's/Codex's own local session transcript files and return authoritative per-session token + cost totals (see Token Tracking below), plus real subscription quota and today's model/project breakdowns (see Live Token Usage Dashboard below)
 - **TerminalService**: forks/supervises `ptyHost.js`, forwards its data/exit events to the renderer — see Terminal above
 - **FileService**: reads/writes project files for the Sidebar file tree + Monaco editor, containment-checked against the requesting project's root — see File Explorer / Editor above
+- **ScreenshotService**: drag-to-select screen capture saved into the active project's own folder — see Screenshots above
 - **LoadBalancer**: decides provider based on credit status
 
 ---
@@ -333,9 +391,10 @@ agent:
 src/
   dist/           — complete production application generated by the build
   main/           — Electron main process
-    services/     — AgentService, DBService, LoadBalancer, TokenParser, TerminalService, FileService
+    services/     — AgentService, DBService, LoadBalancer, TokenParser, TerminalService, FileService, ScreenshotService (TICKET-0034)
     ipc/          — IPC handler registrations
     ptyHost.js    — forked node-pty host process (TICKET-0019)
+    overlay/      — screenshot-overlay.html/.js/-preload.js, the drag-to-select capture window (TICKET-0034)
   renderer/       — React app
     components/   — Reusable UI components (incl. AgentTerminal.jsx TICKET-0019, FileTree.jsx TICKET-0021, UsageCard.jsx TICKET-0022, UsageBar.jsx TICKET-0023)
     views/        — AgentView, AuditView, TokenView, SettingsView, EditorView (TICKET-0021)

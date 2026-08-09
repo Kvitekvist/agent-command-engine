@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import useStore from '../store/useStore'
 import ModelSelector from '../components/ModelSelector'
 import AgentTerminal from '../components/AgentTerminal'
@@ -189,8 +189,38 @@ export default function AgentView() {
 // terminal) handles all of that.
 
 function AgentPane({ agent, onStop, onDelete }) {
+  const [screenshotMsg, setScreenshotMsg] = useState(null)
+  const screenshotMsgTimer = useRef(null)
+
   function handleDelete() {
     if (window.confirm(`Delete "${agent.label}"? This removes it from the interface.`)) onDelete()
+  }
+
+  const [capturing, setCapturing] = useState(false)
+
+  // TICKET-0034 (reworked from TICKET-0032's clipboard-paste model): hides
+  // the app, lets the user drag-select a region of the primary display, and
+  // saves it into this project's own .cpi/screenshots/ folder. Overwrites
+  // the clipboard with the saved file's path (relative to the project
+  // root, since that's the agent's own cwd) so the natural next step
+  // (pasting into this card's terminal to reference it in a prompt) yields
+  // the path instead of nothing.
+  async function captureScreenshot() {
+    setCapturing(true)
+    try {
+      const result = await window.cpi.screenshots.captureRegion(agent.projectPath)
+      if (result.ok) {
+        setScreenshotMsg(`Saved ${result.filename} — path copied, paste into the terminal`)
+      } else if (result.reason === 'cancelled') {
+        setScreenshotMsg('Screenshot cancelled')
+      } else {
+        setScreenshotMsg(`Failed to save screenshot: ${result.error || 'unknown error'}`)
+      }
+    } finally {
+      setCapturing(false)
+    }
+    clearTimeout(screenshotMsgTimer.current)
+    screenshotMsgTimer.current = setTimeout(() => setScreenshotMsg(null), 4000)
   }
 
   const permIcon    = ({ safe: '🔒', ask: '🛡️', auto: '⚡' })[agent.permissionMode] || '🔒'
@@ -208,6 +238,13 @@ function AgentPane({ agent, onStop, onDelete }) {
           <span className="text-xs" title={'Permission: ' + agent.permissionMode}>{permIcon}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          {agent.status === 'running' && (
+            <button onClick={captureScreenshot} disabled={capturing}
+              title="Drag-select a screen region to save into this project's .cpi/screenshots/ folder"
+              className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50">
+              {capturing ? '…' : '📸'}
+            </button>
+          )}
           {agent.status === 'running' ? (
             <button onClick={onStop} className="btn-danger text-xs py-0.5">Stop</button>
           ) : (
@@ -218,6 +255,10 @@ function AgentPane({ agent, onStop, onDelete }) {
           )}
         </div>
       </div>
+
+      {screenshotMsg && (
+        <div className="text-xs text-muted mb-1.5 shrink-0 truncate select-none" title="Not the path itself -- selecting/copying this line overwrites the clipboard the button just set">{screenshotMsg}</div>
+      )}
 
       {agent.status === 'running' ? (
         <AgentTerminal agent={agent} />

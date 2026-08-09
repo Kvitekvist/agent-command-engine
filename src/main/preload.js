@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld('cpi', {
     writeFile: (root, filePath, content) => ipcRenderer.invoke('fs:writeFile', { root, filePath, content }),
   },
 
+  // Screenshots (TICKET-0034, reworked from TICKET-0032)
+  screenshots: {
+    captureRegion: (projectPath) => ipcRenderer.invoke('screenshots:captureRegion', projectPath),
+  },
+
   // Terminal
   terminal: {
     spawn: (opts) => ipcRenderer.invoke('terminal:spawn', opts),

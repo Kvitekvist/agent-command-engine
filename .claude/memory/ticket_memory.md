@@ -275,3 +275,86 @@ npm run build:renderer and the full automated test suite (11/11 pass, no
 new coverage — same reasoning as TICKET-0027, this is store/mount-
 lifecycle UI behavior); live in-app verification (switch projects with a
 real running conversation, confirm scrollback survives) still open.
+
+TICKET-0032
+2026-08-09
+Added per-agent screenshot folders plus a 📸 button (ScreenshotService.js,
+screenshots:pasteFromClipboard IPC handler, window.cpi.screenshots) that
+saves whatever image is on the OS clipboard into that agent's dedicated
+folder under Electron's userData dir, then overwrites the clipboard with
+the saved file's absolute path so the natural next step is pasting it
+into that agent's terminal. Found already implemented, uncommitted, in
+the working tree at the start of this session (like TICKET-0017) — this
+ticket formalizes and verifies it. Live verification on a real running
+agent (this session's own agent, "Yuki") found a real bug: right after a
+successful save, the OS clipboard held the toast's own status text
+instead of the file path, because the toast message was ordinary
+selectable text worded in a way ("path copied") that invited
+selecting/copying that line instead of just pressing Ctrl+V — silently
+clobbering the real path. Confirmed by checking the live clipboard
+directly and cross-referencing it against the actual saved PNG on disk.
+Fixed by adding `select-none` to the toast in AgentView.jsx so it can't
+be selected/copied over the real clipboard content. General pattern
+worth remembering: any clipboard-handoff feature should make its own
+"copied" status text non-selectable, since it sits right next to the
+thing the user actually wants to paste.
+
+TICKET-0034
+2026-08-09
+Reworked the screenshot feature (TICKET-0032) from clipboard-paste to
+interactive drag-to-select screen capture. The 📸 button now grabs the
+primary display via desktopCapturer, shows a frameless always-on-top
+overlay window the user drags a selection rectangle across (Esc/right-
+click cancels), crops to that region, and saves it under the active
+project's own `.cpi/screenshots/` folder instead of a per-agent folder
+under Electron's userData dir -- auto-appending `.cpi/` to the project's
+.gitignore (created if missing) so it never gets committed. Copies the
+saved file's path, relative to the project root, to the clipboard.
+Rationale: clipboard-paste required a separate screenshot tool already
+running and left files disconnected from the project; region capture is
+one step instead of two, and project-scoped files make sense given
+prompts run with the project as cwd. Found already implemented,
+uncommitted, in the working tree at the start of this session -- this
+ticket formalizes it and fixes two bugs found during its own live
+verification: (1) the 📸 button's onClick still referenced
+`pasteScreenshot`, a function left over from TICKET-0032's superseded
+design and never actually defined, so clicking it (or even just
+rendering a card for a running agent, since the reference was evaluated
+during render) threw a ReferenceError that crashed CPI's renderer
+entirely -- fixed by pointing the button at `captureScreenshot`, the
+correctly-wired handler that existed but was never called from anywhere;
+(2) `captureRegion` hid CPI's own main window before every capture,
+directly defeating the feature's stated purpose of screenshotting CPI
+itself -- removed the hide/show and the now-dead `mainWindow` field it
+existed only to support. Verified via a clean npm run build:main and the
+full automated test suite (11/11 pass, no new coverage -- native
+Electron window/capture behavior isn't exercised by the Node test
+runner). Manual verification (real drag-select capture against a running
+agent, confirming file/gitignore/clipboard behavior) still open -- see
+project_memory.md Active Priorities.
+
+TICKET-0033
+2026-08-09
+Added a right-click context menu to files in the Sidebar's file tree
+(FileTree.jsx): Open (same as the existing left-click), Open in Explorer
+(reveals the file via Electron's shell.showItemInFolder), and Run --
+shown only for executable-like files (.exe/.bat/.cmd/.ps1/.vbs/.com/.msi)
+-- which spawns the file the same way double-clicking it in Explorer
+would. New reusable ContextMenu.jsx component (position-at-cursor,
+closes on outside click/Escape) since none existed yet. FileService
+gained openInExplorer/runFile, both routed through the same
+resolveWithinRoot containment check TICKET-0021's readDir/readFile/
+writeFile already use, so Run/Open in Explorer can't reach outside the
+project root either. Run is deliberately NOT windowsHide'd, unlike this
+app's own background spawns (TICKET-0029) -- a user-invoked Run should
+show a console window like a real double-click, not be silently hidden.
+.ps1 is special-cased to spawn `powershell.exe -File` directly, since
+Explorer's own default double-click verb for PowerShell scripts is Edit,
+not Run (a deliberate Windows security default) -- relying on the file
+association alone would open the script in an editor instead of running
+it. Verified via a clean npm run build and the full automated test suite
+(11/11 pass, no new coverage -- this is IPC/UI wiring and native process
+spawning, same reasoning as TICKET-0021/0025/0027 etc.); manual
+verification (right-click a regular file vs. a .bat/.exe/.ps1, confirm
+Explorer actually opens/highlights and Run actually launches) still
+open.

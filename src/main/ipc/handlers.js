@@ -3,6 +3,7 @@ const { LoadBalancer } = require('../services/LoadBalancer')
 const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 const { FileService } = require('../services/FileService')
 const { TokscaleService } = require('../services/TokscaleService')
+const { ScreenshotService } = require('../services/ScreenshotService')
 
 function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keep window ref updated
@@ -239,6 +240,18 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   ipcMain.handle('fs:writeFile', (_, { root, filePath, content }) => {
     try {
       return FileService.writeFile(root, filePath, content)
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  // ── Screenshots (TICKET-0034, reworked from TICKET-0032) ───────────────────
+  // Drag-to-select screen capture, saved into the requesting project's own
+  // .cpi/screenshots/ folder -- see ScreenshotService for the capture-overlay
+  // flow and the clipboard-path handoff.
+  ipcMain.handle('screenshots:captureRegion', async (_, projectPath) => {
+    try {
+      return await ScreenshotService.captureRegion(projectPath)
     } catch (error) {
       return { ok: false, error: error.message }
     }

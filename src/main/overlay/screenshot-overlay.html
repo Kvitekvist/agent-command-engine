@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline';" />
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    cursor: crosshair;
+    background: #000;
+  }
+  #shot {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  #sel {
+    position: absolute;
+    display: none;
+    border: 1.5px solid #3b82f6;
+    background: rgba(59, 130, 246, 0.12);
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  }
+  #hint {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #fff;
+    font: 13px -apple-system, "Segoe UI", sans-serif;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 6px 14px;
+    border-radius: 6px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+  <img id="shot" alt="" draggable="false" />
+  <div id="sel"></div>
+  <div id="hint">Drag to select an area to capture &middot; Esc or right-click to cancel</div>
+  <script src="screenshot-overlay.js"></script>
+</body>
+</html>
