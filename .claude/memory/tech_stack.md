@@ -18,6 +18,10 @@
 | Zustand | 4.5 | Renderer state |
 | Recharts | 2.12 | Usage charts |
 | sql.js | 1.12 | In-process SQLite |
+| node-pty | — | Real interactive PTY sessions per agent card (forked into its own `ptyHost.js` process) |
+| @xterm/xterm | — | Renders each agent's PTY session in the UI |
+| @monaco-editor/react + monaco-editor (pinned 0.50.0) | — | VS Code's own editor, powering the Sidebar file explorer |
+| tokscale | — | Reads Claude Code's/Codex's own local session transcripts for authoritative token/cost usage and live subscription quota |
 
 ## Build and Package Management
 

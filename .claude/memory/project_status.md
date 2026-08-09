@@ -2,7 +2,7 @@
 
 ## Current Version
 
-0.1.1
+0.1.1 (unreleased changes accumulated since — see CHANGELOG.md's `[Unreleased]` section)
 
 ---
 
@@ -14,7 +14,9 @@ Reliability Alpha
 
 ## Progress
 
-Core prototype complete; reliability work in progress
+Core prototype complete. Most Reliability Alpha work (TICKET-0019 through
+TICKET-0034) is implemented and committed; what's left is working through
+a live manual-verification backlog, not new development.
 
 ---
 
@@ -24,54 +26,66 @@ main
 
 ---
 
-## Open Feature/Enhancement Tickets
+## Ticket Summary
 
-3 (TICKET-0011, TICKET-0015, TICKET-0016)
-
----
-
-## Open Bug Tickets
-
-0
-
----
-
-## Completed Tickets
-
-6 (TICKET-0001, 0012, 0013, 0014, 0017, 0018)
+- **Closed** (implemented + manually verified) — 9: TICKET-0001, 0012,
+  0013, 0014, 0017, 0018, 0022, 0023, 0032
+- **Open, implemented + committed, pending manual verification only** — 14:
+  TICKET-0011, 0016, 0019, 0020, 0021, 0024, 0025, 0026, 0027, 0028, 0029,
+  0030, 0033, 0034 (see project_memory.md Active Priorities for the exact
+  verification step per ticket)
+- **Open, not started** — 1: TICKET-0031 (in-chat model switcher)
+- **Open, in progress, uncommitted** — 1: TICKET-0035 (3px border-radius
+  standardization) — see Notes
+- **Open, stale/flagged, needs a user decision** — 1: TICKET-0015 (.NET
+  migration) — see Notes
 
 ---
 
 ## Build Status
 
-Passing (`npm run build`; installer produced)
+Passing as of the last commit (`npm run build`; installer produced)
 
 ---
 
 ## Test Status
 
-Passing (9 automated tests)
+Passing — 11 automated tests (`agent-service.test.js`,
+`tokscale-service.test.js`)
 
 ---
 
 ## Last Commit
 
-09e3ec9
+07e5e30 [TICKET-0033] Add Open/Open in Explorer/Run right-click menu to the file tree
 
 ---
 
 ## Next Priority
 
-Manually verify TICKET-0011; give Codex real session resumption so its
-token usage can be reconciled (currently the one known tokscale gap from
-TICKET-0018).
+Work through the live manual-verification backlog (TICKET-0024–0030, 0033,
+0034 first, since those are the most recent and least-verified). No new
+feature work is blocked on this, but none of these tickets can move to
+`tickets/closed/` until verified. After that, TICKET-0031 (in-chat model
+switcher) is the only open ticket not yet started.
 
 ---
 
 ## Notes
 
 TICKET-0018 (accurate token tracking via tokscale) completed on 2026-08-03.
-TICKET-0015 (.NET migration) is open but appears stale/abandoned — drafted
-uncommitted, with an empty app/ folder and no trace in this memory system
-until now; the active app remains the Electron one under src/. Flag to the
-user before resuming or discarding it.
+
+TICKET-0015 (.NET migration) claims a scaffolded .NET 8 solution, a ported
+DbService/AgentService, and a working WPF shell, but the repo has no
+`.sln`/`.csproj` anywhere and `app/` (its stated home) contains only a
+`.gitkeep`. There's no evidence the described work actually exists. This
+was flagged before this update and remains unresolved — the active app
+remains the Electron one under `src/`. Ask the user whether to discard
+this ticket or locate/restore the described work before touching it again.
+
+TICKET-0035 (standardize rounded corners to 3px) has an uncommitted
+`src/tailwind.config.js` change matching its plan, plus an uncommitted
+`src/.npmrc` change (both `allow-scripts` lines removed) sitting in the
+working tree alongside it. The `.npmrc` change isn't mentioned anywhere in
+the ticket and looks unrelated/possibly accidental — flag it to the user
+before committing either file.

@@ -15,6 +15,20 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
+* TICKET-0031 (in-chat model switcher, promoted from `WISHLIST.md`) is the
+  only open ticket not yet started — everything else open is implemented
+  and committed, awaiting only manual verification (see below) or, for
+  TICKET-0035, still in progress
+* TICKET-0035 (standardize rounded corners to 3px) is in progress and
+  uncommitted: `src/tailwind.config.js` has the border-radius override,
+  but `src/.npmrc` also has an unexplained, unrelated-looking uncommitted
+  change (both `allow-scripts` lines removed) sitting alongside it — flag
+  to the user before committing either
+* TICKET-0015 (.NET migration) remains flagged as stale/unverifiable — its
+  Result section claims a scaffolded .NET 8 solution, ported DbService/
+  AgentService, and a working WPF shell, but the repo has no `.sln`/
+  `.csproj` anywhere and `app/` (its stated home) contains only a
+  `.gitkeep`. Ask the user whether to discard or restore before resuming
 * Verify the TICKET-0033 file-tree context menu live: right-click a
   regular file (Open, Open in Explorer only) and a runnable file like
   `.bat`/`.exe`/`.ps1` (Run also present), confirm Explorer actually
