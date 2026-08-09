@@ -48,6 +48,15 @@ export default function AgentView() {
   // 'running' agent gets a brand-new terminal session (AgentTerminal always
   // starts fresh on mount); its previous interactive session does not
   // survive the switch — see AgentTerminal.jsx.
+  //
+  // This effect reruns on every AgentView mount, not just a real project
+  // switch — App.jsx renders AgentView conditionally, so leaving and
+  // returning to the Agents tab remounts it while `agents` (Zustand store
+  // state, not component state) still holds whatever this effect already
+  // added. Skip rows already present in the store, or every return trip
+  // to the tab would append a duplicate card — and for a 'running' row,
+  // mount a second AgentTerminal that spawns a second real PTY/CLI process
+  // for the same agent (TICKET-0024).
   useEffect(() => {
     if (!activeProject) return
     let cancelled = false
@@ -55,6 +64,7 @@ export default function AgentView() {
       const rows = await window.cpi.getAgents(activeProject.id)
       for (const row of rows) {
         if (cancelled) return
+        if (useStore.getState().agents.some((a) => a.agentId === row.id)) continue
         let meta
         if (row.status === 'running') {
           // Re-register with AgentService so it can accept new prompts.

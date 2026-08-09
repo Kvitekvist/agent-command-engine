@@ -153,6 +153,17 @@ interactively — replacing what AgentPane used to render as a headless
   survive switching projects away and back (a real limitation vs. the
   original standalone-panel design below; re-selecting the project starts
   a brand-new session) — see TICKET-0019 Notes.
+- **AgentView's restore effect guards against re-adding an already-present
+  agent (TICKET-0024).** `App.jsx` renders `AgentView` conditionally
+  (`activeView === 'agents'`), so leaving and returning to the Agents tab
+  unmounts/remounts it and reruns its restore `useEffect` — but the
+  `agents` array lives in the Zustand store, not component state, and is
+  only cleared on a real project switch (`setActiveProject`). Without a
+  guard, every return trip to the tab re-fetched and re-added every
+  persisted row, producing duplicate cards and, for a running agent, a
+  second `AgentTerminal` mount that spawned a second real PTY/CLI process
+  for the same agent. The effect now skips any row whose `agentId` is
+  already in the store.
 - Session lifetime otherwise: ends when the user disposes it (Stop/unmount)
   or the app quits (`TerminalService.shutdown()` in `window-all-closed`,
   mirroring `AgentService.killAll()`). Verified directly (bypassing the

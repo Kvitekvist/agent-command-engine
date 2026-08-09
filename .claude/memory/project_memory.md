@@ -35,6 +35,11 @@ Make process execution, persistence, packaging, and provider behavior dependable
   revisiting if per-turn audit rows specifically (not just aggregate
   usage) turn out to matter again
 * Verify restored stopped-agent behavior manually (TICKET-0011)
+* Verify the TICKET-0024 duplicate-agent fix live: switch away from the
+  Agents tab and back with a running agent present, confirm exactly one
+  card and one terminal process (deferred during the fix itself since the
+  dev window had real in-progress agent sessions on another project — see
+  TICKET-0024 Testing)
 * Add end-to-end provider contract tests for Claude and Codex
 * Replace whole-database export-on-write if audit volume causes UI stalls
 

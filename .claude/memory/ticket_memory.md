@@ -104,3 +104,22 @@ history rather than deleted. Verified live via Chrome DevTools Protocol
 automation: real quota percentages, reset countdowns, and per-project
 token totals rendered correctly with no console errors, and the app
 opened directly on this tab with no click needed.
+
+TICKET-0024
+2026-08-09
+Fixed duplicate agent cards (and, for a running agent, a duplicate real
+terminal/CLI process) appearing after leaving the Agents tab and
+returning without switching projects. Root cause: AgentView.jsx's restore
+useEffect reruns on every AgentView mount, not just a real project
+switch, because App.jsx renders AgentView conditionally so tab switches
+unmount/remount it — but the `agents` array lives in the Zustand store,
+not component state, and was only cleared on a project switch. The
+effect had no guard against an agent row already present in the store,
+so every return trip re-added it, and for a running agent, mounted a
+second AgentTerminal that spawned a second PTY session and re-launched
+the CLI. Fixed by skipping any row whose agentId already exists in the
+store before adding it. Verified via a clean npm run build:renderer and
+the full automated test suite (11/11 pass); live in-app verification
+deliberately deferred since the user's running dev window had real
+in-progress agent sessions on another project at the time — see the
+ticket's Testing/Notes.
