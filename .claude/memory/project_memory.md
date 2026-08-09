@@ -15,6 +15,17 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
+* Verify the TICKET-0033 file-tree context menu live: right-click a
+  regular file (Open, Open in Explorer only) and a runnable file like
+  `.bat`/`.exe`/`.ps1` (Run also present), confirm Explorer actually
+  opens/highlights the file and Run actually launches it — needs an app
+  restart since `handlers.js`/`preload.js` are main-process changes,
+  deferred for the same reason as TICKET-0024/0025/etc.
+* Verify the TICKET-0034 screenshot rework live: click 📸 on a running
+  agent, drag-select a region (including one covering CPI's own window),
+  confirm the PNG lands under `<project>/.cpi/screenshots/`, `.gitignore`
+  gained a `.cpi/` entry, Esc/right-click cancels cleanly, and the copied
+  path pastes correctly into that agent's terminal
 * Finish manually verifying the file explorer/editor (TICKET-0021): an
   actual Save through Monaco's own keyboard input (write path itself was
   verified directly via IPC, not through simulated typing), tab-switching

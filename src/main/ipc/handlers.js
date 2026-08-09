@@ -245,6 +245,23 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     }
   })
 
+  // TICKET-0033: file-tree right-click actions
+  ipcMain.handle('fs:openInExplorer', (_, { root, filePath }) => {
+    try {
+      return FileService.openInExplorer(root, filePath)
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('fs:runFile', (_, { root, filePath }) => {
+    try {
+      return FileService.runFile(root, filePath)
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
   // ── Screenshots (TICKET-0034, reworked from TICKET-0032) ───────────────────
   // Drag-to-select screen capture, saved into the requesting project's own
   // .cpi/screenshots/ folder -- see ScreenshotService for the capture-overlay

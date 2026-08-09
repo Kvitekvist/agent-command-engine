@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('cpi', {
     readDir: (root, dirPath) => ipcRenderer.invoke('fs:readDir', { root, dirPath }),
     readFile: (root, filePath) => ipcRenderer.invoke('fs:readFile', { root, filePath }),
     writeFile: (root, filePath, content) => ipcRenderer.invoke('fs:writeFile', { root, filePath, content }),
+    // TICKET-0033: file-tree right-click actions
+    openInExplorer: (root, filePath) => ipcRenderer.invoke('fs:openInExplorer', { root, filePath }),
+    runFile: (root, filePath) => ipcRenderer.invoke('fs:runFile', { root, filePath }),
   },
 
   // Screenshots (TICKET-0034, reworked from TICKET-0032)

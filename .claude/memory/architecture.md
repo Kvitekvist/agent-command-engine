@@ -352,6 +352,23 @@ agent:
   for the whole project (would choke on a real `node_modules` tree).
   Clicking a file calls `fs:readFile` and, on success, opens it in
   `EditorView` (switches `activeView` to `'editor'`).
+- **Right-click menu (TICKET-0033, file rows only, not directories)**: a
+  generic `ContextMenu.jsx` (position-at-cursor, closes on outside
+  click/Escape) offers **Open** (same as left-click), **Open in Explorer**
+  (`shell.showItemInFolder` via `fs:openInExplorer`), and — only for
+  files matching an executable-like extension allowlist
+  (`.exe/.bat/.cmd/.ps1/.vbs/.com/.msi`, checked both in `FileTree.jsx` for
+  menu gating and again in `FileService.runFile` as the real authority) —
+  **Run**, which spawns the file the way double-clicking it in Explorer
+  would (`fs:runFile`), routed through the same `resolveWithinRoot`
+  containment check as every other `FileService` method. Deliberately not
+  `windowsHide`'d, unlike this app's own background spawns (TICKET-0029)
+  — a user-invoked Run should show a console window like a real
+  double-click. `.ps1` is special-cased to spawn `powershell.exe -File`
+  directly, since Explorer's own default double-click verb for PowerShell
+  scripts is Edit, not Run (a deliberate Windows security default) — the
+  file-association path every other allowlisted extension uses wouldn't
+  actually execute it.
 - **`EditorView.jsx`**: tab strip of open files + a Monaco instance (`@monaco-editor/react`) for the active one, dirty-state dot per tab, Ctrl+S/Save
   button that calls `fs:writeFile`. Tabs share one mounted `<Editor>`
   instance switching its `path`/`value` props rather than remounting per

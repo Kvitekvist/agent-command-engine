@@ -1,5 +1,7 @@
 const fs = require('fs')
 const path = require('path')
+const { spawn } = require('child_process')
+const { shell } = require('electron')
 
 // TICKET-0021: backs the Sidebar file tree + Monaco editor. Every method
 // takes the project root the request is scoped to (as reported by the
@@ -26,6 +28,11 @@ const MAX_READABLE_BYTES = 2 * 1024 * 1024
 function looksBinary(buffer) {
   return buffer.subarray(0, 8000).includes(0)
 }
+
+// TICKET-0033: extensions the file tree's "Run" context-menu item will
+// spawn directly. Kept narrow (Windows-executable-shaped files only) since
+// this runs whatever the file contains with no confirmation step.
+const RUNNABLE_EXTENSIONS = new Set(['.exe', '.bat', '.cmd', '.ps1', '.vbs', '.com', '.msi'])
 
 class FileService {
   readDir(root, dirPath) {
@@ -61,6 +68,43 @@ class FileService {
     fs.writeFileSync(target, content, 'utf8')
     return { ok: true }
   }
+
+  // TICKET-0033: reveals the file in Windows Explorer, highlighted/selected
+  // -- same as its "Open in Explorer" IPC name implies.
+  openInExplorer(root, filePath) {
+    const target = resolveWithinRoot(root, filePath)
+    shell.showItemInFolder(target)
+    return { ok: true }
+  }
+
+  // TICKET-0033: runs a file the same way double-clicking it in Explorer
+  // would. Deliberately NOT windowsHide'd (unlike this app's own background
+  // spawns, see TICKET-0029) -- a user-invoked "Run" should behave like a
+  // normal double-click, console window and all, not be silently hidden.
+  // .ps1 is special-cased: Explorer's own default double-click verb for
+  // PowerShell scripts is "Edit", not "Run" (a deliberate Windows security
+  // default), so running one for real needs an explicit powershell.exe
+  // invocation rather than relying on the file association.
+  runFile(root, filePath) {
+    const target = resolveWithinRoot(root, filePath)
+    const ext = path.extname(target).toLowerCase()
+    if (!RUNNABLE_EXTENSIONS.has(ext)) {
+      return { ok: false, error: `"${ext}" files can't be run` }
+    }
+    const cwd = path.dirname(target)
+    const isPs1 = ext === '.ps1'
+    const cmd = isPs1 ? 'powershell.exe' : target
+    const args = isPs1 ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', target] : []
+    const child = spawn(cmd, args, {
+      cwd,
+      detached: true,
+      stdio: 'ignore',
+      shell: !isPs1 && ext !== '.exe',
+    })
+    child.on('error', () => {}) // detached + unref'd -- nothing left to report a spawn error to
+    child.unref()
+    return { ok: true }
+  }
 }
 
-module.exports = { FileService: new FileService() }
+module.exports = { FileService: new FileService(), RUNNABLE_EXTENSIONS }
