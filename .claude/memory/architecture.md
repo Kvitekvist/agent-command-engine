@@ -180,6 +180,23 @@ interactively — replacing what AgentPane used to render as a headless
   second `AgentTerminal` mount that spawned a second real PTY/CLI process
   for the same agent. The effect now skips any row whose `agentId` is
   already in the store.
+- **The CLI's own startup splash is hidden on every launch (TICKET-0025).**
+  Every `AgentTerminal` mount is a fresh `claude`/`codex` session, and the
+  real CLI prints its own account/session banner, "What's new", and tips
+  on every fresh session start — reprinting it on every remount (e.g. a
+  tab switch back to an already-running agent, not just a genuine new
+  launch). No CLI flag suppresses this (`--help` on both CLIs and the
+  bundled `claude.exe`'s own known `CLAUDE_CODE_*` env vars checked, none
+  apply). Covered with a "Launching…" overlay for a fixed
+  `LAUNCH_BANNER_HIDE_MS` (1200ms) after the launch command is sent, then
+  wiped with a local `term.clear()` (xterm.js's own buffer, display-only —
+  never touches the real process) before revealing the now-clean live
+  session. Deliberately timing-based rather than matched against specific
+  CLI output text (which differs between Claude/Codex and across CLI
+  versions) — degrades gracefully (a brief flash) instead of hanging if a
+  future CLI's output stops matching an expected marker. Reveals
+  immediately without clearing if the session errors or exits before the
+  timer fires, so that message stays visible.
 - Session lifetime otherwise: ends when the user disposes it (Stop/unmount)
   or the app quits (`TerminalService.shutdown()` in `window-all-closed`,
   mirroring `AgentService.killAll()`). Verified directly (bypassing the

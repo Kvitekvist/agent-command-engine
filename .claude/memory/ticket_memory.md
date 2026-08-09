@@ -142,3 +142,24 @@ the full automated test suite (11/11 pass); live in-app verification
 deliberately deferred since the user's running dev window had real
 in-progress agent sessions on another project at the time — see the
 ticket's Testing/Notes.
+
+TICKET-0025
+2026-08-09
+Hid the real CLI's own startup splash (account info, "What's new", tips)
+that reprints in an agent's terminal card on every launch, including
+every AgentTerminal remount (e.g. a tab switch away and back to an
+already-running agent, distinct from TICKET-0024's duplicate-store-entry
+bug). Neither `claude --help`/`codex --help` nor the bundled claude.exe's
+own known CLAUDE_CODE_* env vars expose a flag to suppress it. Fixed by
+covering the card with a "Launching…" overlay for a fixed 1200ms delay,
+then calling xterm.js's local `term.clear()` (display-only, doesn't touch
+the real process) and revealing the already-clean session — timing-based
+rather than matching specific CLI output text, since that text differs
+between Claude/Codex and across CLI versions and a fixed delay degrades
+gracefully instead of hanging if a future CLI's output no longer matches.
+Reveals immediately without clearing if the session errors or exits
+before the timer fires, so that message isn't hidden. Verified via a
+clean npm run build:renderer and the full automated test suite (11/11
+pass, no new coverage since this is timing-based terminal-display
+behavior); live in-app verification still open, same reasoning as
+TICKET-0024.

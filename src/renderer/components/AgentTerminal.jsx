@@ -17,6 +17,20 @@ const XTERM_THEME = {
   selectionBackground: '#6858e0', // accent-hover
 }
 
+// The real CLI prints its own splash (account info, "What's new", tips) on
+// every fresh launch -- and every AgentTerminal mount is a fresh launch, so
+// it reappears on every tab/project switch back to an already-running
+// agent, not just a genuine first launch. There's no CLI flag to suppress
+// it (checked `claude --help`/`codex --help` and the bundled CLI's own
+// known env vars). Hidden behind a loading overlay for a fixed delay, then
+// wiped with a local xterm.js clear() (display-only -- doesn't touch the
+// real process), so the card reveals straight into the live, already-clean
+// session. Timing-based rather than content-matched on purpose: the splash
+// text differs between Claude and Codex and across CLI versions, and a
+// fixed delay degrades gracefully (worst case: a brief flash) instead of
+// silently hanging forever if a future CLI version changes its output.
+const LAUNCH_BANNER_HIDE_MS = 1200
+
 // Mounted only while the agent is 'running' (see AgentView.jsx) -- unmount
 // (Stop, or switching away from the project) disposes the PTY session in
 // this effect's cleanup, which actually ends the interactive CLI process,
@@ -29,12 +43,21 @@ export default function AgentTerminal({ agent }) {
   const containerRef = useRef(null)
   const sessionIdRef = useRef(null)
   const [status, setStatus] = useState('connecting') // connecting | ready | exited | error
+  const [showBanner, setShowBanner] = useState(true)
 
   useEffect(() => {
     let disposed = false
     let unsubData
     let unsubExit
     let unsubHostRestarted
+    let hideBannerTimer
+
+    // Used when the session errors or exits before the timed reveal fires --
+    // don't leave the error/exit message hidden behind the overlay.
+    function revealImmediately() {
+      clearTimeout(hideBannerTimer)
+      setShowBanner(false)
+    }
 
     const term = new Terminal({
       convertEol: true,
@@ -56,6 +79,7 @@ export default function AgentTerminal({ agent }) {
       if (!result.success) {
         setStatus('error')
         term.write(`\r\n\x1b[31mFailed to start terminal: ${result.error || 'unknown error'}\x1b[0m\r\n`)
+        revealImmediately()
         return
       }
       sessionIdRef.current = result.id
@@ -68,10 +92,12 @@ export default function AgentTerminal({ agent }) {
         if (id !== sessionIdRef.current) return
         setStatus('exited')
         term.write(`\r\n\x1b[90m[process exited with code ${exitCode}]\x1b[0m\r\n`)
+        revealImmediately()
       })
       unsubHostRestarted = window.cpi.terminal.onHostRestarted(() => {
         setStatus('exited')
         term.write('\r\n\x1b[31m[terminal process was lost -- stop and relaunch this agent to start a new session]\x1b[0m\r\n')
+        revealImmediately()
       })
 
       term.onData((data) => {
@@ -80,6 +106,14 @@ export default function AgentTerminal({ agent }) {
 
       // Boot straight into the real CLI instead of leaving an empty shell.
       window.cpi.terminal.write(sessionIdRef.current, buildLaunchCommand(agent) + '\r')
+
+      // See LAUNCH_BANNER_HIDE_MS above -- wipe the CLI's own splash once
+      // it's had time to render, then reveal the already-clean session.
+      hideBannerTimer = setTimeout(() => {
+        if (disposed) return
+        term.clear()
+        setShowBanner(false)
+      }, LAUNCH_BANNER_HIDE_MS)
     }
     start()
 
@@ -94,6 +128,7 @@ export default function AgentTerminal({ agent }) {
 
     return () => {
       disposed = true
+      clearTimeout(hideBannerTimer)
       resizeObserver.disconnect()
       unsubData?.()
       unsubExit?.()
@@ -109,13 +144,19 @@ export default function AgentTerminal({ agent }) {
   }, [])
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex-1 min-h-0 flex flex-col relative">
       {(status === 'error' || status === 'exited') && (
         <div className="text-xs text-muted px-1 pb-1 shrink-0">
           {status === 'error' ? 'Failed to start terminal.' : 'Session ended.'}
         </div>
       )}
       <div className="flex-1 min-h-0 [&_.xterm]:h-full" ref={containerRef} />
+      {showBanner && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface text-muted text-xs gap-1">
+          <div className="text-lg">⚡</div>
+          <div>Launching {agent.label}…</div>
+        </div>
+      )}
     </div>
   )
 }

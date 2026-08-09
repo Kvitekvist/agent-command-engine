@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Agent cards briefly show a "Launching…" overlay while the real CLI's own startup splash (account info, "What's new", tips) renders, then reveal the already-clean live session instead of leaving that splash visible — it otherwise reprinted on every terminal (re)launch, including every tab switch away and back to an already-running agent (TICKET-0025)
 - Compact usage bar above the Agents tab's toolbar: % used, % available, and reset countdown per provider (Claude, Codex), so quota is visible while launching/watching agents without switching to Token Usage. Shares one 60s poll with the Token Usage tab's dashboard instead of each spawning its own `tokscale` call (TICKET-0023)
 - Live token usage dashboard, now the app's default tab: real Claude/Codex subscription quota (5-hour rolling + weekly limits, reset countdowns) plus today's usage by model and by project, sourced live from `tokscale`'s own account data — accurate regardless of whether an agent ran headlessly or through the new embedded terminal, unlike the existing DB-backed history (kept below it, relabeled) which only the old headless path ever populated. Design ported from the user's reference app `token-monitor` (TICKET-0022)
 - File explorer: a VS Code-style file tree per project in the Sidebar, lazy-loading folders on expand. Click a file to open it in a real Monaco editor (tabs, per-file undo history, dirty-state indicator) and save straight to disk with Ctrl+S or the Save button (TICKET-0021)

@@ -40,6 +40,10 @@ Make process execution, persistence, packaging, and provider behavior dependable
   card and one terminal process (deferred during the fix itself since the
   dev window had real in-progress agent sessions on another project — see
   TICKET-0024 Testing)
+* Verify the TICKET-0025 splash-hiding overlay live: launch a new agent
+  and confirm the CLI's own startup banner is not left visible (a brief
+  flash before the overlay clears is expected and fine) — deferred for
+  the same reason as TICKET-0024
 * Add end-to-end provider contract tests for Claude and Codex
 * Replace whole-database export-on-write if audit volume causes UI stalls
 
