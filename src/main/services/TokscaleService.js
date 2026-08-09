@@ -124,7 +124,7 @@ const TokscaleService = {
   // TICKET-0022: real subscription quota (5-hour rolling / weekly limits +
   // reset times) straight from tokscale's own `usage` subcommand, which
   // reads the same local OAuth credentials Claude Code/Codex already use --
-  // CPI never touches auth tokens itself. Returns tokscale's array as-is
+  // ACE never touches auth tokens itself. Returns tokscale's array as-is
   // (one entry per provider); callers key it by `provider` (case-varies,
   // e.g. "Claude"/"Codex").
   async getQuota() {

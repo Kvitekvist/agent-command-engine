@@ -92,7 +92,7 @@ const useStore = create((set, get) => ({
 
   // ── Live token usage (TICKET-0022, shared TICKET-0023) ────────────────────
   // Whole-machine subscription quota from tokscale -- not scoped to the
-  // active CPI project. Polled once here (started from App.jsx) rather than
+  // active ACE project. Polled once here (started from App.jsx) rather than
   // per-view, so the Agents tab's compact UsageBar and the Token Usage tab's
   // full UsageCard pair both read the same data without each spawning their
   // own tokscale subprocess call on its own timer.

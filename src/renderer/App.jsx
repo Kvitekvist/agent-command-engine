@@ -8,7 +8,7 @@ import SettingsView from './views/SettingsView'
 import EditorView from './views/EditorView'
 
 // TICKET-0022/0023: live subscription quota is whole-machine data (not
-// scoped to whichever CPI project is active), and both the Agents tab's
+// scoped to whichever ACE project is active), and both the Agents tab's
 // compact UsageBar and the Token Usage tab's full UsageCard pair read the
 // same store slice -- polled once here so they never spawn two independent
 // tokscale subprocess calls on their own timers.

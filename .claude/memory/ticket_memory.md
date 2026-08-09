@@ -10,7 +10,7 @@ Append entries only.
 
 TICKET-0001
 2026-07-19
-Bootstrapped Claude Projects Interface (CPI) — Electron + React + Tailwind + Vite + SQLite scaffold,
+Bootstrapped Agent Command Engine (ACE) — Electron + React + Tailwind + Vite + SQLite scaffold,
 IPC bridge, DBService with full schema, AgentService (spawn claude/codex CLI subprocesses),
 LoadBalancer, OptimizationAdvisor, all renderer views (AgentView, AuditView, TokenView, SettingsView),
 Sidebar project switcher, ModelSelector component, Zustand store, setup/run/build scripts, README, CHANGELOG.
@@ -97,7 +97,7 @@ token-monitor: Claude + Codex cards showing real subscription quota
 (5-hour rolling/weekly limits with reset countdowns), today's usage by
 model and by project, and a total — all sourced live from the already-
 installed tokscale binary's own `usage --json` and `--today --group-by
-workspace,model` commands, independent of CPI's `prompts` DB table
+workspace,model` commands, independent of ACE's `prompts` DB table
 (which TICKET-0019's embedded terminal no longer populates). Kept the
 existing Recharts historical view underneath, relabeled as DB-scoped
 history rather than deleted. Verified live via Chrome DevTools Protocol
@@ -320,11 +320,11 @@ verification: (1) the 📸 button's onClick still referenced
 `pasteScreenshot`, a function left over from TICKET-0032's superseded
 design and never actually defined, so clicking it (or even just
 rendering a card for a running agent, since the reference was evaluated
-during render) threw a ReferenceError that crashed CPI's renderer
+during render) threw a ReferenceError that crashed ACE's renderer
 entirely -- fixed by pointing the button at `captureScreenshot`, the
 correctly-wired handler that existed but was never called from anywhere;
-(2) `captureRegion` hid CPI's own main window before every capture,
-directly defeating the feature's stated purpose of screenshotting CPI
+(2) `captureRegion` hid ACE's own main window before every capture,
+directly defeating the feature's stated purpose of screenshotting ACE
 itself -- removed the hide/show and the now-dead `mainWindow` field it
 existed only to support. Verified via a clean npm run build:main and the
 full automated test suite (11/11 pass, no new coverage -- native

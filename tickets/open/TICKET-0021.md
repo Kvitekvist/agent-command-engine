@@ -20,7 +20,7 @@ Medium
 
 ## Description
 
-Add a VS Code-style file explorer to CPI: a collapsible file tree in the
+Add a VS Code-style file explorer to ACE: a collapsible file tree in the
 Sidebar, scoped to the active project, that lets the user click a file to
 open it in a real code editor (Monaco — the same editor VS Code itself
 uses) and save changes directly back to disk.
@@ -40,9 +40,9 @@ Scoped with the user via three questions before implementation:
 
 User asked for this directly: "i need a file explorer similar to VS Code
 or something per project. So i can click on files, expand folders and
-edit." CPI already manages arbitrary project folders and already grants
+edit." ACE already manages arbitrary project folders and already grants
 agents read/write access to them (via the embedded terminal, TICKET-0019)
-— a file explorer/editor for the human using CPI is the same trust
+— a file explorer/editor for the human using ACE is the same trust
 boundary, just a more direct path to it.
 
 ---
@@ -159,7 +159,7 @@ config({ monaco })` in `EditorView.jsx` is what makes `@monaco-editor/
 react`'s `<Editor>` use this locally-bundled `monaco-editor` instead of
 its default CDN-fetch behavior.
 
-**File explorer/editor uses the same trust boundary CPI already has**,
+**File explorer/editor uses the same trust boundary ACE already has**,
 not a new one: agents (via TICKET-0019's embedded terminal) already get
 read/write access to a project's folder depending on permission mode; a
 human directly editing files through Sidebar's tree is the same access,

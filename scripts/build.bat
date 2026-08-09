@@ -1,5 +1,5 @@
 @echo off
-echo Building Claude Projects Interface...
+echo Building Agent Command Engine...
 cd /d "%~dp0..\src"
 call npm run build
 if errorlevel 1 (

@@ -52,8 +52,8 @@ export default function Sidebar() {
     <aside className="w-56 flex flex-col bg-panel border-r border-border h-full shrink-0">
       {/* App title */}
       <div className="px-4 py-4 border-b border-border shrink-0">
-        <div className="text-xs font-semibold tracking-widest text-muted uppercase">CPI</div>
-        <div className="text-sm font-semibold text-gray-100 mt-0.5">Claude Projects</div>
+        <div className="text-xs font-semibold tracking-widest text-muted uppercase">ACE</div>
+        <div className="text-sm font-semibold text-gray-100 mt-0.5">Agent Command Engine</div>
       </div>
 
       {/* Project list */}

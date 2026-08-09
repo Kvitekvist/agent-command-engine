@@ -20,7 +20,7 @@ Medium
 
 ## Description
 
-Add real interactive terminals to CPI, ported from Flowgrid's terminal
+Add real interactive terminals to ACE, ported from Flowgrid's terminal
 implementation (`ptyHost.js`): a forked node-pty host process driving
 xterm.js panels in the renderer, so the user can run `claude`/`codex`
 interactively inside the app instead of only through AgentService's
@@ -43,14 +43,14 @@ change reusing the same backend.
 
 ## Reason
 
-User asked for CPI's terminal to work the same way Flowgrid's does. CPI's
+User asked for ACE's terminal to work the same way Flowgrid's does. ACE's
 existing AgentService is a good fit for orchestrated, audited, multi-agent
 runs, but it can't offer a raw interactive shell — no live prompts, no
 arbitrary commands, no watching Claude Code's own interactive UI. Flowgrid
 already solved this with a dedicated forked PTY host process (kept separate
 from its worker process so a shell/CLI crash can't be taken down by an
 unrelated crash, and vice versa) plus a mount-once-keep-alive xterm.js
-panel that survives being hidden. Porting the same architecture gives CPI
+panel that survives being hidden. Porting the same architecture gives ACE
 an interactive terminal without touching AgentService at all.
 
 ---
@@ -62,7 +62,7 @@ an interactive terminal without touching AgentService at all.
       sessions (spawn/write/resize/dispose over `process.send`/`on('message')`),
       ported from Flowgrid with the same env-stripping AgentService already
       applies (`CLAUDE*` vars) so a `claude` CLI run inside the terminal
-      doesn't inherit a sandboxed-child session from CPI's own dev process
+      doesn't inherit a sandboxed-child session from ACE's own dev process
 * [x] Add `src/main/services/TerminalService.js` — forks/restarts
       `ptyHost.js`, forwards `terminal:data`/`terminal:exit`/`terminal:hostRestarted`
       to the renderer, mirrors AgentService's `init(mainWindow)`/`setWindow()`
@@ -72,8 +72,8 @@ an interactive terminal without touching AgentService at all.
 * [x] Add `terminal:spawn` (invoke) / `terminal:write` / `terminal:resize` /
       `terminal:dispose` (fire-and-forget) IPC handlers in
       `src/main/ipc/handlers.js`; `spawn` defaults `cwd` to the active
-      project's folder path (passed from the renderer) rather than CPI's own
-      repo, since CPI manages other people's project folders, not itself —
+      project's folder path (passed from the renderer) rather than ACE's own
+      repo, since ACE manages other people's project folders, not itself —
       this is the one deliberate deviation from Flowgrid's `defaultTerminalCwd()`
 * [x] Expose `window.cpi.terminal.{spawn,write,resize,dispose,onData,onExit,onHostRestarted}`
       in `preload.js`
@@ -238,9 +238,9 @@ blocking this pass.
 
 ## Notes
 
-CPI has a single fixed dark theme (Tailwind tokens in `tailwind.config.js`),
+ACE has a single fixed dark theme (Tailwind tokens in `tailwind.config.js`),
 unlike Flowgrid's multi-theme `data-theme` CSS-custom-property setup, so
-`TerminalPanel.jsx` uses a static xterm theme object matching CPI's palette
+`TerminalPanel.jsx` uses a static xterm theme object matching ACE's palette
 instead of Flowgrid's `readThemeColors()`/`MutationObserver` approach — no
 theme switching to react to here.
 
@@ -294,7 +294,7 @@ next, not solved here.
   undefined (reading 'whenReady')` — `require('electron')` returns a path
   string, not the API, under that flag). Had to launch the verification
   instance with that variable explicitly stripped (`env -u
-  ELECTRON_RUN_AS_NODE`). Not a CPI bug; recorded here only so the next
+  ELECTRON_RUN_AS_NODE`). Not a ACE bug; recorded here only so the next
   person debugging "electron won't start" from inside a Claude Code
   session doesn't lose time on it.
 - Also observed once, harmless: node-pty's Windows ConPTY helper

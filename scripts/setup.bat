@@ -1,6 +1,6 @@
 @echo off
 echo ============================================================
-echo  Claude Projects Interface - Setup
+echo  Agent Command Engine - Setup
 echo ============================================================
 
 echo.

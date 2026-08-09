@@ -39,7 +39,7 @@ codebase.
 ## Implementation Plan
 
 * [ ] Decide the per-agent folder location/naming (e.g. under the
-      project's working directory, or a CPI-managed temp/data dir keyed by
+      project's working directory, or a ACE-managed temp/data dir keyed by
       agent id) and whether it needs cleanup on agent delete/app quit
 * [ ] Add a main-process IPC handler that reads an image from the OS
       clipboard and writes it into the agent's folder (timestamped
@@ -71,7 +71,7 @@ Live, on a real running agent (this agent, "Yuki", project "Claude
 Creator"): clicked 📸, confirmed via direct filesystem read that the PNG
 landed at `%APPDATA%/claude-projects-interface/screenshots/<agentId>/
 screenshot-<iso>.png`. Read the file back directly by path and confirmed
-it's a real screenshot (of the CPI app itself).
+it's a real screenshot (of the ACE app itself).
 
 Bug found during this pass: checked the live OS clipboard right after a
 successful save and found it held the toast's own UI text instead of the

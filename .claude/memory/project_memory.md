@@ -1,7 +1,7 @@
 # Project Memory
 
 ## Project Name
-Claude Projects Interface (CPI)
+Agent Command Engine (ACE)
 
 ## Project Vision
 A specialized Electron desktop application that provides a powerful interface for managing Claude (and OpenAI Codex) AI agents across multiple projects. The goal is to benchmark different project frameworks by tracking speed, token usage, and documentation quality — while keeping a full audit trail of every prompt and response for reproducibility.
@@ -36,7 +36,7 @@ Make process execution, persistence, packaging, and provider behavior dependable
   restart since `handlers.js`/`preload.js` are main-process changes,
   deferred for the same reason as TICKET-0024/0025/etc.
 * Verify the TICKET-0034 screenshot rework live: click 📸 on a running
-  agent, drag-select a region (including one covering CPI's own window),
+  agent, drag-select a region (including one covering ACE's own window),
   confirm the PNG lands under `<project>/.cpi/screenshots/`, `.gitignore`
   gained a `.cpi/` entry, Esc/right-click cancels cleanly, and the copied
   path pastes correctly into that agent's terminal
@@ -54,7 +54,7 @@ Make process execution, persistence, packaging, and provider behavior dependable
   back, confirm the same session (scrollback intact, no relaunch) is
   still there instead of a fresh CLI process
 * Live token usage (TICKET-0022) now covers real usage tracking
-  regardless of headless vs. embedded-terminal agents — CPI's own
+  regardless of headless vs. embedded-terminal agents — ACE's own
   `prompts` DB table (Audit Log + the historical Token Usage section) is
   still frozen for new agents, but that's now a documented, accepted
   trade-off rather than an open "rebuild tracking" priority; only worth

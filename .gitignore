@@ -39,5 +39,5 @@ obj/
 # Claude Code runtime state
 .claude/scheduled_tasks.lock
 
-# Claude Projects Interface data (screenshots, etc.)
+# Agent Command Engine data (screenshots, etc.)
 .cpi/

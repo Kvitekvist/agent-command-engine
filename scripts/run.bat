@@ -1,5 +1,5 @@
 @echo off
-echo Starting Claude Projects Interface...
+echo Starting Agent Command Engine...
 echo.
 
 REM Kill stale process on port 5173

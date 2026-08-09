@@ -170,7 +170,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // Live usage dashboard (TICKET-0022) -- sourced straight from tokscale
   // (real subscription quota + today's session transcripts), independent
-  // of CPI's own `prompts` table, which the embedded terminal (TICKET-0019)
+  // of ACE's own `prompts` table, which the embedded terminal (TICKET-0019)
   // no longer populates. Quota and today's breakdown are fetched
   // independently so one provider being logged out, or one call failing,
   // doesn't blank out the other.

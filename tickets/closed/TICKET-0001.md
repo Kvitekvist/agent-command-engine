@@ -8,7 +8,7 @@
 ---
 
 ## Description
-Bootstrap the Claude Projects Interface (CPI) Electron application. This is the foundational scaffolding ticket covering: project structure, Electron main/renderer split, React + Tailwind setup via Vite, SQLite initialization, and IPC bridge.
+Bootstrap the Agent Command Engine (ACE) Electron application. This is the foundational scaffolding ticket covering: project structure, Electron main/renderer split, React + Tailwind setup via Vite, SQLite initialization, and IPC bridge.
 
 ## Reason
 The project does not yet exist as runnable code. All subsequent tickets depend on this scaffold.

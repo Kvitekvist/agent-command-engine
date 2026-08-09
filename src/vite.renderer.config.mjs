@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   // monacoEditorPlugin (TICKET-0021) bundles Monaco's web workers as local
-  // assets instead of CPI's EditorView.jsx needing to fetch them from a
+  // assets instead of ACE's EditorView.jsx needing to fetch them from a
   // CDN -- keeps the editor working the same offline as every other
   // dependency in this Electron app.
   plugins: [react(), monacoEditorPlugin({})],

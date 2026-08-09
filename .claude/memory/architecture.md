@@ -1,7 +1,7 @@
 # Project Architecture
 
 ## Overview
-Claude Projects Interface (CPI) is an Electron desktop application with a React renderer. The main process manages child processes (AI CLI tools), the SQLite database, and file system access. The renderer provides the React UI. IPC channels bridge the two.
+Agent Command Engine (ACE) is an Electron desktop application with a React renderer. The main process manages child processes (AI CLI tools), the SQLite database, and file system access. The renderer provides the React UI. IPC channels bridge the two.
 
 ---
 
@@ -69,7 +69,7 @@ response the user is waiting on:
    `DBService.updatePromptUsage` once it resolves. Result: the fast path
    still logs a same-turn best guess, and it gets silently corrected to the
    real figures moments later.
-- **Codex is not reconciled.** CPI spawns `codex exec` stateless (no
+- **Codex is not reconciled.** ACE spawns `codex exec` stateless (no
   `resume`), so there is no stable per-turn session id to match a tokscale
   row against — matching by "most recently written codex session file"
   would misattribute tokens whenever two Codex agents finish close together,
@@ -85,11 +85,11 @@ response the user is waiting on:
 ### Live Token Usage Dashboard (TICKET-0022)
 The Token Usage tab's primary content (and the app's default tab) — real
 subscription usage, sourced live from the `tokscale` binary rather than
-CPI's own `prompts` table, so it stays accurate regardless of whether an
+ACE's own `prompts` table, so it stays accurate regardless of whether an
 agent ran through the old headless path or the new embedded terminal:
 - **`TokscaleService.getQuota()`**: runs `tokscale usage --json`, tokscale's
   own subcommand for real subscription quota — reads the same local OAuth
-  credentials Claude Code/Codex already use, so CPI never touches auth
+  credentials Claude Code/Codex already use, so ACE never touches auth
   tokens itself. Returns `[{provider, plan, metrics: [{label, used_percent,
   resets_at}]}]` — Claude reports `Session` (its 5-hour rolling limit) and
   `Weekly`; Codex reports `Weekly` only.
@@ -117,7 +117,7 @@ agent ran through the old headless path or the new embedded terminal:
   instead (`#d97757` Claude, `#3b82f6` Codex).
 - **`TokenView.jsx`** renders a Claude + Codex `UsageCard` pair, independent
   of the project-scoped historical section below it — quota/today's-usage
-  is whole-machine data, not scoped to whichever CPI project is active.
+  is whole-machine data, not scoped to whichever ACE project is active.
 - **Shared poll (TICKET-0023)**: `liveUsage`/`liveUsageLoading`/
   `loadLiveUsage` live in `useStore.js`, not local component state. `App.jsx`
   starts the one 60s poll (`LIVE_USAGE_POLL_MS`) on mount, so both
@@ -296,14 +296,14 @@ read it straight from disk by a relative path:
   cwd) is written to the OS clipboard. Resolves `{ ok:false,
   reason:'cancelled' }` rather than throwing if the user backs out
   (Esc/right-click/a too-small selection) — not an error case.
-- **Deliberately does not hide CPI's own window before capturing.** An
+- **Deliberately does not hide ACE's own window before capturing.** An
   earlier version did; removed after live feedback ("when i click the
   screenshot button the app hides, that cant happen because sometimes i
   need to screenshot the app") — the feature's whole point includes
-  visual UI debugging/feedback on CPI itself, which auto-hiding made
+  visual UI debugging/feedback on ACE itself, which auto-hiding made
   impossible. Matches how standard capture tools (Snipping Tool,
   Greenshot) behave: they don't hide their own invoking window either. If
-  the user wants to exclude CPI, they can move/minimize it first, same as
+  the user wants to exclude ACE, they can move/minimize it first, same as
   with those tools.
 - **Selection overlay** (`_runOverlay`, `src/main/overlay/`): a frameless,
   transparent, always-on-top `BrowserWindow` sized to exactly the primary

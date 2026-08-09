@@ -1,5 +1,5 @@
 {
-  "name": "claude-projects-interface",
+  "name": "agent-command-engine",
   "version": "0.1.1",
   "description": "A specialized Electron interface for managing Claude & OpenAI Codex agents across multiple projects",
   "main": "dist/main/index.js",
@@ -40,8 +40,8 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.cpi.app",
-    "productName": "Claude Projects Interface",
+    "appId": "com.ace.app",
+    "productName": "Agent Command Engine",
     "directories": {
       "output": "../releases"
     },

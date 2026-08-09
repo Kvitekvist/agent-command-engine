@@ -34,7 +34,7 @@ Neither `claude --help` nor `codex --help`, nor the bundled `claude.exe`'s
 own known `CLAUDE_CODE_*` env vars, expose a flag to suppress this splash
 in interactive mode — it's simply what the real CLI prints on every fresh
 session start, and `AgentTerminal` starts a fresh CLI session on every
-mount (see architecture.md Terminal section). Since CPI already launches
+mount (see architecture.md Terminal section). Since ACE already launches
 the CLI by typing a command into the PTY rather than passing `--print`,
 the cleanest fix is display-only: hide the card behind a loading overlay
 briefly, then clear the local xterm.js buffer (never touches the real

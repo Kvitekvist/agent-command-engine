@@ -44,7 +44,7 @@ files on disk and returns already-computed, accurate token + cost totals
 per session. Verified locally: `npx tokscale --json --client claude --group-by
 client,session,model` returns real `input`/`output`/`cacheRead`/`cacheWrite`/
 `cost` figures per Claude session id — and that `sessionId` is the exact
-same id CPI's `AgentService` already captures via `parseSessionId` from the
+same id ACE's `AgentService` already captures via `parseSessionId` from the
 Claude CLI's `stream-json` output. That match key makes per-turn
 reconciliation straightforward for Claude.
 
@@ -55,7 +55,7 @@ stdout-parsed numbers for the *instant* prompt-done event (unchanged
 responsiveness), then run a tokscale reconciliation pass asynchronously
 afterward and correct the DB row once it resolves.
 
-Codex has no equivalent match key: CPI never asks codex to `--resume` a
+Codex has no equivalent match key: ACE never asks codex to `--resume` a
 prior session (each turn is a stateless invocation), so there is no stable
 per-agent session id to match against tokscale's codex session rows, and
 guessing via "newest codex session file" is unsafe once more than one Codex

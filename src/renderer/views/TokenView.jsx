@@ -107,7 +107,7 @@ export default function TokenView() {
   return (
     <div className="p-5 space-y-6 overflow-y-auto h-full">
       {/* Live usage (TICKET-0022) -- real subscription quota + today's
-          usage straight from tokscale, independent of CPI's own project
+          usage straight from tokscale, independent of ACE's own project
           selection or `prompts` DB table (see architecture.md Token
           Tracking for why that table no longer fills in on its own). */}
       <div className="flex items-center justify-between">
@@ -123,12 +123,12 @@ export default function TokenView() {
         </div>
       )}
 
-      {/* Historical (this project, from CPI's own audit log) */}
+      {/* Historical (this project, from ACE's own audit log) */}
       <div className="flex items-center justify-between pt-2 border-t border-border">
         <div>
           <h2 className="text-base font-semibold mt-4">History (this project)</h2>
           <p className="text-xs text-muted mt-0.5">
-            From CPI's own audit log — only reflects agents launched through the older headless path; see architecture.md.
+            From ACE's own audit log — only reflects agents launched through the older headless path; see architecture.md.
           </p>
         </div>
         <button onClick={load} className="btn-ghost text-xs mt-4">↻ Refresh</button>

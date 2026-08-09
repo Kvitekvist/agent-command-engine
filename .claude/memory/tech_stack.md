@@ -2,7 +2,7 @@
 
 ## Project
 
-- Name: Claude Projects Interface
+- Name: Agent Command Engine
 - Version: 0.1.1
 - Created: 2026-07-19
 - Target: Windows desktop; Electron also supports macOS packaging

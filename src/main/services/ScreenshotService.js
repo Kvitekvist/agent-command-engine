@@ -15,7 +15,7 @@ function timestampedFilename() {
 }
 
 // Appends `.cpi/` to the project's .gitignore (creating the file if it
-// doesn't exist yet) so screenshots -- and anything else CPI ever stores
+// doesn't exist yet) so screenshots -- and anything else ACE ever stores
 // under the project root -- never get committed to the user's own repo.
 function ensureGitignored(projectRoot) {
   const gitignorePath = path.join(projectRoot, '.gitignore')
@@ -27,12 +27,12 @@ function ensureGitignored(projectRoot) {
   }
   if (content.split(/\r?\n/).some((line) => line.trim() === '.cpi/')) return
   const separator = content.length && !content.endsWith('\n') ? '\n' : ''
-  fs.writeFileSync(gitignorePath, `${content}${separator}\n# Claude Projects Interface data (screenshots, etc.)\n.cpi/\n`)
+  fs.writeFileSync(gitignorePath, `${content}${separator}\n# Agent Command Engine data (screenshots, etc.)\n.cpi/\n`)
 }
 
 class ScreenshotService {
   // Captures the primary display exactly as it currently appears --
-  // including CPI's own window, if it's on screen -- lets the user
+  // including ACE's own window, if it's on screen -- lets the user
   // drag-select a region over it, crops to that region, and saves the
   // result under <projectRoot>/.cpi/screenshots/. Resolves { ok:false,
   // reason:'cancelled' } if the user backs out (Esc/right-click/too-small
@@ -40,11 +40,11 @@ class ScreenshotService {
   //
   // Deliberately does NOT hide the main window first (an earlier version
   // did): the whole point of this feature is visual UI debugging/feedback
-  // on CPI itself (e.g. an agent's terminal), which a screenshot that
-  // always excludes CPI can never capture. Standard screen-capture tools
+  // on ACE itself (e.g. an agent's terminal), which a screenshot that
+  // always excludes ACE can never capture. Standard screen-capture tools
   // (Snipping Tool, Greenshot, etc.) don't hide their own invoking window
   // either -- if the user wants to capture something else instead, they
-  // can move or minimize CPI first, same as with any of those.
+  // can move or minimize ACE first, same as with any of those.
   async captureRegion(projectRoot) {
     if (!projectRoot) return { ok: false, error: 'No project path' }
 

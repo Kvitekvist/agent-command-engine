@@ -56,7 +56,7 @@ project as cwd.
       auto-append `.cpi/` to the project's `.gitignore`, copy the saved
       file's path (relative to the project root) to the clipboard.
       Originally hid the main window first — reverted (see Result below):
-      the user needs to be able to screenshot CPI itself (e.g. an agent's
+      the user needs to be able to screenshot ACE itself (e.g. an agent's
       terminal), which auto-hiding made impossible
 * [x] Build the selection overlay: a frameless/transparent/always-on-top
       `BrowserWindow` sized to the primary display, showing the captured
@@ -71,7 +71,7 @@ project as cwd.
       off already implemented, but the button's `onClick` still referenced
       the old `pasteScreenshot` handler — see Result)
 * [ ] Manual verification: click 📸 on a real running agent, drag-select a
-      region — including a region that covers CPI's own window, to confirm
+      region — including a region that covers ACE's own window, to confirm
       it's actually capturable — confirm the PNG lands under
       `<project>/.cpi/screenshots/`, confirm `.gitignore` gained a `.cpi/`
       entry, confirm Esc/right-click cancels cleanly, confirm the copied
@@ -108,7 +108,7 @@ the 📸 button's `onClick` still called `pasteScreenshot`, a function that
 was never defined in `AgentView.jsx` — a leftover name from TICKET-0032's
 superseded clipboard-paste design. `captureScreenshot` (the actual,
 correctly-wired capture-region handler this ticket added) was defined but
-never called from anywhere. Since CPI's renderer has no error boundary,
+never called from anywhere. Since ACE's renderer has no error boundary,
 this `ReferenceError` during render crashed the whole React tree — visible
 to the user as the entire app going blank the moment the Agents tab
 rendered a card for any running agent (reported live: "clicking on the
@@ -119,10 +119,10 @@ old clipboard-paste behavior). The manual-verification checklist item
 above is unblocked by this fix but still not run.
 
 Second bug reported live, also fixed: `ScreenshotService.captureRegion`
-called `win.hide()` on CPI's own main window before every capture (showing
+called `win.hide()` on ACE's own main window before every capture (showing
 it again in a `finally` block once the crop/save finished). Intended
 reasoning isn't documented anywhere in this ticket, but the effect was
-that CPI itself could never be part of a screenshot — directly blocking
+that ACE itself could never be part of a screenshot — directly blocking
 the feature's own stated purpose (this ticket's Description and the
 original wishlist entry both call out "visual UI debugging/feedback" on
 the app itself as a use case) and reported live as "when i click the
@@ -130,9 +130,9 @@ screenshot button the app hides, that cant happen because sometimes i
 need to screenshot the app." Removed the hide/show entirely (and the
 now-dead `mainWindow` field/`setWindow()` method it existed only to
 support, plus its call site in `handlers.js`) — `captureRegion` now grabs
-whatever's actually on screen, CPI included, matching how every standard
+whatever's actually on screen, ACE included, matching how every standard
 screen-capture tool (Snipping Tool, Greenshot) behaves. If the user wants
-to capture something else instead, they can move or minimize CPI first,
+to capture something else instead, they can move or minimize ACE first,
 same as with those tools. Verified via a clean `npm run build:main` and
 the full automated test suite (11/11 pass, no new coverage — this is
 native Electron window/capture behavior, not something the Node test

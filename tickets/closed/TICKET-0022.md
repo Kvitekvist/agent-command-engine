@@ -20,13 +20,13 @@ Medium
 
 ## Description
 
-Add a live token-usage dashboard to CPI's Token Usage tab, matching the
+Add a live token-usage dashboard to ACE's Token Usage tab, matching the
 design of the user's reference app `token-monitor`
 (`C:\Users\jensr\Documents\VS Projects\token-monitor-main`): per-provider
 (Claude, Codex) cards showing real subscription quota (5-hour rolling +
 weekly limits with reset countdowns), today's usage broken down by model
 and by project, and a total tokens-used figure — all sourced live from
-`tokscale`, not CPI's own `prompts` DB table. Make Token Usage the app's
+`tokscale`, not ACE's own `prompts` DB table. Make Token Usage the app's
 default tab on launch.
 
 ---
@@ -34,12 +34,12 @@ default tab on launch.
 ## Reason
 
 User shared a screenshot of `token-monitor`'s dashboard and said "I like
-this exact design, so make this the default tab." `token-monitor` and CPI
-already share the same underlying data source (`tokscale`, already a CPI
+this exact design, so make this the default tab." `token-monitor` and ACE
+already share the same underlying data source (`tokscale`, already a ACE
 dependency since TICKET-0018) — this is a design port, not new plumbing to
 invent from scratch. It also happens to solve part of the "rebuild token
 tracking for the new per-agent terminal path" priority noted in
-TICKET-0019's Notes: unlike CPI's `prompts` table (which only fills in via
+TICKET-0019's Notes: unlike ACE's `prompts` table (which only fills in via
 the now-unused headless `AgentService.sendPrompt` path), `tokscale` reads
 Claude's/Codex's own session transcripts directly, so it reflects usage
 regardless of whether an agent ran headlessly or through the new embedded
@@ -54,11 +54,11 @@ terminal.
       binary's own `usage --json` subcommand (`tokscale usage --json` —
       returns `[{provider, plan, metrics: [{label, used_percent,
       remaining_percent, resets_at}]}]`, e.g. Claude gets `Session` +
-      `Weekly`, Codex gets `Weekly` only) — this CPI's installed tokscale
+      `Weekly`, Codex gets `Weekly` only) — this ACE's installed tokscale
       version (4.9.0) added natively; `token-monitor`'s older-pinned
       version (^4.8.0) didn't have it and calls Anthropic's/OpenAI's own
       account APIs by hand instead. Using tokscale's own command is
-      simpler and doesn't require CPI to touch OAuth tokens itself.
+      simpler and doesn't require ACE to touch OAuth tokens itself.
 * [ ] Today's per-model / per-project breakdown: `tokscale --json --today
       --client claude,codex --group-by workspace,model` (also confirmed
       directly against the installed CLI) — one call produces rows
@@ -130,7 +130,7 @@ Fully implemented and verified live: the app now opens directly on the
 Usage tab, showing real Claude + Codex subscription quota (5-hour
 rolling/weekly % and reset countdowns) and today's token usage broken
 down by model and by project, all sourced from the already-installed
-`tokscale` binary rather than CPI's own (frozen-for-new-agents, see
+`tokscale` binary rather than ACE's own (frozen-for-new-agents, see
 TICKET-0019) `prompts` table. The existing Recharts-based historical view
 is preserved underneath, relabeled to make clear it's DB-scoped/historical
 rather than live.
@@ -141,7 +141,7 @@ rather than live.
 
 Chose a **vertical card layout** (icon/name header, then quota bars, then
 a Models/Today-by-project two-column grid, then a total) rather than the
-reference screenshot's wide single-row horizontal layout — CPI's main
+reference screenshot's wide single-row horizontal layout — ACE's main
 content pane sits next to a fixed Sidebar and isn't reliably as wide as
 the reference app's own window, so a literal pixel-for-pixel port would
 have broken down at normal window widths. Same information architecture
@@ -155,7 +155,7 @@ Claude a warm coral/orange (`#d97757`), Codex blue (`#3b82f6`).
 Live usage polls every 60s while the Usage tab exists in the component
 tree (`LIVE_USAGE_POLL_MS`) — independent of the historical section's
 project-scoped `load()`, since quota/today's-usage is whole-machine data,
-not scoped to whichever CPI project is active.
+not scoped to whichever ACE project is active.
 
 ---
 
