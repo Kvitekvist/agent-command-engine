@@ -40,7 +40,19 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden bg-surface text-gray-100">
       <Sidebar />
       <main className="flex-1 overflow-auto">
-        {activeView === 'agents'   && <AgentView />}
+        {/* TICKET-0027: unlike the other views, AgentView stays mounted at
+            all times -- toggled with a CSS class instead of conditional
+            rendering -- because each running agent's card owns a real
+            PTY-backed shell process (AgentTerminal.jsx). Conditionally
+            mounting it here meant every tab switch away and back unmounted
+            and remounted every agent's terminal, killing and re-spawning
+            its actual CLI process each time (visible console-window
+            flashes, lost scrollback). A project switch still correctly
+            tears sessions down, since that's driven by the `agents` store
+            array being reset, not by this component's own mount lifecycle. */}
+        <div className={activeView === 'agents' ? 'h-full' : 'hidden'}>
+          <AgentView />
+        </div>
         {activeView === 'audit'    && <AuditView />}
         {activeView === 'tokens'   && <TokenView />}
         {activeView === 'settings' && <SettingsView />}

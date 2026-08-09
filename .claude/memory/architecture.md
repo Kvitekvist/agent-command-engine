@@ -151,9 +151,14 @@ interactively — replacing what AgentPane used to render as a headless
 - **`TerminalService`**: forks/supervises `ptyHost.js`, auto-restarts it on
   crash, forwards `terminal:data`/`terminal:exit`/`terminal:hostRestarted`
   to the renderer. Same `init(mainWindow)`/`setWindow()` shape as
-  AgentService so `index.js` wires both the same way. Unchanged since first
+  AgentService so `index.js` wires both the same way. `_forkHost()` passes
+  `windowsHide: true` to its `fork()` call (TICKET-0027) — without it,
+  Windows shows a console window for this forked `node.exe` process, since
+  `child_process.fork()` defaults to a visible window when a
+  console-subsystem executable is spawned from a windowed (GUI-subsystem)
+  parent like Electron's main process. Otherwise unchanged since first
   built — already generically multi-session, so giving every agent its own
-  terminal needed no backend changes at all.
+  terminal needed no other backend changes.
 - **`AgentTerminal.jsx`** (renderer, one instance per running agent card):
   xterm.js + FitAddon, spawned via `window.cpi.terminal.spawn({cwd: agent.
   projectPath})` when the card mounts, then immediately writes the agent's
@@ -163,40 +168,65 @@ interactively — replacing what AgentPane used to render as a headless
   identically to an interactive invocation) as the session's first
   keystrokes, so the card boots straight into the real CLI instead of an
   empty shell. Mounted only while `agent.status === 'running'`; unmounting
-  (Stop, delete, or switching away from the project) disposes its PTY
+  (Stop, delete, or switching away from the *project*) disposes its PTY
   session in cleanup, which actually ends the CLI process — not merely
   hides it. Consequently an agent's interactive session does **not**
-  survive switching projects away and back (a real limitation vs. the
+  survive switching *projects* away and back (a real limitation vs. the
   original standalone-panel design below; re-selecting the project starts
-  a brand-new session) — see TICKET-0019 Notes.
+  a brand-new session) — see TICKET-0019 Notes. It **does** now survive
+  switching *tabs* away and back — see the `AgentView` point below
+  (TICKET-0027) — that used to also spawn a brand-new session per agent on
+  every tab visit, which is a distinct, now-fixed cause from the
+  project-switch case.
 - **AgentView's restore effect guards against re-adding an already-present
-  agent (TICKET-0024).** `App.jsx` renders `AgentView` conditionally
-  (`activeView === 'agents'`), so leaving and returning to the Agents tab
-  unmounts/remounts it and reruns its restore `useEffect` — but the
-  `agents` array lives in the Zustand store, not component state, and is
-  only cleared on a real project switch (`setActiveProject`). Without a
-  guard, every return trip to the tab re-fetched and re-added every
-  persisted row, producing duplicate cards and, for a running agent, a
-  second `AgentTerminal` mount that spawned a second real PTY/CLI process
-  for the same agent. The effect now skips any row whose `agentId` is
-  already in the store.
-- **The CLI's own startup splash is hidden on every launch (TICKET-0025).**
-  Every `AgentTerminal` mount is a fresh `claude`/`codex` session, and the
-  real CLI prints its own account/session banner, "What's new", and tips
-  on every fresh session start — reprinting it on every remount (e.g. a
-  tab switch back to an already-running agent, not just a genuine new
-  launch). No CLI flag suppresses this (`--help` on both CLIs and the
-  bundled `claude.exe`'s own known `CLAUDE_CODE_*` env vars checked, none
-  apply). Covered with a "Launching…" overlay for a fixed
-  `LAUNCH_BANNER_HIDE_MS` (1200ms) after the launch command is sent, then
-  wiped with a local `term.clear()` (xterm.js's own buffer, display-only —
-  never touches the real process) before revealing the now-clean live
-  session. Deliberately timing-based rather than matched against specific
-  CLI output text (which differs between Claude/Codex and across CLI
-  versions) — degrades gracefully (a brief flash) instead of hanging if a
-  future CLI's output stops matching an expected marker. Reveals
-  immediately without clearing if the session errors or exits before the
-  timer fires, so that message stays visible.
+  agent (TICKET-0024).** Before TICKET-0027 (below), `App.jsx` rendered
+  `AgentView` conditionally (`activeView === 'agents'`), so leaving and
+  returning to the Agents tab unmounted/remounted it and reran its restore
+  `useEffect` — but the `agents` array lives in the Zustand store, not
+  component state, and is only cleared on a real project switch
+  (`setActiveProject`). Without a guard, every return trip to the tab
+  re-fetched and re-added every persisted row, producing duplicate cards
+  and, for a running agent, a second `AgentTerminal` mount that spawned a
+  second real PTY/CLI process for the same agent. The effect now skips any
+  row whose `agentId` is already in the store. Still relevant even after
+  TICKET-0027 stopped `AgentView` from unmounting on tab switches — this
+  guard is what makes switching *projects* away and back to the *same*
+  project (a genuine remount) not re-add already-running agents either.
+- **`AgentView` stays mounted across tab switches (TICKET-0027).**
+  `App.jsx` used to render it conditionally (`{activeView === 'agents' &&
+  <AgentView />}`); it's now always rendered, hidden with a CSS class when
+  another tab is active, the same hide-not-unmount pattern the original
+  standalone `TerminalPanel.jsx` used. Conditional mounting meant every
+  tab switch away and back tore down and rebuilt every `AgentTerminal`
+  for every running agent — killing and re-spawning its real CLI process
+  each time, each spawn a fresh chance for a console-window flash and lost
+  scrollback, and with several agents running this could visibly read as
+  multiple windows opening at once. Only `AuditView`/`TokenView`/
+  `SettingsView`/`EditorView` are still conditionally mounted — none of
+  them own a long-lived OS process, so there's nothing to preserve across
+  their remounts. A real project switch still correctly tears sessions
+  down, since that's driven by the `agents` store array being reset on
+  `setActiveProject`, independent of whether `AgentView` itself stays
+  mounted.
+- **The CLI's own startup splash is hidden on every genuine launch
+  (TICKET-0025).** Every `AgentTerminal` mount is a fresh `claude`/`codex`
+  session, and the real CLI prints its own account/session banner, "What's
+  new", and tips on every fresh session start. Before TICKET-0027 this
+  reprinted on every tab-switch remount too, not just a real new launch;
+  now that sessions survive tab switches, it only fires on an actual first
+  launch, Stop → relaunch, or a project switch. No CLI flag suppresses the
+  splash itself (`--help` on both CLIs and the bundled `claude.exe`'s own
+  known `CLAUDE_CODE_*` env vars checked, none apply), so it's still
+  covered with a "Launching…" overlay for a fixed `LAUNCH_BANNER_HIDE_MS`
+  (1200ms) after the launch command is sent, then wiped with a local
+  `term.clear()` (xterm.js's own buffer, display-only — never touches the
+  real process) before revealing the now-clean live session. Deliberately
+  timing-based rather than matched against specific CLI output text (which
+  differs between Claude/Codex and across CLI versions) — degrades
+  gracefully (a brief flash) instead of hanging if a future CLI's output
+  stops matching an expected marker. Reveals immediately without clearing
+  if the session errors or exits before the timer fires, so that message
+  stays visible.
 - Session lifetime otherwise: ends when the user disposes it (Stop/unmount)
   or the app quits (`TerminalService.shutdown()` in `window-all-closed`,
   mirroring `AgentService.killAll()`). Verified directly (bypassing the

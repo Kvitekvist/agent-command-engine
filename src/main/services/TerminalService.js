@@ -34,6 +34,11 @@ class TerminalService {
     return fork(scriptPath, [], {
       execPath: process.env.SYSTEM_NODE || (useElectronNode ? process.execPath : 'node'),
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      // Without this, Windows shows a console window for this forked
+      // node.exe process -- child_process.fork()'s default behavior when a
+      // console-subsystem executable is spawned from a windowed
+      // (GUI-subsystem) parent like Electron's main process.
+      windowsHide: true,
       env: useElectronNode
         ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
         : process.env,

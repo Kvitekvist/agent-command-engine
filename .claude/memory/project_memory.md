@@ -46,6 +46,14 @@ Make process execution, persistence, packaging, and provider behavior dependable
   the same reason as TICKET-0024
 * Verify the TICKET-0026 Codex model-list fix live: launch a fresh Codex
   agent and send a prompt, confirm no "model not supported" error
+* Verify the TICKET-0027 fix live: this needs an actual app restart to
+  take effect (the `TerminalService.js` half is a main-process change,
+  which Vite's dev HMR never picks up — see architecture.md's `npm run
+  dev` gotcha), deliberately not forced yet since the running dev window
+  had real in-progress agent sessions. Once restarted: confirm no console
+  window appears when switching tabs, and that switching away from Agents
+  and back keeps the same terminal session (scrollback intact) instead of
+  relaunching every running agent's CLI
 * Add end-to-end provider contract tests for Claude and Codex
 * Replace whole-database export-on-write if audit volume causes UI stalls
 
@@ -86,8 +94,23 @@ Make process execution, persistence, packaging, and provider behavior dependable
   a Codex agent specifically, and typing a follow-up prompt into a running
   terminal.
 - Terminal sessions do not currently survive switching away from a
-  project and back, or an app restart — each is tied to its agent card's
-  mount lifecycle. See TICKET-0019 Notes.
+  *project* and back, or an app restart — each is tied to its agent
+  card's mount lifecycle. See TICKET-0019 Notes. They now do survive
+  switching *tabs* away and back (TICKET-0027) — that used to also
+  respawn every running agent's session (and, on Windows, could pop up
+  a visible console window per spawn — see below) every time the Agents
+  tab was revisited; `AgentView` now stays mounted instead of being torn
+  down on every tab switch.
+- TICKET-0027: switching tabs away from Agents and back showed visible
+  console/cmd windows and restarted every running agent's CLI session,
+  sometimes appearing to trigger more than once for the same agent. Two
+  causes: `TerminalService`'s fork of `ptyHost.js` was missing
+  `windowsHide: true` (Windows shows a console window for a forked
+  `node.exe` by default when spawned from a windowed parent like
+  Electron), and `AgentView` unmounted/remounted on every tab switch,
+  which killed and re-spawned every running agent's PTY session each
+  time. Both fixed; live re-verification needs an app restart, deferred
+  for the same reason as TICKET-0024/0025/0026 (see Active Priorities).
 - Audit Log / Token Usage no longer gain new rows for agents launched via
   the embedded terminal (only the old headless path wrote them, and
   nothing calls it anymore) — historical data still displays correctly.
