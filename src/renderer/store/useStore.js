@@ -2,14 +2,58 @@ import { create } from 'zustand'
 
 const useStore = create((set, get) => ({
   // ── Active view ────────────────────────────────────────────────────────────
-  activeView: 'agents', // 'agents' | 'audit' | 'tokens' | 'settings'
+  activeView: 'agents', // 'agents' | 'audit' | 'tokens' | 'settings' | 'editor'
   setActiveView: (view) => set({ activeView: view }),
 
   // ── Projects ───────────────────────────────────────────────────────────────
   projects: [],
   activeProject: null,
   setProjects: (projects) => set({ projects }),
-  setActiveProject: (project) => set({ activeProject: project, agents: [] }),
+  // Open files are absolute paths scoped to whichever project's tree they
+  // were opened from -- switching projects closes them, same as switching
+  // projects already clears the running-agent cards above. Sidebar.jsx
+  // confirms first if any are dirty, same pattern as agent/project delete.
+  setActiveProject: (project) => set({ activeProject: project, agents: [], openFiles: [], activeFilePath: null }),
+
+  // ── File explorer / editor (TICKET-0021) ──────────────────────────────────
+  // [{ path, name, content, originalContent, dirty }]
+  openFiles: [],
+  activeFilePath: null,
+
+  openFile: (filePath, name, content) =>
+    set((s) => {
+      if (s.openFiles.some((f) => f.path === filePath)) {
+        return { activeFilePath: filePath }
+      }
+      const file = { path: filePath, name, content, originalContent: content, dirty: false }
+      return { openFiles: [...s.openFiles, file], activeFilePath: filePath }
+    }),
+
+  closeFile: (filePath) =>
+    set((s) => {
+      const openFiles = s.openFiles.filter((f) => f.path !== filePath)
+      let activeFilePath = s.activeFilePath
+      if (activeFilePath === filePath) {
+        activeFilePath = openFiles.length ? openFiles[openFiles.length - 1].path : null
+      }
+      return { openFiles, activeFilePath }
+    }),
+
+  setActiveFile: (filePath) => set({ activeFilePath: filePath }),
+
+  updateFileContent: (filePath, content) =>
+    set((s) => ({
+      openFiles: s.openFiles.map((f) =>
+        f.path === filePath ? { ...f, content, dirty: content !== f.originalContent } : f
+      ),
+    })),
+
+  markFileSaved: (filePath) =>
+    set((s) => ({
+      openFiles: s.openFiles.map((f) =>
+        f.path === filePath ? { ...f, originalContent: f.content, dirty: false } : f
+      ),
+    })),
 
   // ── Agents (running) ───────────────────────────────────────────────────────
   // [{ agentId, label, provider, model, permissionMode, projectPath, status }]

@@ -30,6 +30,13 @@ contextBridge.exposeInMainWorld('cpi', {
   // Optimization advisor
   getOptimizationAdvice: (projectId) => ipcRenderer.invoke('optimize:analyze', projectId),
 
+  // File explorer / editor (TICKET-0021)
+  fs: {
+    readDir: (root, dirPath) => ipcRenderer.invoke('fs:readDir', { root, dirPath }),
+    readFile: (root, filePath) => ipcRenderer.invoke('fs:readFile', { root, filePath }),
+    writeFile: (root, filePath, content) => ipcRenderer.invoke('fs:writeFile', { root, filePath, content }),
+  },
+
   // Terminal
   terminal: {
     spawn: (opts) => ipcRenderer.invoke('terminal:spawn', opts),

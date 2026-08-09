@@ -15,10 +15,15 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
+* Finish manually verifying the file explorer/editor (TICKET-0021): an
+  actual Save through Monaco's own keyboard input (write path itself was
+  verified directly via IPC, not through simulated typing), tab-switching
+  preserving independent undo history, and a real large/binary file
 * Finish manually verifying the per-agent embedded terminal (TICKET-0019
-  correction): confirm a launched Codex agent boots correctly too, type a
-  follow-up prompt directly into a running terminal and confirm it
-  responds, get a real pixel screenshot of the CLI banner rendering
+  correction): confirm a launched Codex agent boots correctly too now
+  that TICKET-0020 fixed its CLI invocation, type a follow-up prompt
+  directly into a running terminal and confirm it responds, get a real
+  pixel screenshot of the CLI banner rendering
 * Decide whether agent terminal sessions need to survive a project
   switch (currently they don't — see TICKET-0019 Notes) — open a follow-up
   ticket if so
@@ -40,6 +45,7 @@ Make process execution, persistence, packaging, and provider behavior dependable
 - Node.js child_process (spawn claude CLI and openai codex CLI)
 - tokscale (reads Claude Code's/Codex's own local session transcripts for accurate token/cost usage — see [[architecture]] Token Tracking)
 - node-pty + xterm.js (real interactive terminal embedded per agent card, forked into its own `ptyHost.js` process — see [[architecture]] Terminal)
+- Monaco editor (`@monaco-editor/react`, pinned `monaco-editor@0.50.0`, `vite-plugin-monaco-editor-esm`) — VS Code-style file explorer + editor per project, see [[architecture]] File Explorer / Editor
 
 ---
 
@@ -81,6 +87,17 @@ Make process execution, persistence, packaging, and provider behavior dependable
 - TICKET-0011 (restore stopped agents + Delete button) is implemented but its
   manual UI verification step (stop an agent, switch projects, confirm cards +
   history reappear) hasn't been run yet.
+- TICKET-0021 (file explorer + Monaco editor per project, in the Sidebar)
+  is verified for reading (tree → open → real Monaco rendering, confirmed
+  live) and for writing/security (writeFile/readFile round trip, `..`
+  path-traversal correctly rejected, confirmed live). Getting Monaco
+  building at all needed two workarounds — `monaco-editor` pinned to
+  `0.50.0` (newer versions' package.json `exports` map breaks the Vite
+  plugin's worker path resolution) and `vite.renderer.config.mjs`'s
+  `build.outDir` changed to relative (the plugin's own output-path join
+  assumes a root-relative `outDir`) — see TICKET-0021 Notes if touching
+  this again. An actual Save via real Monaco keystrokes, multi-tab undo
+  history, and a real large/binary file are still open.
 
 ---
 

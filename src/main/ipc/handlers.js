@@ -1,6 +1,7 @@
 const { dialog } = require('electron')
 const { LoadBalancer } = require('../services/LoadBalancer')
 const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
+const { FileService } = require('../services/FileService')
 
 function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keep window ref updated
@@ -174,6 +175,33 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // ── Optimization advisor ────────────────────────────────────────────────────
   ipcMain.handle('optimize:analyze', (_, projectId) => OptimizationAdvisor.analyze(projectId))
+
+  // ── File explorer / editor (TICKET-0021) ────────────────────────────────────
+  // `root` is always the requesting project's path (as the renderer already
+  // knows it) -- FileService refuses any resolved path that falls outside it.
+  ipcMain.handle('fs:readDir', (_, { root, dirPath }) => {
+    try {
+      return { ok: true, entries: FileService.readDir(root, dirPath) }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('fs:readFile', (_, { root, filePath }) => {
+    try {
+      return FileService.readFile(root, filePath)
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('fs:writeFile', (_, { root, filePath, content }) => {
+    try {
+      return FileService.writeFile(root, filePath, content)
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
 
   // ── Terminal (TICKET-0019) ──────────────────────────────────────────────────
   // Keystrokes/resize/dispose are fire-and-forget (ipcMain.on) -- there's no

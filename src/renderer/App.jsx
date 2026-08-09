@@ -5,6 +5,7 @@ import AgentView from './views/AgentView'
 import AuditView from './views/AuditView'
 import TokenView from './views/TokenView'
 import SettingsView from './views/SettingsView'
+import EditorView from './views/EditorView'
 
 export default function App() {
   const { activeView, addAgent, updateAgentStatus } = useStore()
@@ -30,6 +31,7 @@ export default function App() {
         {activeView === 'audit'    && <AuditView />}
         {activeView === 'tokens'   && <TokenView />}
         {activeView === 'settings' && <SettingsView />}
+        {activeView === 'editor'   && <EditorView />}
       </main>
     </div>
   )
