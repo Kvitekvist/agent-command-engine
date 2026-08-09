@@ -28,15 +28,13 @@ main
 
 ## Ticket Summary
 
-- **Closed** (implemented + manually verified) — 9: TICKET-0001, 0012,
-  0013, 0014, 0017, 0018, 0022, 0023, 0032
+- **Closed** (implemented + manually verified) — 10: TICKET-0001, 0012,
+  0013, 0014, 0017, 0018, 0022, 0023, 0032, 0035
 - **Open, implemented + committed, pending manual verification only** — 14:
   TICKET-0011, 0016, 0019, 0020, 0021, 0024, 0025, 0026, 0027, 0028, 0029,
   0030, 0033, 0034 (see project_memory.md Active Priorities for the exact
   verification step per ticket)
 - **Open, not started** — 1: TICKET-0031 (in-chat model switcher)
-- **Open, in progress, uncommitted** — 1: TICKET-0035 (3px border-radius
-  standardization) — see Notes
 - **Open, stale/flagged, needs a user decision** — 1: TICKET-0015 (.NET
   migration) — see Notes
 
@@ -83,9 +81,10 @@ was flagged before this update and remains unresolved — the active app
 remains the Electron one under `src/`. Ask the user whether to discard
 this ticket or locate/restore the described work before touching it again.
 
-TICKET-0035 (standardize rounded corners to 3px) has an uncommitted
-`src/tailwind.config.js` change matching its plan, plus an uncommitted
-`src/.npmrc` change (both `allow-scripts` lines removed) sitting in the
-working tree alongside it. The `.npmrc` change isn't mentioned anywhere in
-the ticket and looks unrelated/possibly accidental — flag it to the user
-before committing either file.
+TICKET-0035 (standardize rounded corners to 3px) shipped 2026-08-09. Its
+`src/tailwind.config.js` change was committed separately from an
+unrelated, unexplained `src/.npmrc` change (both `allow-scripts` lines
+removed) that was sitting in the same working tree — that `.npmrc` change
+was left uncommitted since it isn't mentioned anywhere in the ticket and
+looks accidental. Still flagged for the user; check before touching
+`src/.npmrc` again.

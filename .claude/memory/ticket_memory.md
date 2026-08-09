@@ -373,3 +373,17 @@ spawning, same reasoning as TICKET-0021/0025/0027 etc.); manual
 verification (right-click a regular file vs. a .bat/.exe/.ps1, confirm
 Explorer actually opens/highlights and Run actually launches) still
 open.
+
+TICKET-0035
+2026-08-09
+Standardized every rounded-corner box in the UI to a consistent 3px
+radius, per direct user feedback ("i dont like all the edge courners in
+the app"). Overrode borderRadius.DEFAULT/md/lg/xl/2xl to 3px in
+tailwind.config.js -- a single source of truth instead of hunting down
+every rounded-* class usage individually. rounded-full (toggle switches,
+progress bar tracks/fills in UsageBar.jsx/UsageCard.jsx/SettingsView.jsx)
+deliberately left untouched, since those are meant to be pill/circle
+shapes, not cornered boxes. Checked every rounded-lg usage in the
+renderer (SettingsView.jsx's advisor-suggestion cards, globals.css's
+.card component) -- both are plain decorative cards, confirming nothing
+depended on a larger radius. Verified via a clean npm run build:renderer.

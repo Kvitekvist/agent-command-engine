@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -48,7 +48,7 @@ rounded courner should be 3pxl".
       all resolve to 3px — single source of truth instead of hunting down
       every class usage individually
 * [ ] Leave `rounded-full` untouched (pill/circle shapes)
-* [ ] Verify no component relies on a larger radius for a reason the 3px
+* [x] Verify no component relies on a larger radius for a reason the 3px
       override would break
 
 ---
@@ -67,8 +67,21 @@ rounded courner should be 3pxl".
 
 ## Result
 
-
+Implemented as planned. Overrode `borderRadius.DEFAULT/md/lg/xl/2xl` to
+`3px` in `src/tailwind.config.js`, leaving `rounded-full` (toggle
+switches, progress bar tracks/fills) untouched. Checked every `rounded-lg`
+usage in the renderer (`SettingsView.jsx`'s advisor-suggestion cards,
+`globals.css`'s `.card` component) — both are plain decorative cards, not
+pills/circles, so the 3px override is a pure visual tightening with no
+functional dependency broken. Verified via a clean
+`npm run build:renderer`.
 
 ---
 
 ## Notes
+
+---
+
+## Closed
+
+2026-08-09

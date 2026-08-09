@@ -3,6 +3,13 @@ module.exports = {
   content: ['./renderer/**/*.{html,js,jsx}'],
   theme: {
     extend: {
+      borderRadius: {
+        DEFAULT: '3px',
+        md: '3px',
+        lg: '3px',
+        xl: '3px',
+        '2xl': '3px',
+      },
       colors: {
         surface: '#0f1117',
         panel:   '#1a1d27',
