@@ -8,7 +8,7 @@ function formatTokens(n) {
   return String(Math.round(n))
 }
 
-function formatReset(resetsAt) {
+export function formatReset(resetsAt) {
   if (!resetsAt) return null
   const ms = new Date(resetsAt).getTime() - Date.now()
   if (!Number.isFinite(ms)) return null
@@ -24,7 +24,7 @@ function formatReset(resetsAt) {
 
 // tokscale's `usage --json` labels quota windows "Session" (Claude's
 // 5-hour rolling limit) and "Weekly" -- Codex only ever reports "Weekly".
-const METRIC_LABELS = { Session: '5-hour rolling', Weekly: 'Weekly' }
+export const METRIC_LABELS = { Session: '5-hour rolling', Weekly: 'Weekly' }
 
 export default function UsageCard({ name, iconSvg, color, data }) {
   const { plan, quota = [], models = [], projects = [], totalTokens = 0, quotaError, breakdownError } = data || {}

@@ -7,8 +7,21 @@ import TokenView from './views/TokenView'
 import SettingsView from './views/SettingsView'
 import EditorView from './views/EditorView'
 
+// TICKET-0022/0023: live subscription quota is whole-machine data (not
+// scoped to whichever CPI project is active), and both the Agents tab's
+// compact UsageBar and the Token Usage tab's full UsageCard pair read the
+// same store slice -- polled once here so they never spawn two independent
+// tokscale subprocess calls on their own timers.
+const LIVE_USAGE_POLL_MS = 60_000
+
 export default function App() {
-  const { activeView, addAgent, updateAgentStatus } = useStore()
+  const { activeView, addAgent, updateAgentStatus, loadLiveUsage } = useStore()
+
+  useEffect(() => {
+    loadLiveUsage()
+    const interval = setInterval(loadLiveUsage, LIVE_USAGE_POLL_MS)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     window.cpi.onAgentStatus((data) => {

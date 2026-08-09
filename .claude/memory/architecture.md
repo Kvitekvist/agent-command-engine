@@ -12,7 +12,10 @@ Claude Projects Interface (CPI) is an Electron desktop application with a React 
   file tree scoped to the active project (TICKET-0021) — see File
   Explorer / Editor below
 - **Agent Pane**: one card per launched agent, each embedding a real
-  interactive terminal (TICKET-0019) — see Terminal below
+  interactive terminal (TICKET-0019) — see Terminal below. A compact
+  **Usage Bar** (TICKET-0023) sits above the toolbar: % used, % available,
+  and reset countdown per provider, from the same live quota data as the
+  Token Usage tab — see Live Token Usage Dashboard below
 - **Editor View** (TICKET-0021): tabbed Monaco editor for files opened from
   the Sidebar's tree — see File Explorer / Editor below
 - **Audit Log View**: searchable table of all prompts + responses (historical
@@ -112,10 +115,23 @@ agent ran through the old headless path or the new embedded terminal:
   project grid, and a total. Colors are a deliberate departure from
   `token-monitor`'s own CSS — matched to the user's reference screenshot
   instead (`#d97757` Claude, `#3b82f6` Codex).
-- **`TokenView.jsx`** renders a Claude + Codex `UsageCard` pair on a 60s
-  poll (`LIVE_USAGE_POLL_MS`), independent of the project-scoped historical
-  section below it — quota/today's-usage is whole-machine data, not scoped
-  to whichever CPI project is active.
+- **`TokenView.jsx`** renders a Claude + Codex `UsageCard` pair, independent
+  of the project-scoped historical section below it — quota/today's-usage
+  is whole-machine data, not scoped to whichever CPI project is active.
+- **Shared poll (TICKET-0023)**: `liveUsage`/`liveUsageLoading`/
+  `loadLiveUsage` live in `useStore.js`, not local component state. `App.jsx`
+  starts the one 60s poll (`LIVE_USAGE_POLL_MS`) on mount, so both
+  `TokenView.jsx` and the Agents tab's `UsageBar.jsx` read the same data
+  instead of each spawning its own `tokscale` subprocess call on its own
+  timer — `TokenView.jsx`'s "Refresh" button just calls the shared action.
+- **`UsageBar.jsx`** (TICKET-0023): a compact second presentation of the
+  same `liveUsage` slice above the Agents tab's toolbar — one slim row per
+  provider (icon, mini bar, "`X`% used", "`Y`% available", reset countdown)
+  for the *primary* quota metric only (`quota[0]` — Claude's 5-hour rolling
+  window, Codex's only metric, Weekly), reusing `formatReset`/
+  `METRIC_LABELS` exported from `UsageCard.jsx` rather than duplicating
+  them. Renders even with no project selected, since quota is whole-machine
+  data.
 
 ### Terminal (TICKET-0019)
 Ported from Flowgrid's terminal implementation. Real interactive shells —
@@ -249,7 +265,7 @@ src/
     ipc/          — IPC handler registrations
     ptyHost.js    — forked node-pty host process (TICKET-0019)
   renderer/       — React app
-    components/   — Reusable UI components (incl. AgentTerminal.jsx TICKET-0019, FileTree.jsx TICKET-0021, UsageCard.jsx TICKET-0022)
+    components/   — Reusable UI components (incl. AgentTerminal.jsx TICKET-0019, FileTree.jsx TICKET-0021, UsageCard.jsx TICKET-0022, UsageBar.jsx TICKET-0023)
     views/        — AgentView, AuditView, TokenView, SettingsView, EditorView (TICKET-0021)
     utils/        — agentNames.js, agentLaunch.js (TICKET-0019 interactive launch-command builder)
     assets/icons/ — claude.svg, codex.svg (TICKET-0022, copied from the token-monitor reference app)
@@ -306,6 +322,19 @@ src/
   `npm run dev` picks it up, or Electron silently runs the old code with no
   error (discovered while building TICKET-0019: the terminal wired up fine
   in source but never spawned anything until `dist/main` was rebuilt).
+- **`npm run dev` reuses whatever's already on port 5173, silently.**
+  `dev:main` hard-waits on `http://localhost:5173` specifically; if a prior
+  `npm run dev` is still running (stray process, or a window left open from
+  earlier in the same session), Vite's new instance just moves to 5174 and
+  Electron's `wait-on` happily connects to the *old* server on 5173 instead
+  — meaning a second `npm run dev` doesn't preview any new source changes,
+  it just opens a redundant second window onto the old process, and (worse)
+  a second full app instance pointed at the same on-disk SQLite database
+  (`db.export()`-on-every-write, see above) that a badly-timed write from
+  either instance could corrupt. Before starting a dev instance to verify a
+  change, check `netstat -ano | grep 5173` (or just try the window that's
+  already open — Vite HMR keeps it current) rather than assuming a fresh
+  `npm run dev` gives a clean instance (discovered verifying TICKET-0023).
 
 ## Future Improvements
 - WebSocket-based agent output stream

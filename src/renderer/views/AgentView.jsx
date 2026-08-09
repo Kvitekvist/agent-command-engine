@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import useStore from '../store/useStore'
 import ModelSelector from '../components/ModelSelector'
 import AgentTerminal from '../components/AgentTerminal'
+import UsageBar from '../components/UsageBar'
 import { generateAgentName } from '../utils/agentNames'
 
 const CLAUDE_MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-5','claude-opus-4-8','claude-fable-5']
@@ -90,9 +91,12 @@ export default function AgentView() {
 
   if (!activeProject) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted">
-        <div className="text-4xl mb-3">📁</div>
-        <div className="text-sm">Select a project from the sidebar to get started.</div>
+      <div className="flex flex-col h-full">
+        <UsageBar />
+        <div className="flex-1 flex flex-col items-center justify-center text-muted">
+          <div className="text-4xl mb-3">📁</div>
+          <div className="text-sm">Select a project from the sidebar to get started.</div>
+        </div>
       </div>
     )
   }
@@ -101,6 +105,7 @@ export default function AgentView() {
 
   return (
     <div className="flex flex-col h-full">
+      <UsageBar />
       <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-panel shrink-0 flex-wrap">
         <div className="text-sm font-semibold text-gray-100 mr-2 truncate max-w-xs">{activeProject.name}</div>
         <input className="input w-32 text-xs" placeholder="Agent label" value={label} onChange={(e) => setLabel(e.target.value)} />

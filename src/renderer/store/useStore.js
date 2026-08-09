@@ -85,6 +85,22 @@ const useStore = create((set, get) => ({
   tokenStats: [],
   setTokenStats: (stats) => set({ tokenStats: stats }),
 
+  // ── Live token usage (TICKET-0022, shared TICKET-0023) ────────────────────
+  // Whole-machine subscription quota from tokscale -- not scoped to the
+  // active CPI project. Polled once here (started from App.jsx) rather than
+  // per-view, so the Agents tab's compact UsageBar and the Token Usage tab's
+  // full UsageCard pair both read the same data without each spawning their
+  // own tokscale subprocess call on its own timer.
+  liveUsage: {
+    claude: { plan: null, quota: [], models: [], projects: [], totalTokens: 0 },
+    codex: { plan: null, quota: [], models: [], projects: [], totalTokens: 0 },
+  },
+  liveUsageLoading: true,
+  loadLiveUsage: async () => {
+    const usage = await window.cpi.getLiveTokenUsage()
+    set({ liveUsage: usage, liveUsageLoading: false })
+  },
+
   // ── Optimization advisor ───────────────────────────────────────────────────
   optimizationResult: null,
   setOptimizationResult: (result) => set({ optimizationResult: result }),

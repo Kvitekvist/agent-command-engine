@@ -13,16 +13,6 @@ import codexIcon from '../assets/icons/codex.svg?raw'
 // user pointed to, not token-monitor's own (slightly different) CSS palette.
 const PROVIDER_COLOR = { claude: '#d97757', codex: '#3b82f6' }
 
-const EMPTY_LIVE_USAGE = {
-  claude: { plan: null, quota: [], models: [], projects: [], totalTokens: 0 },
-  codex: { plan: null, quota: [], models: [], projects: [], totalTokens: 0 },
-}
-
-// Live usage is a separate, lighter-weight poll from the historical DB
-// query below -- it hits the real tokscale binary (a subprocess spawn),
-// so this stays well above what'd be reasonable for e.g. a keystroke.
-const LIVE_USAGE_POLL_MS = 60_000
-
 // Cost estimates per 1M tokens (approximate mid-2026 pricing)
 const COST_PER_M = {
   'claude-haiku-4-5-20251001': { input: 0.80,  output: 4.00  },
@@ -51,11 +41,13 @@ function rowCost(row) {
 }
 
 export default function TokenView() {
-  const { activeProject, tokenStats, setTokenStats } = useStore()
+  // liveUsage/liveUsageLoading/loadLiveUsage (TICKET-0022, shared TICKET-0023):
+  // polled once from App.jsx so this tab and the Agents tab's compact
+  // UsageBar read the same data instead of each spawning their own
+  // tokscale subprocess call on its own timer.
+  const { activeProject, tokenStats, setTokenStats, liveUsage, liveUsageLoading, loadLiveUsage } = useStore()
   const [loading, setLoading] = useState(false)
   const [view, setView]       = useState('daily') // 'daily' | 'model' | 'task'
-  const [liveUsage, setLiveUsage] = useState(EMPTY_LIVE_USAGE)
-  const [liveLoading, setLiveLoading] = useState(true)
 
   async function load() {
     setLoading(true)
@@ -65,22 +57,7 @@ export default function TokenView() {
     setLoading(false)
   }
 
-  async function loadLiveUsage() {
-    const usage = await window.cpi.getLiveTokenUsage()
-    setLiveUsage(usage)
-    setLiveLoading(false)
-  }
-
   useEffect(() => { load() }, [activeProject])
-
-  // Live usage (TICKET-0022) is project-independent (it's the whole
-  // machine's real subscription usage, not scoped to CPI's own projects)
-  // so it loads once and polls on its own timer, not per activeProject.
-  useEffect(() => {
-    loadLiveUsage()
-    const interval = setInterval(loadLiveUsage, LIVE_USAGE_POLL_MS)
-    return () => clearInterval(interval)
-  }, [])
 
   // Aggregate by day for the line chart
   const byDay = Object.values(
@@ -137,7 +114,7 @@ export default function TokenView() {
         <h2 className="text-base font-semibold">Usage</h2>
         <button onClick={loadLiveUsage} className="btn-ghost text-xs">↻ Refresh</button>
       </div>
-      {liveLoading ? (
+      {liveUsageLoading ? (
         <div className="text-xs text-muted">Loading live usage…</div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

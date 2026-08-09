@@ -52,7 +52,7 @@ Make process execution, persistence, packaging, and provider behavior dependable
 - sql.js (local SQLite database persisted in Electron userData)
 - Recharts (token usage visualization)
 - Node.js child_process (spawn claude CLI and openai codex CLI)
-- tokscale (reads Claude Code's/Codex's own local session transcripts for accurate token/cost usage — see [[architecture]] Token Tracking — and, via its own `usage`/`--today` subcommands, powers the live Token Usage dashboard, see [[architecture]] Live Token Usage Dashboard)
+- tokscale (reads Claude Code's/Codex's own local session transcripts for accurate token/cost usage — see [[architecture]] Token Tracking — and, via its own `usage`/`--today` subcommands, powers the live Token Usage dashboard and the Agents tab's compact quota bar, both reading one shared 60s poll — see [[architecture]] Live Token Usage Dashboard)
 - node-pty + xterm.js (real interactive terminal embedded per agent card, forked into its own `ptyHost.js` process — see [[architecture]] Terminal)
 - Monaco editor (`@monaco-editor/react`, pinned `monaco-editor@0.50.0`, `vite-plugin-monaco-editor-esm`) — VS Code-style file explorer + editor per project, see [[architecture]] File Explorer / Editor
 

@@ -105,6 +105,25 @@ automation: real quota percentages, reset countdowns, and per-project
 token totals rendered correctly with no console errors, and the app
 opened directly on this tab with no click needed.
 
+TICKET-0023
+2026-08-09
+Added a compact quota bar (UsageBar.jsx) above the Agents tab's toolbar:
+one slim row per provider showing % used, % available, and a reset
+countdown for the primary quota metric (Claude's 5-hour rolling window,
+Codex's weekly), so that's visible while actually launching/watching
+agents without switching to Token Usage. Lifted the live-usage poll
+TICKET-0022 had local to TokenView.jsx into the zustand store
+(`liveUsage`/`loadLiveUsage`), started once from App.jsx on a shared 60s
+interval, so the new bar and the Token Usage tab's full UsageCard pair
+read one poll instead of each spawning its own tokscale subprocess call.
+Token Usage tab itself is visually unchanged, only re-wired to the shared
+store slice. Verified live against the app's own already-running window
+(real Claude/Codex quota numbers, matching between both tabs, real running
+agent cards unaffected underneath). Found and safely tore down a
+duplicate second app instance this ticket's own verification step
+accidentally spawned (both pointed at the same on-disk SQLite database) —
+see the ticket's Notes for the process-tree diagnosis.
+
 TICKET-0024
 2026-08-09
 Fixed duplicate agent cards (and, for a running agent, a duplicate real
