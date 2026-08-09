@@ -146,6 +146,15 @@ const DBService = {
     if (!promptCols.includes('cost_usd')) {
       db.run('ALTER TABLE prompts ADD COLUMN cost_usd REAL DEFAULT 0')
     }
+    // TICKET-0026 follow-up: agents created before the ChatGPT-account
+    // model-list fix still carry the old API-key-only Codex slugs in their
+    // row, so they keep hitting "model not supported" on every relaunch
+    // even though the create-agent dropdown itself was already fixed.
+    // One-time data repair, idempotent (no-op once no rows match).
+    db.run(`
+      UPDATE agents SET model = 'gpt-5.6-terra'
+      WHERE provider = 'codex' AND model IN ('codex-mini-latest', 'o3', 'o4-mini')
+    `)
   },
 
   // Projects

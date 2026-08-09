@@ -45,8 +45,12 @@ Make process execution, persistence, packaging, and provider behavior dependable
   and confirm the CLI's own startup banner is not left visible (a brief
   flash before the overlay clears is expected and fine) — deferred for
   the same reason as TICKET-0024
-* Verify the TICKET-0026 Codex model-list fix live: launch a fresh Codex
-  agent and send a prompt, confirm no "model not supported" error
+* Verify the TICKET-0026 Codex model-list fix live — needs an actual app
+  restart (the follow-up DB migration is a main-process change sql.js
+  only applies at `DBService.init()`, same HMR caveat as TICKET-0027/29):
+  confirm a previously-broken existing Codex agent (e.g. "Omar") now
+  launches and completes a prompt without "model not supported", and
+  that a freshly-created Codex agent does too
 * Verify the TICKET-0028 fix live: run several agents in one project,
   switch to a different project, confirm ptyHost.js doesn't crash (no
   `terminal:hostRestarted` event / "terminal process was lost" message)
@@ -148,8 +152,14 @@ Make process execution, persistence, packaging, and provider behavior dependable
   are raw API-key-only model slugs, and this machine's Codex CLI is logged
   in via a ChatGPT subscription, which rejects all three outright. Found
   live in a running agent card. Replaced with ChatGPT-account-compatible
-  slugs read from `~/.codex/models_cache.json`; re-verifying with a fresh
-  Codex agent launch is still open.
+  slugs read from `~/.codex/models_cache.json`. Follow-up: that alone
+  didn't fix already-created agents, since the bad slug was already saved
+  on their DB row and every relaunch kept reading it straight from there,
+  bypassing the corrected dropdown — confirmed by querying `cpi.db`
+  directly and finding four agents still on `codex-mini-latest`. Added a
+  one-time migration in `DBService._migrateSchema()` to repair those rows;
+  takes effect on next app restart. Re-verifying live (restart + confirm a
+  previously-broken agent launches cleanly) is still open.
 - TICKET-0029: two external cmd.exe console windows briefly flashed on
   Windows roughly once a minute, even with the app idle and no agents
   running — traced to the 60s live-usage poll's two `tokscale` calls

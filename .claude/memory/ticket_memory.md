@@ -183,6 +183,21 @@ pass, no new coverage since this is a hardcoded model-name list, same as
 CLAUDE_MODELS); live in-app verification (a fresh Codex agent completing
 a prompt) still open.
 
+Follow-up, same day: user hit the identical error again after the above
+landed. Cause was that the dropdown fix only affects newly-created
+agents — four agents already existed with codex-mini-latest saved
+directly on their agents.model DB row (confirmed by querying cpi.db
+directly), and every relaunch (including the automatic ones TICKET-0027/
+TICKET-0030 added on tab/project switches) kept reading that stale value
+straight from the DB, bypassing the fixed dropdown entirely. Fixed with a
+one-time idempotent migration in DBService._migrateSchema() that rewrites
+any codex agent row still holding codex-mini-latest/o3/o4-mini to
+gpt-5.6-terra. Only takes effect after an app restart (sql.js loads the
+whole DB into memory once at init — an already-running instance can't
+self-repair). npm run build:main / build:renderer both clean, npm test
+11/11 pass; live verification (restart app, confirm a previously-broken
+agent now launches cleanly) still open.
+
 TICKET-0028
 2026-08-09
 Fixed ptyHost.js (the forked process hosting every agent's live PTY
