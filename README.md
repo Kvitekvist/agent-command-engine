@@ -4,6 +4,18 @@ A specialized Electron desktop application for managing Claude and OpenAI Codex 
 
 ---
 
+## Screenshots
+
+**Agent Interface** — multi-agent runner with real interactive terminals per project
+
+![Agent Interface](docs/screenshots/agent-interface.png)
+
+**Usage** — live token usage dashboard across Claude and Codex
+
+![Usage](docs/screenshots/usage.png)
+
+---
+
 ## Features
 
 - **Project Switcher** — open and switch between any number of project folders
@@ -56,6 +68,12 @@ npm run package
 ```
 
 Application build output is written to `src/dist`; installers are written to `releases`.
+
+---
+
+## Credits
+
+Token usage tracking is built on [token-monitor](https://github.com/Javis603/token-monitor) by [Javis603](https://github.com/Javis603).
 
 ---
 

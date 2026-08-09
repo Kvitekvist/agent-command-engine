@@ -387,3 +387,14 @@ shapes, not cornered boxes. Checked every rounded-lg usage in the
 renderer (SettingsView.jsx's advisor-suggestion cards, globals.css's
 .card component) -- both are plain decorative cards, confirming nothing
 depended on a larger radius. Verified via a clean npm run build:renderer.
+
+TICKET-0036
+2026-08-09
+Added a Screenshots section to README.md (agent interface first, then the
+usage dashboard) and a Credits section linking to token-monitor
+(https://github.com/Javis603/token-monitor), the upstream project the
+token usage tracking code (TICKET-0018/0022) was built on. The two
+screenshots lived in the project's own `.cpi/screenshots/` folder, which
+TICKET-0034 auto-gitignores -- copied them into a new tracked
+docs/screenshots/ folder instead so the images actually render on GitHub
+rather than 404ing for anyone else who clones the repo.
