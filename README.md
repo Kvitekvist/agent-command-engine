@@ -10,7 +10,8 @@ A specialized Electron desktop application for managing Claude and OpenAI Codex 
 - **File Explorer** — a VS Code-style file tree per project in the Sidebar; click a file to open and edit it in a real Monaco editor, save straight to disk
 - **Multi-Agent Runner** — launch multiple Claude CLI or OpenAI Codex agents simultaneously within a project; each gets its own real interactive terminal (opens in the project's folder, runs the actual CLI) rather than a scripted chat pane
 - **Full Audit Log** — every prompt sent and every response received through the (currently unused by the UI) headless agent path is stored in SQLite for auditing and result reproduction; historical only until a future update reconciles it against the interactive terminal path too
-- **Token Dashboard** — per-prompt, per-task, and per-project token tracking with bar charts, line charts, and cost estimates by model; same historical-only caveat as the audit log above
+- **Live Token Usage Dashboard** (default tab) — real Claude/Codex subscription quota (5-hour rolling + weekly limits with reset countdowns) and today's usage by model and by project, sourced live from `tokscale`'s own account data rather than CPI's audit log
+- **Token Dashboard (History)** — per-prompt, per-task, and per-project token tracking with bar charts, line charts, and cost estimates by model; same historical-only caveat as the audit log above
 - **Model Selector** — dropdown to choose Claude or Codex model per agent
 - **Load Balancing** — automatically falls back to OpenAI Codex when Claude token usage exceeds a configurable hourly threshold
 - **Optimization Advisor** — one-click analysis of recent prompts with actionable suggestions for reducing token spend

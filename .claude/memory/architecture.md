@@ -17,8 +17,12 @@ Claude Projects Interface (CPI) is an Electron desktop application with a React 
   the Sidebar's tree — see File Explorer / Editor below
 - **Audit Log View**: searchable table of all prompts + responses (historical
   only as of TICKET-0019's correction — see Terminal)
-- **Token Dashboard**: Recharts charts per prompt/task/project; cost estimates
-  (historical only as of TICKET-0019's correction — see Terminal)
+- **Token Dashboard** (Token Usage tab, the app's **default tab** as of
+  TICKET-0022): a live per-provider usage dashboard (see Live Token Usage
+  Dashboard below) on top, with the original Recharts historical charts
+  (per prompt/task/project; historical only as of TICKET-0019's
+  correction — see Terminal) kept underneath, relabeled as DB-scoped
+  history
 - **Optimization Advisor**: triggered by button; analyzes recent prompts, returns suggestions
 - **Settings**: default model, load-balance threshold
 
@@ -62,17 +66,56 @@ response the user is waiting on:
    `DBService.updatePromptUsage` once it resolves. Result: the fast path
    still logs a same-turn best guess, and it gets silently corrected to the
    real figures moments later.
-- **Codex is not reconciled.** CPI spawns `codex --print` stateless (no
-  `--resume`), so there is no stable per-turn session id to match a tokscale
+- **Codex is not reconciled.** CPI spawns `codex exec` stateless (no
+  `resume`), so there is no stable per-turn session id to match a tokscale
   row against — matching by "most recently written codex session file"
   would misattribute tokens whenever two Codex agents finish close together,
   which this app's multi-agent design allows. Codex token counts stay at
   the (inaccurate) stdout-parsed value, effectively always `0` today, until
-  a future ticket gives codex real session resumption.
-- `TokenView.jsx` prefers the reconciled `cost_usd` from the DB when present
-  and only falls back to the static `COST_PER_M` estimate table for rows
-  that were never reconciled (Codex, or a Claude turn rendered before its
-  correction lands).
+  a future ticket gives codex real session resumption. (Also: this whole
+  headless path is unused by the UI as of TICKET-0019 anyway — see above.)
+- `TokenView.jsx`'s historical section prefers the reconciled `cost_usd`
+  from the DB when present and only falls back to the static `COST_PER_M`
+  estimate table for rows that were never reconciled (Codex, or a Claude
+  turn rendered before its correction lands).
+
+### Live Token Usage Dashboard (TICKET-0022)
+The Token Usage tab's primary content (and the app's default tab) — real
+subscription usage, sourced live from the `tokscale` binary rather than
+CPI's own `prompts` table, so it stays accurate regardless of whether an
+agent ran through the old headless path or the new embedded terminal:
+- **`TokscaleService.getQuota()`**: runs `tokscale usage --json`, tokscale's
+  own subcommand for real subscription quota — reads the same local OAuth
+  credentials Claude Code/Codex already use, so CPI never touches auth
+  tokens itself. Returns `[{provider, plan, metrics: [{label, used_percent,
+  resets_at}]}]` — Claude reports `Session` (its 5-hour rolling limit) and
+  `Weekly`; Codex reports `Weekly` only.
+- **`TokscaleService.getTodayBreakdown(clients)`**: runs `tokscale --json
+  --today --client <clients> --group-by workspace,model`, then rolls the
+  returned rows (which carry both `model` and `workspaceLabel`) up
+  client-side into a Models breakdown and a Today-by-project breakdown from
+  one call. Per-row token total = `input + output + cacheRead + cacheWrite`
+  (`rowTokenTotal`) — `reasoning` is deliberately excluded since Codex
+  already counts reasoning tokens inside `output`, so adding them again
+  would double-count (confirmed against the reference app's own formula,
+  see TICKET-0022 Notes).
+- **`tokens:getLiveUsage`** (IPC handler, `handlers.js`): calls both above
+  and combines them into `{ claude: {...}, codex: {...} }`. Quota and
+  breakdown are fetched independently and each provider's failure is
+  isolated (`quotaError`/`breakdownError` on that provider's object) so one
+  provider being logged out doesn't blank out the other.
+- **`UsageCard.jsx`**: one provider card — icon (real SVG asset,
+  `assets/icons/claude.svg`/`codex.svg`, copied from the reference app
+  `token-monitor`, masked with `currentColor` via inline `dangerouslySetInnerHTML`
+  since Vite's `?raw` import gives raw SVG markup, not a component), a bar
+  per quota metric with its reset countdown, a Models list, a Today-by-
+  project grid, and a total. Colors are a deliberate departure from
+  `token-monitor`'s own CSS — matched to the user's reference screenshot
+  instead (`#d97757` Claude, `#3b82f6` Codex).
+- **`TokenView.jsx`** renders a Claude + Codex `UsageCard` pair on a 60s
+  poll (`LIVE_USAGE_POLL_MS`), independent of the project-scoped historical
+  section below it — quota/today's-usage is whole-machine data, not scoped
+  to whichever CPI project is active.
 
 ### Terminal (TICKET-0019)
 Ported from Flowgrid's terminal implementation. Real interactive shells —
@@ -179,7 +222,7 @@ agent:
 - **AgentService**: spawns/kills CLI processes, streams output via IPC
 - **DBService**: all SQLite reads/writes
 - **AgentService stream parsers**: parse responses, sessions, tools, denials, and token counts from CLI JSON output
-- **TokscaleService**: spawns the `tokscale` npm package to read Claude Code's/Codex's own local session transcript files and return authoritative per-session token + cost totals — see Token Tracking below
+- **TokscaleService**: spawns the `tokscale` npm package to read Claude Code's/Codex's own local session transcript files and return authoritative per-session token + cost totals (see Token Tracking below), plus real subscription quota and today's model/project breakdowns (see Live Token Usage Dashboard below)
 - **TerminalService**: forks/supervises `ptyHost.js`, forwards its data/exit events to the renderer — see Terminal above
 - **FileService**: reads/writes project files for the Sidebar file tree + Monaco editor, containment-checked against the requesting project's root — see File Explorer / Editor above
 - **LoadBalancer**: decides provider based on credit status
@@ -195,9 +238,10 @@ src/
     ipc/          — IPC handler registrations
     ptyHost.js    — forked node-pty host process (TICKET-0019)
   renderer/       — React app
-    components/   — Reusable UI components (incl. AgentTerminal.jsx TICKET-0019, FileTree.jsx TICKET-0021)
+    components/   — Reusable UI components (incl. AgentTerminal.jsx TICKET-0019, FileTree.jsx TICKET-0021, UsageCard.jsx TICKET-0022)
     views/        — AgentView, AuditView, TokenView, SettingsView, EditorView (TICKET-0021)
     utils/        — agentNames.js, agentLaunch.js (TICKET-0019 interactive launch-command builder)
+    assets/icons/ — claude.svg, codex.svg (TICKET-0022, copied from the token-monitor reference app)
     store/        — Zustand state
   scripts/        — build helpers
   tests/          — Node test runner suites

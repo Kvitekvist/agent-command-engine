@@ -2,6 +2,7 @@ const { dialog } = require('electron')
 const { LoadBalancer } = require('../services/LoadBalancer')
 const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 const { FileService } = require('../services/FileService')
+const { TokscaleService } = require('../services/TokscaleService')
 
 function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keep window ref updated
@@ -165,6 +166,46 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // ── Token stats ─────────────────────────────────────────────────────────────
   ipcMain.handle('tokens:getStats', (_, filters) => DB.getTokenStats(filters || {}))
+
+  // Live usage dashboard (TICKET-0022) -- sourced straight from tokscale
+  // (real subscription quota + today's session transcripts), independent
+  // of CPI's own `prompts` table, which the embedded terminal (TICKET-0019)
+  // no longer populates. Quota and today's breakdown are fetched
+  // independently so one provider being logged out, or one call failing,
+  // doesn't blank out the other.
+  ipcMain.handle('tokens:getLiveUsage', async () => {
+    const clients = ['claude', 'codex']
+    const result = {}
+    for (const c of clients) result[c] = { plan: null, quota: [], models: [], projects: [], totalTokens: 0 }
+
+    try {
+      const quota = await TokscaleService.getQuota()
+      for (const entry of quota || []) {
+        const key = (entry.provider || '').toLowerCase()
+        if (result[key]) {
+          result[key].plan = entry.plan || null
+          result[key].quota = entry.metrics || []
+        }
+      }
+    } catch (error) {
+      for (const c of clients) result[c].quotaError = error.message
+    }
+
+    try {
+      const breakdown = await TokscaleService.getTodayBreakdown(clients)
+      for (const c of clients) {
+        if (breakdown[c]) {
+          result[c].models = breakdown[c].models
+          result[c].projects = breakdown[c].projects
+          result[c].totalTokens = breakdown[c].totalTokens
+        }
+      }
+    } catch (error) {
+      for (const c of clients) result[c].breakdownError = error.message
+    }
+
+    return result
+  })
 
   // ── Settings ────────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', (_, key) => DB.getSetting(key))

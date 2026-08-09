@@ -2,7 +2,10 @@ import { create } from 'zustand'
 
 const useStore = create((set, get) => ({
   // ── Active view ────────────────────────────────────────────────────────────
-  activeView: 'agents', // 'agents' | 'audit' | 'tokens' | 'settings' | 'editor'
+  // Default is 'tokens' (TICKET-0022) -- the live usage dashboard is
+  // project-independent and useful the instant the app opens, unlike
+  // 'agents' which needs a project selected first.
+  activeView: 'tokens', // 'agents' | 'audit' | 'tokens' | 'settings' | 'editor'
   setActiveView: (view) => set({ activeView: view }),
 
   // ── Projects ───────────────────────────────────────────────────────────────

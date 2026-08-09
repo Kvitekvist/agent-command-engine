@@ -82,6 +82,17 @@ function toUsageMap(json) {
   return map
 }
 
+// TICKET-0022: total tokens for one tokscale row, matching the formula the
+// reference project (token-monitor, see usage.js) uses -- reasoning tokens
+// are deliberately excluded since Codex/OpenAI already counts them inside
+// `output`, so adding them again would double-count.
+function rowTokenTotal(entry) {
+  return (Number(entry.input) || 0)
+    + (Number(entry.output) || 0)
+    + (Number(entry.cacheRead) || 0)
+    + (Number(entry.cacheWrite) || 0)
+}
+
 const TokscaleService = {
   // All-time cumulative usage per session, grouped by client/session/model.
   // No date filter: agent sessions can span more than a day, and per-agent
@@ -96,7 +107,51 @@ const TokscaleService = {
     return toUsageMap(json)
   },
 
+  // TICKET-0022: real subscription quota (5-hour rolling / weekly limits +
+  // reset times) straight from tokscale's own `usage` subcommand, which
+  // reads the same local OAuth credentials Claude Code/Codex already use --
+  // CPI never touches auth tokens itself. Returns tokscale's array as-is
+  // (one entry per provider); callers key it by `provider` (case-varies,
+  // e.g. "Claude"/"Codex").
+  async getQuota() {
+    return runTokscale(['usage', '--json'])
+  },
+
+  // TICKET-0022: today's usage, broken down by project and by model in one
+  // call -- rows carry both `workspaceLabel` and `model`, rolled up
+  // client-side into the two breakdowns the UsageCard needs.
+  async getTodayBreakdown(clients) {
+    const json = await runTokscale([
+      '--json', '--today', '--client', clients.join(','),
+      '--group-by', 'workspace,model',
+      '--no-spinner',
+    ])
+    const entries = Array.isArray(json?.entries) ? json.entries : []
+
+    const result = {}
+    for (const client of clients) result[client] = { models: new Map(), projects: new Map(), totalTokens: 0 }
+
+    for (const entry of entries) {
+      const bucket = result[entry.client]
+      if (!bucket) continue
+      const tokens = rowTokenTotal(entry)
+      bucket.totalTokens += tokens
+      bucket.models.set(entry.model, (bucket.models.get(entry.model) || 0) + tokens)
+      const project = entry.workspaceLabel || entry.workspaceKey || 'unknown'
+      bucket.projects.set(project, (bucket.projects.get(project) || 0) + tokens)
+    }
+
+    for (const client of clients) {
+      result[client] = {
+        totalTokens: result[client].totalTokens,
+        models: [...result[client].models].map(([name, tokens]) => ({ name, tokens })).sort((a, b) => b.tokens - a.tokens),
+        projects: [...result[client].projects].map(([name, tokens]) => ({ name, tokens })).sort((a, b) => b.tokens - a.tokens),
+      }
+    }
+    return result
+  },
+
   sessionKey,
 }
 
-module.exports = { TokscaleService, sessionKey, toUsageMap }
+module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal }

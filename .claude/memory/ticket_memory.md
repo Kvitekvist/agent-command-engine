@@ -88,3 +88,19 @@ Claude session history, a simulated pre-migration sql.js DB run through the
 schema migration + updated queries, 9 automated tests (new
 tokscale-service.test.js + reconciliation-delta tests in
 agent-service.test.js), and a clean npm run build.
+
+TICKET-0022
+2026-08-09
+Added a live token-usage dashboard to the Token Usage tab (now the app's
+default tab), ported from the design of the user's reference app
+token-monitor: Claude + Codex cards showing real subscription quota
+(5-hour rolling/weekly limits with reset countdowns), today's usage by
+model and by project, and a total — all sourced live from the already-
+installed tokscale binary's own `usage --json` and `--today --group-by
+workspace,model` commands, independent of CPI's `prompts` DB table
+(which TICKET-0019's embedded terminal no longer populates). Kept the
+existing Recharts historical view underneath, relabeled as DB-scoped
+history rather than deleted. Verified live via Chrome DevTools Protocol
+automation: real quota percentages, reset countdowns, and per-project
+token totals rendered correctly with no console errors, and the app
+opened directly on this tab with no click needed.

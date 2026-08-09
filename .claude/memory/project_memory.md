@@ -27,9 +27,13 @@ Make process execution, persistence, packaging, and provider behavior dependable
 * Decide whether agent terminal sessions need to survive a project
   switch (currently they don't — see TICKET-0019 Notes) — open a follow-up
   ticket if so
-* Rebuild token tracking for the new per-agent terminal path (it currently
-  only works for the now-unused headless `AgentService.sendPrompt` path —
-  see TICKET-0019 Notes and [[architecture]] Token Tracking)
+* Live token usage (TICKET-0022) now covers real usage tracking
+  regardless of headless vs. embedded-terminal agents — CPI's own
+  `prompts` DB table (Audit Log + the historical Token Usage section) is
+  still frozen for new agents, but that's now a documented, accepted
+  trade-off rather than an open "rebuild tracking" priority; only worth
+  revisiting if per-turn audit rows specifically (not just aggregate
+  usage) turn out to matter again
 * Verify restored stopped-agent behavior manually (TICKET-0011)
 * Add end-to-end provider contract tests for Claude and Codex
 * Replace whole-database export-on-write if audit volume causes UI stalls
@@ -43,7 +47,7 @@ Make process execution, persistence, packaging, and provider behavior dependable
 - sql.js (local SQLite database persisted in Electron userData)
 - Recharts (token usage visualization)
 - Node.js child_process (spawn claude CLI and openai codex CLI)
-- tokscale (reads Claude Code's/Codex's own local session transcripts for accurate token/cost usage — see [[architecture]] Token Tracking)
+- tokscale (reads Claude Code's/Codex's own local session transcripts for accurate token/cost usage — see [[architecture]] Token Tracking — and, via its own `usage`/`--today` subcommands, powers the live Token Usage dashboard, see [[architecture]] Live Token Usage Dashboard)
 - node-pty + xterm.js (real interactive terminal embedded per agent card, forked into its own `ptyHost.js` process — see [[architecture]] Terminal)
 - Monaco editor (`@monaco-editor/react`, pinned `monaco-editor@0.50.0`, `vite-plugin-monaco-editor-esm`) — VS Code-style file explorer + editor per project, see [[architecture]] File Explorer / Editor
 
@@ -115,3 +119,8 @@ Make process execution, persistence, packaging, and provider behavior dependable
 - All token counts parsed from CLI stdout (JSON output mode)
 - One SQLite DB for the application in Electron's userData directory
 - Current template project: the AI Project Bootstrap in this repo
+- User has a separate reference project, `token-monitor`, checked out at
+  `C:\Users\jensr\Documents\VS Projects\token-monitor-main` — an Electron
+  live token/cost widget for Claude Code/Codex, also built on `tokscale`.
+  Source of the design TICKET-0022's live usage dashboard is based on;
+  worth checking again for any future tokscale/usage-tracking work

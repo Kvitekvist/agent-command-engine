@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('cpi', {
 
   // Token stats
   getTokenStats: (filters) => ipcRenderer.invoke('tokens:getStats', filters),
+  getLiveTokenUsage: () => ipcRenderer.invoke('tokens:getLiveUsage'),
 
   // Settings
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),

@@ -5,6 +5,23 @@ import {
   Legend, ResponsiveContainer,
 } from 'recharts'
 import useStore from '../store/useStore'
+import UsageCard from '../components/UsageCard'
+import claudeIcon from '../assets/icons/claude.svg?raw'
+import codexIcon from '../assets/icons/codex.svg?raw'
+
+// TICKET-0022: matches the reference design (token-monitor) screenshot the
+// user pointed to, not token-monitor's own (slightly different) CSS palette.
+const PROVIDER_COLOR = { claude: '#d97757', codex: '#3b82f6' }
+
+const EMPTY_LIVE_USAGE = {
+  claude: { plan: null, quota: [], models: [], projects: [], totalTokens: 0 },
+  codex: { plan: null, quota: [], models: [], projects: [], totalTokens: 0 },
+}
+
+// Live usage is a separate, lighter-weight poll from the historical DB
+// query below -- it hits the real tokscale binary (a subprocess spawn),
+// so this stays well above what'd be reasonable for e.g. a keystroke.
+const LIVE_USAGE_POLL_MS = 60_000
 
 // Cost estimates per 1M tokens (approximate mid-2026 pricing)
 const COST_PER_M = {
@@ -37,6 +54,8 @@ export default function TokenView() {
   const { activeProject, tokenStats, setTokenStats } = useStore()
   const [loading, setLoading] = useState(false)
   const [view, setView]       = useState('daily') // 'daily' | 'model' | 'task'
+  const [liveUsage, setLiveUsage] = useState(EMPTY_LIVE_USAGE)
+  const [liveLoading, setLiveLoading] = useState(true)
 
   async function load() {
     setLoading(true)
@@ -46,7 +65,22 @@ export default function TokenView() {
     setLoading(false)
   }
 
+  async function loadLiveUsage() {
+    const usage = await window.cpi.getLiveTokenUsage()
+    setLiveUsage(usage)
+    setLiveLoading(false)
+  }
+
   useEffect(() => { load() }, [activeProject])
+
+  // Live usage (TICKET-0022) is project-independent (it's the whole
+  // machine's real subscription usage, not scoped to CPI's own projects)
+  // so it loads once and polls on its own timer, not per activeProject.
+  useEffect(() => {
+    loadLiveUsage()
+    const interval = setInterval(loadLiveUsage, LIVE_USAGE_POLL_MS)
+    return () => clearInterval(interval)
+  }, [])
 
   // Aggregate by day for the line chart
   const byDay = Object.values(
@@ -95,9 +129,32 @@ export default function TokenView() {
 
   return (
     <div className="p-5 space-y-6 overflow-y-auto h-full">
+      {/* Live usage (TICKET-0022) -- real subscription quota + today's
+          usage straight from tokscale, independent of CPI's own project
+          selection or `prompts` DB table (see architecture.md Token
+          Tracking for why that table no longer fills in on its own). */}
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">Token Usage</h2>
-        <button onClick={load} className="btn-ghost text-xs">↻ Refresh</button>
+        <h2 className="text-base font-semibold">Usage</h2>
+        <button onClick={loadLiveUsage} className="btn-ghost text-xs">↻ Refresh</button>
+      </div>
+      {liveLoading ? (
+        <div className="text-xs text-muted">Loading live usage…</div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <UsageCard name="Claude" iconSvg={claudeIcon} color={PROVIDER_COLOR.claude} data={liveUsage.claude} />
+          <UsageCard name="Codex" iconSvg={codexIcon} color={PROVIDER_COLOR.codex} data={liveUsage.codex} />
+        </div>
+      )}
+
+      {/* Historical (this project, from CPI's own audit log) */}
+      <div className="flex items-center justify-between pt-2 border-t border-border">
+        <div>
+          <h2 className="text-base font-semibold mt-4">History (this project)</h2>
+          <p className="text-xs text-muted mt-0.5">
+            From CPI's own audit log — only reflects agents launched through the older headless path; see architecture.md.
+          </p>
+        </div>
+        <button onClick={load} className="btn-ghost text-xs mt-4">↻ Refresh</button>
       </div>
 
       {/* Summary cards */}

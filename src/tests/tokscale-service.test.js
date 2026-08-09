@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { toUsageMap, sessionKey } = require('../main/services/TokscaleService')
+const { toUsageMap, sessionKey, rowTokenTotal } = require('../main/services/TokscaleService')
 
 // Sample shape verified against a real `tokscale --json --client claude
 // --group-by client,session,model` invocation.
@@ -48,4 +48,9 @@ test('ignores rows missing a client or session id, and malformed input', () => {
   assert.equal(toUsageMap(null).size, 0)
   assert.equal(toUsageMap({}).size, 0)
   assert.equal(toUsageMap({ entries: [{ model: 'x', input: 5 }] }).size, 0)
+})
+
+test('rowTokenTotal excludes reasoning tokens to avoid double-counting (TICKET-0022)', () => {
+  assert.equal(rowTokenTotal({ input: 10, output: 5, cacheRead: 100, cacheWrite: 20, reasoning: 999 }), 135)
+  assert.equal(rowTokenTotal({}), 0)
 })
