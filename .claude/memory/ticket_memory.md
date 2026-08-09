@@ -182,3 +182,28 @@ clean npm run build:renderer and the full automated test suite (11/11
 pass, no new coverage since this is a hardcoded model-name list, same as
 CLAUDE_MODELS); live in-app verification (a fresh Codex agent completing
 a prompt) still open.
+
+TICKET-0028
+2026-08-09
+Fixed ptyHost.js (the forked process hosting every agent's live PTY
+session) crashing with a native access violation (exit 0xC0000005) —
+observed live once, while the user was switching between projects with
+multiple agents running. Root cause: switching projects resets the
+`agents` store array, unmounting every AgentTerminal for the old
+project's agents in the same React commit; each one's cleanup fires a
+fire-and-forget `terminal:dispose` IPC send, so ptyHost.js received
+several `dispose` messages back-to-back and called node-pty's
+`proc.kill()` on multiple ConPTY sessions in rapid succession — a known
+crash class for that native addon on Windows when teardowns overlap.
+Fixed by serializing disposeSession behind a promise queue that waits for
+each killed session's own onExit (1500ms timeout fallback) before the
+next queued kill() runs; gracefulShutdown (full host exit) now awaits
+that same queue instead of exiting before any kill() had completed.
+Verified via a clean npm run build:main and the full automated test
+suite (11/11 pass, no new coverage — native-process teardown timing
+isn't exercised by the existing JS-level tests). Root cause is inferred
+from timing + node-pty's documented Windows/ConPTY concurrency issues,
+not a captured crash dump (Windows Error Reporting had no matching entry
+for the crash). Live re-verification (multiple agents running, switch
+projects, confirm no crash) still open — the original crash wasn't
+reliably reproducible on demand.

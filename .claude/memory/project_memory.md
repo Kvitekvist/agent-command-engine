@@ -46,6 +46,9 @@ Make process execution, persistence, packaging, and provider behavior dependable
   the same reason as TICKET-0024
 * Verify the TICKET-0026 Codex model-list fix live: launch a fresh Codex
   agent and send a prompt, confirm no "model not supported" error
+* Verify the TICKET-0028 fix live: run several agents in one project,
+  switch to a different project, confirm ptyHost.js doesn't crash (no
+  `terminal:hostRestarted` event / "terminal process was lost" message)
 * Verify the TICKET-0027 fix live: this needs an actual app restart to
   take effect (the `TerminalService.js` half is a main-process change,
   which Vite's dev HMR never picks up — see architecture.md's `npm run
@@ -101,6 +104,14 @@ Make process execution, persistence, packaging, and provider behavior dependable
   a visible console window per spawn — see below) every time the Agents
   tab was revisited; `AgentView` now stays mounted instead of being torn
   down on every tab switch.
+- TICKET-0028: ptyHost.js crashed with a native access violation while
+  switching projects with multiple agents running — killing more than one
+  ConPTY session concurrently (every AgentTerminal's dispose firing at
+  once on the project-switch unmount) is a known crash trigger for
+  node-pty's native Windows addon. Fixed by serializing session teardown
+  behind a promise queue in ptyHost.js so kills never overlap. Only
+  observed once live; not reliably reproducible on demand, so live
+  re-verification is still open — see Active Priorities.
 - TICKET-0027: switching tabs away from Agents and back showed visible
   console/cmd windows and restarted every running agent's CLI session,
   sometimes appearing to trigger more than once for the same agent. Two

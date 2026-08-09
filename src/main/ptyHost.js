@@ -15,6 +15,7 @@ try {
 }
 
 const sessions = new Map() // id -> node-pty process
+const exitWaiters = new Map() // id -> resolve fn, invoked once that session's onExit fires
 
 function defaultShell() {
   if (process.platform === 'win32') return 'powershell.exe'
@@ -42,6 +43,8 @@ function spawnSession({ id, shell, cwd, cols, rows }) {
     })
     proc.onExit(({ exitCode, signal }) => {
       sessions.delete(id)
+      const waiter = exitWaiters.get(id)
+      if (waiter) { exitWaiters.delete(id); waiter() }
       try { process.send({ type: 'exit', id, exitCode, signal }) } catch (_) { /* parent gone */ }
     })
     return { success: true, pid: proc.pid }
@@ -62,23 +65,45 @@ function resizeSession(id, cols, rows) {
   }
 }
 
+// Killing more than one ConPTY session at (or near) the same instant is a
+// known crash trigger for node-pty's native Windows addon -- e.g. every
+// running agent's session tearing down at once when the renderer switches
+// projects. Queuing disposals and waiting for each session's own onExit
+// (falling back to a timeout if it never fires) before starting the next
+// kill() keeps native teardowns from overlapping. See TICKET-0028.
+let disposeQueue = Promise.resolve()
+
 function disposeSession(id) {
-  const proc = sessions.get(id)
-  if (proc) {
-    try { proc.kill() } catch (_) { /* already dead */ }
-    sessions.delete(id)
-  }
+  disposeQueue = disposeQueue.then(() => killAndWait(id))
+  return disposeQueue
 }
 
-function gracefulShutdown() {
+function killAndWait(id) {
+  const proc = sessions.get(id)
+  if (!proc) return Promise.resolve()
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(finish, 1500)
+    exitWaiters.set(id, finish)
+    try { proc.kill() } catch (_) { finish() }
+  })
+}
+
+async function gracefulShutdown() {
   for (const [id] of sessions) disposeSession(id)
+  await disposeQueue
 }
 
 process.on('message', (msg) => {
   if (!msg) return
   if (msg.channel === 'shutdown') {
-    gracefulShutdown()
-    process.exit(0)
+    gracefulShutdown().finally(() => process.exit(0))
     return
   }
   if (!msg.cmd) return
@@ -106,8 +131,7 @@ process.on('message', (msg) => {
 // process exits -- every live shell (and any CLI running inside it) must be
 // explicitly killed on shutdown or it's orphaned.
 process.on('SIGTERM', () => {
-  gracefulShutdown()
-  process.exit(0)
+  gracefulShutdown().finally(() => process.exit(0))
 })
 
 process.send({ ready: true })
