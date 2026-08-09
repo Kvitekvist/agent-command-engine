@@ -3,6 +3,7 @@ const test = require('node:test')
 
 const {
   buildPermissionArgs,
+  buildCodexArgs,
   computeTokscaleDelta,
   parsePermissionDenials,
   parseSessionId,
@@ -55,6 +56,16 @@ test('permission modes are conservative by default', () => {
   ])
   assert.deepEqual(buildPermissionArgs('auto'), ['--dangerously-skip-permissions'])
   assert.ok(buildPermissionArgs('ask').includes('Bash'))
+})
+
+test('codex permission modes map to real --sandbox/--ask-for-approval flags (TICKET-0020)', () => {
+  assert.deepEqual(buildCodexArgs('unknown'), [
+    '--sandbox', 'read-only', '--ask-for-approval', 'untrusted',
+  ])
+  assert.deepEqual(buildCodexArgs('ask'), [
+    '--sandbox', 'workspace-write', '--ask-for-approval', 'on-request',
+  ])
+  assert.deepEqual(buildCodexArgs('auto'), ['--dangerously-bypass-approvals-and-sandbox'])
 })
 
 test('tokscale reconciliation diffs cumulative session usage into a turn delta', () => {

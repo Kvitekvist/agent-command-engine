@@ -71,6 +71,13 @@ Make process execution, persistence, packaging, and provider behavior dependable
   the embedded terminal (only the old headless path wrote them, and
   nothing calls it anymore) — historical data still displays correctly.
   See TICKET-0019 Notes and [[architecture]] Token Tracking.
+- TICKET-0020: Codex agents couldn't launch at all — both the headless
+  path and the new embedded terminal spawned `openai codex ...`, but
+  `openai` on PATH is the unrelated openai-python SDK CLI (no `codex`
+  subcommand), not the real Codex CLI (`codex`, npm package `codex-cli`).
+  Fixed both call sites and confirmed the corrected flags parse cleanly
+  against the real installed CLI; re-driving it through a live agent card
+  in the running app is still open.
 - TICKET-0011 (restore stopped agents + Delete button) is implemented but its
   manual UI verification step (stop an agent, switch projects, confirm cards +
   history reappear) hasn't been run yet.

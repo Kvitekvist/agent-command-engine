@@ -7,6 +7,7 @@
 - New agents default to a randomly generated human first name instead of a numbered "Agent N" label (TICKET-0016)
 
 ### Fixed
+- Codex agents couldn't launch at all — both the headless path and the new embedded terminal spawned `openai codex ...`, but `openai` on PATH is the unrelated openai-python SDK's CLI (subcommands `api`/`tools`/`migrate`/`grit`, no `codex` subcommand), not the real Codex CLI. Now spawns `codex` directly, with `permissionMode` mapped to its own `--sandbox`/`--ask-for-approval` flags the same way Claude's modes map to `--allowedTools`/`--dangerously-skip-permissions` (TICKET-0020)
 - `DBService.init()` locating the sql.js WASM binary via a `__dirname`-relative path, which broke once the file was copied to `dist/` at build time — now resolved via `require.resolve('sql.js/dist/sql-wasm.js')` (TICKET-0017)
 - Token tracking: Codex agents always showed 0 tokens (never got a JSON output mode to parse), Claude turns undercounted real usage (cache tokens were never read), and cost was a hardcoded, drifting pricing table. Fixed by adopting `tokscale` to read Claude's own local session transcripts for authoritative token + cost totals, reconciled asynchronously against each turn shortly after it completes so it never delays the response. Codex reconciliation is a known, deliberate gap — see architecture.md (TICKET-0018)
 

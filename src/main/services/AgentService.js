@@ -115,6 +115,19 @@ function buildPermissionArgs(permissionMode) {
   return ['--allowedTools', 'Read', 'Edit', 'Write', 'Glob', 'Grep']
 }
 
+// TICKET-0020: same three-tier policy as buildPermissionArgs above,
+// translated to the real Codex CLI's own --sandbox/--ask-for-approval
+// flags (confirmed via `codex exec --help`).
+function buildCodexArgs(permissionMode) {
+  if (permissionMode === 'auto') {
+    return ['--dangerously-bypass-approvals-and-sandbox']
+  }
+  if (permissionMode === 'ask') {
+    return ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request']
+  }
+  return ['--sandbox', 'read-only', '--ask-for-approval', 'untrusted']
+}
+
 // If this app is itself launched from a terminal that has an active Claude
 // Code session (CLAUDECODE=1 etc. — exactly the dev setup here), those env
 // vars leak into spawned children and make the nested `claude` CLI treat
@@ -211,10 +224,17 @@ class AgentService extends EventEmitter {
         args.push('--resume', agent.sessionId)
       }
     } else {
-      args = ['codex', '--model', meta.model, '--print']
+      // TICKET-0020: `codex exec` is the real Codex CLI's non-interactive
+      // subcommand (analogous to Claude's --print); --json is its JSONL
+      // event-stream equivalent of --output-format stream-json. Note: the
+      // stdout parsers below (parseTokens/parseText/parseToolUse/etc.) are
+      // shaped for Claude's stream-json schema and won't correctly
+      // interpret Codex's own event schema yet — this fixes the process
+      // actually starting, not full response/token parsing for it.
+      args = ['exec', '--model', meta.model, '--json', ...buildCodexArgs(meta.permissionMode)]
     }
 
-    const proc = spawn(meta.provider === 'claude' ? 'claude' : 'openai', args, {
+    const proc = spawn(meta.provider === 'claude' ? 'claude' : 'codex', args, {
       cwd: meta.projectPath,
       // Windows CLI installations are commonly .cmd shims and require a shell.
       // Arguments are selected by the application; prompt text is sent over stdin.
@@ -419,6 +439,7 @@ module.exports = {
   AgentServiceClass: AgentService,
   computeTokscaleDelta,
   buildPermissionArgs,
+  buildCodexArgs,
   parsePermissionDenials,
   parseSessionId,
   parseText,
