@@ -168,30 +168,35 @@ interactively — replacing what AgentPane used to render as a headless
   identically to an interactive invocation) as the session's first
   keystrokes, so the card boots straight into the real CLI instead of an
   empty shell. Mounted only while `agent.status === 'running'`; unmounting
-  (Stop, delete, or switching away from the *project*) disposes its PTY
-  session in cleanup, which actually ends the CLI process — not merely
-  hides it. Consequently an agent's interactive session does **not**
-  survive switching *projects* away and back (a real limitation vs. the
-  original standalone-panel design below; re-selecting the project starts
-  a brand-new session) — see TICKET-0019 Notes. It **does** now survive
-  switching *tabs* away and back — see the `AgentView` point below
-  (TICKET-0027) — that used to also spawn a brand-new session per agent on
-  every tab visit, which is a distinct, now-fixed cause from the
-  project-switch case.
+  (Stop or Delete) disposes its PTY session in cleanup, which actually ends
+  the CLI process — not merely hides it. It survives switching *tabs* away
+  and back — see the `AgentView` point below (TICKET-0027) — and, as of
+  TICKET-0030, also survives switching *projects* away and back: `AgentView`
+  now keeps every agent's card mounted for every project visited this
+  session, hiding non-active ones with CSS instead of unmounting them, the
+  same pattern TICKET-0027 already used one level up for tabs. Only Stop,
+  Delete, or the app quitting actually end a session now — re-selecting a
+  previously-visited project reconnects to the still-running terminal
+  (scrollback intact) instead of starting a brand-new one. A project not yet
+  visited this session (or a fresh app launch) still restores its running
+  agents with brand-new sessions, same as before — there's no live PTY
+  process to reconnect to until this app has actually launched one.
 - **AgentView's restore effect guards against re-adding an already-present
   agent (TICKET-0024).** Before TICKET-0027 (below), `App.jsx` rendered
   `AgentView` conditionally (`activeView === 'agents'`), so leaving and
   returning to the Agents tab unmounted/remounted it and reran its restore
   `useEffect` — but the `agents` array lives in the Zustand store, not
-  component state, and is only cleared on a real project switch
-  (`setActiveProject`). Without a guard, every return trip to the tab
+  component state, and (as of TICKET-0030) is never cleared at all, only
+  ever appended to. Without a guard, every return trip to the tab
   re-fetched and re-added every persisted row, producing duplicate cards
   and, for a running agent, a second `AgentTerminal` mount that spawned a
   second real PTY/CLI process for the same agent. The effect now skips any
   row whose `agentId` is already in the store. Still relevant even after
   TICKET-0027 stopped `AgentView` from unmounting on tab switches — this
-  guard is what makes switching *projects* away and back to the *same*
-  project (a genuine remount) not re-add already-running agents either.
+  guard is what makes the restore effect's rerun on every `activeProject`
+  change (switching to a project already visited this session) not re-add
+  already-running agents either — see the `AgentView` hide-not-unmount
+  point below (TICKET-0030).
 - **`AgentView` stays mounted across tab switches (TICKET-0027).**
   `App.jsx` used to render it conditionally (`{activeView === 'agents' &&
   <AgentView />}`); it's now always rendered, hidden with a CSS class when
@@ -204,17 +209,37 @@ interactively — replacing what AgentPane used to render as a headless
   multiple windows opening at once. Only `AuditView`/`TokenView`/
   `SettingsView`/`EditorView` are still conditionally mounted — none of
   them own a long-lived OS process, so there's nothing to preserve across
-  their remounts. A real project switch still correctly tears sessions
-  down, since that's driven by the `agents` store array being reset on
-  `setActiveProject`, independent of whether `AgentView` itself stays
-  mounted.
+  their remounts. A project switch used to still tear sessions down
+  regardless of `AgentView`'s own mount state, since that was driven by the
+  `agents` store array being reset on `setActiveProject` — TICKET-0030
+  below removed that reset too, so a project switch no longer disposes any
+  session either.
+- **`AgentView` renders every agent across every visited project, hiding
+  non-active ones with CSS instead of unmounting them (TICKET-0030).**
+  Before this, `setActiveProject` reset the `agents` store array on every
+  project switch, unmounting every `AgentPane`/`AgentTerminal` for the old
+  project and disposing their PTY sessions — a real regression relative to
+  the original standalone-panel design, and a known limitation ever since
+  TICKET-0019. `setActiveProject` no longer touches `agents` at all;
+  `AgentView` now maps over the *entire* store array and wraps each card in
+  a div toggled `hidden` based on `agent.projectId === activeProject.id`,
+  the same hide-not-unmount pattern TICKET-0027 already used one level up
+  for tab switches. The empty-state message and the new-agent default-label
+  uniqueness check are scoped to just the active project's agents
+  (`projectAgents`), since those should still reflect only what's visible.
+  Trade-off: every running agent across every visited project now keeps a
+  live PTY/xterm instance even while hidden, not just the active project's
+  — accepted since session continuity was the explicit ask; revisit only if
+  running many agents across many projects at once turns out to cost
+  noticeably in practice.
 - **The CLI's own startup splash is hidden on every genuine launch
   (TICKET-0025).** Every `AgentTerminal` mount is a fresh `claude`/`codex`
   session, and the real CLI prints its own account/session banner, "What's
   new", and tips on every fresh session start. Before TICKET-0027 this
   reprinted on every tab-switch remount too, not just a real new launch;
-  now that sessions survive tab switches, it only fires on an actual first
-  launch, Stop → relaunch, or a project switch. No CLI flag suppresses the
+  now that sessions survive both tab switches and project switches
+  (TICKET-0030), it only fires on an actual first launch or a Stop →
+  relaunch. No CLI flag suppresses the
   splash itself (`--help` on both CLIs and the bundled `claude.exe`'s own
   known `CLAUDE_CODE_*` env vars checked, none apply), so it's still
   covered with a "Launching…" overlay for a fixed `LAUNCH_BANNER_HIDE_MS`

@@ -236,3 +236,27 @@ and directly calling both real call sites (getQuota/getTodayBreakdown)
 against live tokscale data through the new path. Live idle-app
 verification (confirm no more flashes over several real poll cycles)
 still open — needs an app restart since this is a main-process change.
+
+TICKET-0030
+2026-08-09
+Fixed agent terminal sessions not surviving a project switch — switching
+away from a project and back used to unmount every running agent's
+terminal (AgentTerminal.jsx disposes its PTY session on unmount) and
+re-mount a brand-new one on return, losing scrollback and restarting the
+CLI process, even though the user was mid-conversation. Confirmed as a
+real need (previously an open decision noted in project_memory.md's
+Active Priorities). Root cause: useStore.setActiveProject reset the
+`agents` array on every project switch. Fixed the same way TICKET-0027
+fixed the equivalent tab-switch problem: AgentView.jsx now renders every
+agent across every project visited this session (not just the active
+one), wrapping each card in a div toggled `hidden` based on
+`agent.projectId === activeProject.id` instead of filtering it out of the
+render — so a hidden project's agents stay mounted with live PTY sessions
+underneath. setActiveProject no longer touches `agents` at all; only
+Stop, Delete, or app quit end a session now. Empty-state message and the
+new-agent default-label uniqueness check were rescoped to just the active
+project's agents so they don't leak across projects. Verified via a clean
+npm run build:renderer and the full automated test suite (11/11 pass, no
+new coverage — same reasoning as TICKET-0027, this is store/mount-
+lifecycle UI behavior); live in-app verification (switch projects with a
+real running conversation, confirm scrollback survives) still open.

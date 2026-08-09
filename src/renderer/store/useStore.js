@@ -13,10 +13,15 @@ const useStore = create((set, get) => ({
   activeProject: null,
   setProjects: (projects) => set({ projects }),
   // Open files are absolute paths scoped to whichever project's tree they
-  // were opened from -- switching projects closes them, same as switching
-  // projects already clears the running-agent cards above. Sidebar.jsx
+  // were opened from -- switching projects closes them. Sidebar.jsx
   // confirms first if any are dirty, same pattern as agent/project delete.
-  setActiveProject: (project) => set({ activeProject: project, agents: [], openFiles: [], activeFilePath: null }),
+  // Does NOT clear `agents` (TICKET-0030) -- each running agent owns a real
+  // PTY-backed terminal session (AgentTerminal.jsx) that must survive a
+  // project switch, not just a tab switch (TICKET-0027 already did the
+  // equivalent for tabs). AgentView.jsx now renders every agent across
+  // every visited project, hiding (not unmounting) any that don't belong
+  // to the active project.
+  setActiveProject: (project) => set({ activeProject: project, openFiles: [], activeFilePath: null }),
 
   // ── File explorer / editor (TICKET-0021) ──────────────────────────────────
   // [{ path, name, content, originalContent, dirty }]

@@ -32,13 +32,16 @@ const XTERM_THEME = {
 const LAUNCH_BANNER_HIDE_MS = 1200
 
 // Mounted only while the agent is 'running' (see AgentView.jsx) -- unmount
-// (Stop, or switching away from the project) disposes the PTY session in
-// this effect's cleanup, which actually ends the interactive CLI process,
-// not just hides the card. Re-mounting (Stop -> relaunch, or switching back
-// to the project) always starts a brand-new session; an in-progress
-// interactive conversation does not currently survive either of those,
-// unlike the old standalone panel's "hidden but alive" behavior -- flagged
-// as a known limitation in architecture.md rather than solved here.
+// (Stop, or Delete) disposes the PTY session in this effect's cleanup,
+// which actually ends the interactive CLI process, not just hides the
+// card. Re-mounting after Stop -> relaunch always starts a brand-new
+// session. Switching away from the project no longer unmounts this
+// component (TICKET-0030): AgentView.jsx keeps every agent's card mounted
+// across every visited project, hiding non-active ones with CSS instead of
+// unmounting them -- the same hide-not-unmount pattern TICKET-0027 already
+// used for tab switches. So an in-progress interactive session now
+// survives a project switch the same way it already survived a tab
+// switch; only Stop/Delete/app quit end it.
 export default function AgentTerminal({ agent }) {
   const containerRef = useRef(null)
   const sessionIdRef = useRef(null)

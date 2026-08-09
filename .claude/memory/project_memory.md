@@ -24,9 +24,10 @@ Make process execution, persistence, packaging, and provider behavior dependable
   that TICKET-0020 fixed its CLI invocation, type a follow-up prompt
   directly into a running terminal and confirm it responds, get a real
   pixel screenshot of the CLI banner rendering
-* Decide whether agent terminal sessions need to survive a project
-  switch (currently they don't — see TICKET-0019 Notes) — open a follow-up
-  ticket if so
+* Verify the TICKET-0030 fix live: launch an agent, type a follow-up
+  prompt so there's real scrollback, switch to a different project and
+  back, confirm the same session (scrollback intact, no relaunch) is
+  still there instead of a fresh CLI process
 * Live token usage (TICKET-0022) now covers real usage tracking
   regardless of headless vs. embedded-terminal agents — CPI's own
   `prompts` DB table (Audit Log + the historical Token Usage section) is
@@ -101,14 +102,18 @@ Make process execution, persistence, packaging, and provider behavior dependable
   open: a pixel-level screenshot check that the CLI banner renders, testing
   a Codex agent specifically, and typing a follow-up prompt into a running
   terminal.
-- Terminal sessions do not currently survive switching away from a
-  *project* and back, or an app restart — each is tied to its agent
-  card's mount lifecycle. See TICKET-0019 Notes. They now do survive
-  switching *tabs* away and back (TICKET-0027) — that used to also
-  respawn every running agent's session (and, on Windows, could pop up
-  a visible console window per spawn — see below) every time the Agents
-  tab was revisited; `AgentView` now stays mounted instead of being torn
-  down on every tab switch.
+- Terminal sessions do not survive an app restart — a PTY session is a
+  real OS process owned by `ptyHost.js`, which dies with the app, and
+  there's nothing to reconnect to on next launch. They now survive both
+  switching *tabs* away and back (TICKET-0027) and switching *projects*
+  away and back (TICKET-0030) — `AgentView` keeps every agent's card
+  mounted (for every tab, and for every project visited this session),
+  toggling visibility with CSS instead of unmounting, so nothing gets torn
+  down until Stop, Delete, or the app quits. Before TICKET-0027, tab
+  switches used to respawn every running agent's session (and, on Windows,
+  could pop up a visible console window per spawn); before TICKET-0030,
+  project switches used to do the same via the `agents` store array being
+  reset on every `setActiveProject` call.
 - TICKET-0028: ptyHost.js crashed with a native access violation while
   switching projects with multiple agents running — killing more than one
   ConPTY session concurrently (every AgentTerminal's dispose firing at

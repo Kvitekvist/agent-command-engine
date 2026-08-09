@@ -28,12 +28,22 @@ export default function AgentView() {
   const [permissionMode, setPermissionMode] = useState('safe')
   const [launching, setLaunching]           = useState(false)
 
+  // `agents` (the store) holds every agent across every project visited
+  // this session, not just the active one -- see the render below and
+  // useStore.js's setActiveProject (TICKET-0030). Scope UI that should
+  // only reflect the active project (the empty state, default label
+  // uniqueness) to just its own agents.
+  const projectAgents = agents.filter((a) => a.projectId === activeProject?.id)
+
   async function launchAgent() {
     if (!activeProject) return
     setLaunching(true)
     try {
       await window.cpi.startAgent({ projectId: activeProject.id, projectPath: activeProject.path, label, provider, model, permissionMode })
-      setLabel(generateAgentName(useStore.getState().agents.map((a) => a.label)))
+      const existingLabels = useStore.getState().agents
+        .filter((a) => a.projectId === activeProject.id)
+        .map((a) => a.label)
+      setLabel(generateAgentName(existingLabels))
     } finally { setLaunching(false) }
   }
 
@@ -49,22 +59,25 @@ export default function AgentView() {
     removeAgent(agentId)
   }
 
-  // Restore agent cards when a project is (re)selected — e.g. after the app
-  // is closed and reopened, or after switching away and back. Every
-  // persisted agent is restored here, running or stopped — a stopped agent
-  // still needs its card back so its Delete button shows up. A restored
-  // 'running' agent gets a brand-new terminal session (AgentTerminal always
-  // starts fresh on mount); its previous interactive session does not
-  // survive the switch — see AgentTerminal.jsx.
+  // Restore agent cards the first time a project is selected this session
+  // — e.g. right after the app opens, or the first switch to a project not
+  // visited yet. Every persisted agent is restored here, running or
+  // stopped — a stopped agent still needs its card back so its Delete
+  // button shows up. A restored 'running' agent gets a brand-new terminal
+  // session (AgentTerminal always starts fresh on mount) since there's no
+  // live PTY process to reconnect to yet — see AgentTerminal.jsx.
   //
-  // This effect reruns on every AgentView mount, not just a real project
-  // switch — App.jsx renders AgentView conditionally, so leaving and
-  // returning to the Agents tab remounts it while `agents` (Zustand store
-  // state, not component state) still holds whatever this effect already
-  // added. Skip rows already present in the store, or every return trip
-  // to the tab would append a duplicate card — and for a 'running' row,
-  // mount a second AgentTerminal that spawns a second real PTY/CLI process
-  // for the same agent (TICKET-0024).
+  // This effect reruns on every activeProject change, including switching
+  // back to a project already visited this session — but `agents` (Zustand
+  // store state, not component state, and no longer cleared on project
+  // switch as of TICKET-0030) still holds whatever this effect already
+  // added for it. Skip rows already present in the store, or every return
+  // trip would append a duplicate card — and for a 'running' row, mount a
+  // second AgentTerminal that spawns a second real PTY/CLI process for the
+  // same agent (TICKET-0024). This same guard is what makes a revisited
+  // project's already-running agents keep their live session instead of
+  // restoring a fresh one (TICKET-0030) — their card was never unmounted,
+  // only hidden, so this effect finds them already in the store and skips.
   useEffect(() => {
     if (!activeProject) return
     let cancelled = false
@@ -139,20 +152,29 @@ export default function AgentView() {
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        {agents.length === 0 ? (
+        {projectAgents.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-muted">
             <div className="text-3xl mb-2">⚡</div>
             <div className="text-sm">No agents running. Launch one above.</div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {agents.map((agent) => (
-              <AgentPane key={agent.agentId} agent={agent}
+        )}
+        {/* TICKET-0030: every agent across every project visited this
+            session stays mounted here, not just the active project's --
+            each running agent owns a real PTY-backed terminal
+            (AgentTerminal.jsx) that must keep running while its project
+            isn't active. Cards for other projects are hidden with CSS
+            instead of being unmounted, mirroring App.jsx's tab-level
+            hide-not-unmount pattern (TICKET-0027). A project switch no
+            longer tears any session down -- only Stop/Delete/app quit do. */}
+        <div className={'grid grid-cols-1 xl:grid-cols-2 gap-4' + (projectAgents.length === 0 ? ' hidden' : '')}>
+          {agents.map((agent) => (
+            <div key={agent.agentId} className={agent.projectId === activeProject.id ? '' : 'hidden'}>
+              <AgentPane agent={agent}
                 onStop={() => stopAgent(agent.agentId)}
                 onDelete={() => deleteAgent(agent.agentId)} />
-            ))}
-          </div>
-        )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
