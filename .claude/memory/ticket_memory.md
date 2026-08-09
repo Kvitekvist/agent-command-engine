@@ -252,6 +252,21 @@ against live tokscale data through the new path. Live idle-app
 verification (confirm no more flashes over several real poll cycles)
 still open — needs an app restart since this is a main-process change.
 
+Follow-up fix, same ticket: running the packaged app surfaced a second
+bug in this same code path — the Usage panel showed "spawn ...
+tokscale.exe ENOENT". `resolveWindowsBinary()`'s `require.resolve()`
+returns the binary's path as it lives inside `app.asar`; `fs` reads
+transparently work through the archive, but `spawn()` performs a real
+Windows `CreateProcess`, which can't launch a binary from inside a
+virtual asar archive (Electron's own docs: only `execFile` gets
+asar-aware redirection, not `spawn`). The real `tokscale.exe` was
+already unpacked correctly to a sibling `app.asar.unpacked` tree by the
+existing `asarUnpack` config, but nothing pointed `spawn` at it. Fixed
+by rewriting the `app.asar` segment of the resolved path to
+`app.asar.unpacked` before spawning; dev builds are unaffected (no
+`app.asar` in the path there). Worth remembering for any future
+packaged-app `spawn()` of a binary resolved via `require.resolve`.
+
 TICKET-0030
 2026-08-09
 Fixed agent terminal sessions not surviving a project switch — switching

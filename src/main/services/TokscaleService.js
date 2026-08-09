@@ -1,4 +1,5 @@
 const { spawn } = require('child_process')
+const path = require('path')
 
 // tokscale reads Claude Code's/Codex's own local session transcript files
 // (~/.claude/projects, ~/.codex/sessions) and reports already-computed
@@ -17,7 +18,15 @@ const { spawn } = require('child_process')
 function resolveWindowsBinary() {
   const pkg = process.arch === 'arm64' ? '@tokscale/cli-win32-arm64-msvc' : '@tokscale/cli-win32-x64-msvc'
   try {
-    return require.resolve(pkg)
+    const resolved = require.resolve(pkg)
+    // Inside a packaged app, require.resolve() returns the path as it
+    // appears in the app.asar archive. That's fine for fs reads (Electron
+    // patches fs to serve archive contents transparently) but spawn() makes
+    // a real Windows CreateProcess call, which can't launch a binary that
+    // lives inside the virtual archive -- only the unpacked copy on disk
+    // works there. asarUnpack (package.json) places that copy in a sibling
+    // app.asar.unpacked tree, so redirect the path to it.
+    return resolved.split(`${path.sep}app.asar${path.sep}`).join(`${path.sep}app.asar.unpacked${path.sep}`)
   } catch (error) {
     return null
   }

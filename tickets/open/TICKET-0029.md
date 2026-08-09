@@ -80,11 +80,28 @@ the exact line responsible.
       `windowsHide: true`, skipping the vendor JS shim (and its un-hidden
       nested spawn) entirely. Non-Windows platforms are untouched — still
       go through the shim as before
+* [x] Live verification (packaged app): running the actual installed
+      build surfaced a second bug in this same fix — the Usage panel
+      showed "spawn ...\@tokscale\cli-win32-x64-msvc\bin\tokscale.exe
+      ENOENT" instead of data. `resolveWindowsBinary()`'s
+      `require.resolve(pkg)` returns the path as it appears inside
+      `app.asar` (fine for `fs` reads, which Electron patches to read
+      through the archive transparently), but `spawn()` makes a real
+      Windows `CreateProcess` call, which cannot launch a binary living
+      inside the virtual archive — per Electron's own docs, only
+      `execFile` gets asar-aware redirection, not `spawn`. The real
+      `tokscale.exe` is correctly unpacked to a sibling
+      `app.asar.unpacked` tree by the existing `asarUnpack` config
+      (`package.json`), but nothing pointed `spawn` at that copy. Fixed
+      by rewriting the resolved path's `app.asar` segment to
+      `app.asar.unpacked` before spawning. Dev builds are unaffected
+      (path never contains `app.asar`, so the rewrite is a no-op).
 * [ ] Live verification: after an app restart (main-process change, not
       picked up by Vite's renderer HMR — see architecture.md's `npm run
       dev` gotcha), leave the app open and idle for a few minutes and
       confirm no console windows appear, and that the Token Usage tab /
-      Agents-tab usage bar still show real numbers
+      Agents-tab usage bar still show real numbers (packaged build,
+      post-ENOENT-fix)
 
 ---
 
@@ -120,6 +137,17 @@ the full automated test suite (11/11 pass), and directly calling both
 real call sites (`getQuota`/`getTodayBreakdown`) against live tokscale
 data. Live idle-app verification (confirm no more flashes over several
 poll cycles) still open.
+
+Follow-up (same day): the packaged app's live verification run hit a
+second, separate bug in this fix — `resolveWindowsBinary()` handed
+`spawn()` the binary's path as it exists inside `app.asar`, which
+Windows can't execute directly (`spawn` isn't asar-aware, unlike
+`execFile`). Fixed by redirecting that path to its `app.asar.unpacked`
+counterpart (already produced correctly by the existing `asarUnpack`
+config) before spawning. Automated tests (4/4 in
+`tokscale-service.test.js`) still pass; dev-mode paths are unaffected
+since they never contain `app.asar`. Live re-verification in the
+packaged app still open.
 
 ---
 
