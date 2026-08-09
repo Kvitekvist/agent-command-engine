@@ -5,30 +5,44 @@ const { spawn } = require('child_process')
 // token + cost totals per session — far more accurate than parsing live CLI
 // stdout, since it captures cache tokens too and needs no per-provider
 // output-format flag. It ships as a Node shim (tokscale/bin.js) that
-// resolves the right native platform binary as an optional dependency, so
-// spawning it as plain JS through node/electron works everywhere.
-//
-// Electron's own binary is not Node — ELECTRON_RUN_AS_NODE makes it behave
-// like one for this one subprocess, same trick the reference project
-// (token-monitor) uses to run tokscale from inside an Electron main process.
-function resolveBinPath() {
-  return require.resolve('tokscale/bin.js')
+// resolves the right native platform binary as an optional dependency and
+// runs it via a bare, un-hidden `spawnSync` (see @tokscale/cli/dist/index.js)
+// — fine on a real terminal, but on Windows that inner spawn briefly flashes
+// a visible console window every poll, since `spawnSync` there doesn't set
+// `windowsHide`. That's not our code to fix, so on win32 we skip the JS
+// shim entirely and invoke the platform binary package directly ourselves
+// with `windowsHide: true` (TICKET-0029). Elsewhere, go through the shim as
+// before via the ELECTRON_RUN_AS_NODE trick (same one the reference project,
+// token-monitor, uses to run tokscale from inside an Electron main process).
+function resolveWindowsBinary() {
+  const pkg = process.arch === 'arm64' ? '@tokscale/cli-win32-arm64-msvc' : '@tokscale/cli-win32-x64-msvc'
+  try {
+    return require.resolve(pkg)
+  } catch (error) {
+    return null
+  }
 }
 
 function runTokscale(args, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
-    let binPath
-    try {
-      binPath = resolveBinPath()
-    } catch (error) {
-      reject(error)
-      return
-    }
+    const windowsBinary = process.platform === 'win32' ? resolveWindowsBinary() : null
 
-    const child = spawn(process.execPath, [binPath, ...args], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-      windowsHide: true,
-    })
+    let child
+    if (windowsBinary) {
+      child = spawn(windowsBinary, args, { windowsHide: true })
+    } else {
+      let binPath
+      try {
+        binPath = require.resolve('tokscale/bin.js')
+      } catch (error) {
+        reject(error)
+        return
+      }
+      child = spawn(process.execPath, [binPath, ...args], {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        windowsHide: true,
+      })
+    }
 
     let stdout = ''
     let stderr = ''

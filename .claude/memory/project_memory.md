@@ -57,6 +57,11 @@ Make process execution, persistence, packaging, and provider behavior dependable
   window appears when switching tabs, and that switching away from Agents
   and back keeps the same terminal session (scrollback intact) instead of
   relaunching every running agent's CLI
+* Verify the TICKET-0029 fix live (needs an app restart, same main-process
+  HMR caveat as TICKET-0027): leave the app open and idle for a few
+  minutes and confirm the two periodic external cmd.exe window flashes
+  are gone, and that the Token Usage tab / Agents-tab usage bar still
+  show real numbers
 * Add end-to-end provider contract tests for Claude and Codex
 * Replace whole-database export-on-write if audit volume causes UI stalls
 
@@ -140,6 +145,20 @@ Make process execution, persistence, packaging, and provider behavior dependable
   live in a running agent card. Replaced with ChatGPT-account-compatible
   slugs read from `~/.codex/models_cache.json`; re-verifying with a fresh
   Codex agent launch is still open.
+- TICKET-0029: two external cmd.exe console windows briefly flashed on
+  Windows roughly once a minute, even with the app idle and no agents
+  running — traced to the 60s live-usage poll's two `tokscale` calls
+  (`getQuota`/`getTodayBreakdown`), specifically to a third-party bug:
+  `tokscale`'s own JS shim (`@tokscale/cli/dist/index.js`) resolves the
+  native `tokscale.exe` binary and runs it via its own nested
+  `spawnSync(..., { stdio: "inherit" })` with no `windowsHide` — a
+  grandchild spawn our own (correctly hidden) outer spawn can't reach.
+  This app's own spawn/fork sites were all already correct (including
+  TICKET-0027's fix). Fixed by having `TokscaleService` resolve and spawn
+  the `@tokscale/cli-win32-{x64,arm64}-msvc` binary directly on win32,
+  bypassing the vendor shim (and its un-hidden nested spawn) entirely;
+  non-Windows unchanged. Live idle-app re-verification still open — see
+  Active Priorities.
 - TICKET-0011 (restore stopped agents + Delete button) is implemented but its
   manual UI verification step (stop an agent, switch projects, confirm cards +
   history reappear) hasn't been run yet.

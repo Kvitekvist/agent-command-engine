@@ -207,3 +207,32 @@ not a captured crash dump (Windows Error Reporting had no matching entry
 for the crash). Live re-verification (multiple agents running, switch
 projects, confirm no crash) still open — the original crash wasn't
 reliably reproducible on demand.
+
+TICKET-0029
+2026-08-09
+Fixed two external cmd.exe console windows briefly flashing on Windows
+roughly once a minute, even with the app idle and no agents running.
+This app's own spawn/fork call sites all already pass windowsHide: true
+(ruled out first, including TICKET-0027's fix and AgentService's unused
+headless-spawn dead code) — the real cause was third-party: tokscale's
+own JS shim resolves the native tokscale.exe binary and runs it via its
+own nested spawnSync(..., { stdio: "inherit" }) with no windowsHide
+(node_modules/@tokscale/cli/dist/index.js:207), and that inner spawn is
+what Windows actually showed a console for — our windowsHide on the
+outer spawn can't reach a grandchild process a vendor package spawns
+with its own options. The 60s live-usage poll (tokens:getLiveUsage,
+App.jsx) calls TokscaleService.getQuota() then getTodayBreakdown() —
+two tokscale invocations per poll, matching "2 windows, periodic, even
+idle" exactly. patch-package was tried first to patch node_modules
+directly but its auto-diff needs a registry install to diff against
+(failed in this environment) and a hand-written patch also failed to
+apply cleanly, so the fix lives in our own code instead:
+TokscaleService.runTokscale now resolves @tokscale/cli-win32-{x64,arm64}-msvc
+directly via require.resolve and spawns tokscale.exe itself with
+windowsHide: true on win32, skipping the vendor shim (and its un-hidden
+nested spawn) entirely; non-Windows platforms are unchanged. Verified via
+a clean npm run build:main, the full automated test suite (11/11 pass),
+and directly calling both real call sites (getQuota/getTodayBreakdown)
+against live tokscale data through the new path. Live idle-app
+verification (confirm no more flashes over several real poll cycles)
+still open — needs an app restart since this is a main-process change.
