@@ -6,7 +6,14 @@ import UsageBar from '../components/UsageBar'
 import { generateAgentName } from '../utils/agentNames'
 
 const CLAUDE_MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-5','claude-opus-4-8','claude-fable-5']
-const CODEX_MODELS  = ['codex-mini-latest', 'o3', 'o4-mini']
+// `codex-mini-latest`/`o3`/`o4-mini` are raw OpenAI-platform (API-key) model
+// slugs -- Codex CLI rejects all three with "not supported when using Codex
+// with a ChatGPT account" for a ChatGPT-subscription login (TICKET-0026).
+// These are the ChatGPT-account-compatible slugs instead, cross-checked
+// against this machine's own `~/.codex/models_cache.json` (fetched
+// 2026-08-09, codex-cli 0.147.0) -- like CLAUDE_MODELS above, expect these
+// to go stale as Codex ships new models and need a manual refresh.
+const CODEX_MODELS  = ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna']
 const PERMISSION_MODES = [
   { id: 'safe', label: '🔒 Safe',    title: 'Safe — file tools only (Read/Edit/Write/Glob/Grep). No shell access at all.' },
   { id: 'ask',  label: '🛡️ Guarded', title: 'Guarded — shell access allowed, but rm, sudo, and Remove-Item are blocked automatically. Claude CLI can\'t pause to ask a human when run headlessly, so this is a fixed policy, not a live prompt.' },

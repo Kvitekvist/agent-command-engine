@@ -44,6 +44,8 @@ Make process execution, persistence, packaging, and provider behavior dependable
   and confirm the CLI's own startup banner is not left visible (a brief
   flash before the overlay clears is expected and fine) — deferred for
   the same reason as TICKET-0024
+* Verify the TICKET-0026 Codex model-list fix live: launch a fresh Codex
+  agent and send a prompt, confirm no "model not supported" error
 * Add end-to-end provider contract tests for Claude and Codex
 * Replace whole-database export-on-write if audit volume causes UI stalls
 
@@ -97,6 +99,13 @@ Make process execution, persistence, packaging, and provider behavior dependable
   Fixed both call sites and confirmed the corrected flags parse cleanly
   against the real installed CLI; re-driving it through a live agent card
   in the running app is still open.
+- TICKET-0026: even after TICKET-0020, Codex agents launched but failed on
+  their first prompt — `CODEX_MODELS` (`codex-mini-latest`/`o3`/`o4-mini`)
+  are raw API-key-only model slugs, and this machine's Codex CLI is logged
+  in via a ChatGPT subscription, which rejects all three outright. Found
+  live in a running agent card. Replaced with ChatGPT-account-compatible
+  slugs read from `~/.codex/models_cache.json`; re-verifying with a fresh
+  Codex agent launch is still open.
 - TICKET-0011 (restore stopped agents + Delete button) is implemented but its
   manual UI verification step (stop an agent, switch projects, confirm cards +
   history reappear) hasn't been run yet.

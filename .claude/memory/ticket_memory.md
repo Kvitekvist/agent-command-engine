@@ -163,3 +163,22 @@ clean npm run build:renderer and the full automated test suite (11/11
 pass, no new coverage since this is timing-based terminal-display
 behavior); live in-app verification still open, same reasoning as
 TICKET-0024.
+
+TICKET-0026
+2026-08-09
+Fixed every Codex agent failing on its first prompt with "The
+'codex-mini-latest' model is not supported when using Codex with a
+ChatGPT account." Found live in a running agent card ("Omar"). Root
+cause: CODEX_MODELS in AgentView.jsx (codex-mini-latest, o3, o4-mini) are
+raw OpenAI-platform API-key model slugs; this machine's Codex CLI is
+authenticated via a ChatGPT subscription (codex login status), which
+rejects all three. Cross-checked against this machine's own
+~/.codex/models_cache.json (the CLI's own cached model list, fetched the
+same day by codex-cli 0.147.0) for the actual ChatGPT-account-compatible
+slugs, and replaced the list with gpt-5.6-terra (balanced, default),
+gpt-5.6-sol (frontier), gpt-5.6-luna (fast/affordable) — excluding two
+internal/hidden routing aliases also present in the cache. Verified via a
+clean npm run build:renderer and the full automated test suite (11/11
+pass, no new coverage since this is a hardcoded model-name list, same as
+CLAUDE_MODELS); live in-app verification (a fresh Codex agent completing
+a prompt) still open.
