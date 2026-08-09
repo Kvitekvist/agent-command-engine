@@ -110,6 +110,16 @@ TICKET-0024/0025/0026 already used.
 Implemented both fixes described above. Not yet re-verified live end to
 end (would require restarting the running app, deferred — see Testing).
 
+App restarted 2026-08-09 ~19:47 (prompted by a user report of "terminal
+windows popping up in the background after a while, as if reconnecting" —
+the previously-running dev window predated this fix, including a live
+Codex agent still using the pre-TICKET-0026 `codex-mini-latest` slug,
+confirming it was on stale code). Fresh `npm run dev` came up clean
+(`Startup complete`, `PTY host process ready`, no console-window flash
+observed). The manual checklist item (launch an agent, switch tabs
+several times, confirm no new window + scrollback intact) is now
+unblocked but still needs an actual pass with a live agent running.
+
 ---
 
 ## Notes
