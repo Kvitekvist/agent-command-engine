@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -53,9 +53,55 @@ The previous implementation was disabled due to concerns about interfering with 
   - AgentTerminal loads setting and passes to spawn
   - TerminalService forwards to ptyHost
   - ptyHost tracks per-session and auto-responds
-* [ ] Build and test with a real agent
-* [ ] Update documentation
-* [ ] Commit changes
+* [x] Build and test with a real agent
+* [x] Update documentation
+* [x] Commit changes
+
+---
+
+## Follow-up (same day): the "re-enabled" version above still didn't work
+
+Live testing found the feature completely non-functional despite passing
+its own checklist above. Root cause: **the patterns and even the whole
+matching strategy were wrong.** They were guessed (`Allow? (y/n)` etc.)
+rather than captured from a real session. The actual Claude Code CLI
+(v2.1.226) never prints plain `Allow? (y/n)` text at all -- its permission
+prompt (and the workspace-trust dialog) is an Ink-rendered TUI menu:
+
+```
+Do you want to allow Claude to fetch this content?
+❯ 1. Yes
+  2. Yes, and don't ask again for www.yr.no
+  3. No, and tell Claude what to do differently (esc)
+```
+
+Worse, the words in that menu aren't even separated by literal space
+characters in the raw PTY byte stream -- Ink positions each word with a
+cursor-forward escape code (`\x1b[1C`) instead of a space, and positions
+each redrawn line with cursor-absolute-position codes (`\x1b[<row>;<col>H`).
+So even a correct text pattern could never have matched against raw
+chunks; `outputBuffer` needed reconstructing into approximate visible text
+first. Confirmed by spawning a real `claude` session through node-pty
+directly (bypassing ACE entirely) and dumping the raw bytes to a file.
+
+### Fix
+`src/main/ptyHost.js`:
+- Added `stripAnsi()` -- converts cursor-forward codes to spaces,
+  cursor-absolute-position codes to newlines, and drops all other CSI/OSC
+  sequences, reconstructing readable text from the raw buffer.
+- Replaced the 5 guessed `(y/n)` regexes with one pattern,
+  `/❯\s*1\.\s*Yes\b/i` -- the selection-arrow-plus-default-option marker is
+  how every one of these Ink `SelectInput` prompts (workspace trust, tool
+  permission, likely others) marks its pre-selected "Yes" option, and isn't
+  something the assistant's own prose ever emits.
+- Changed the response from `'y\r'` to just `'\r'` -- there's no `(y/n)`
+  text input to answer; the menu already has "1. Yes" selected by default,
+  so confirming just means pressing Enter. (`'y'` was never bound to
+  anything in the menu; it would have been a silently-ignored keystroke had
+  the old patterns ever matched, which they never did.)
+- Grew the rolling buffer from 500 to 4000 chars -- a full Ink redraw of a
+  permission box (workspace path, tool args, the menu itself) runs well
+  past the old window before stripping.
 
 ---
 
@@ -73,13 +119,13 @@ Files that were already correctly implemented (no changes needed):
 
 ## Testing
 
-- [ ] Toggle appears in Settings > General Settings
-- [ ] Toggle state persists after app restart
-- [ ] When enabled, permission prompts are auto-answered with "y"
-- [ ] When disabled, permission prompts require manual response
-- [ ] No interference with normal terminal input (typing, spacebar, etc.)
-- [ ] No duplicate responses (debounce working correctly)
-- [ ] Works with claude-sonnet-4-5 (Vertex AI) or other models without --dangerously-skip-permissions
+- [x] Toggle appears in Settings > General Settings
+- [x] Toggle persists after Save (`window.cpi.getSetting('auto_accept_permissions')` read back `'true'`)
+- [x] When enabled, permission prompts are auto-answered (confirming, not `(y/n)` text)
+- [x] No interference with normal terminal input -- typed a real multi-word prompt and it submitted correctly
+- [x] No duplicate responses observed across repeated tool calls
+- [ ] "When disabled, requires manual response" / claude-sonnet-4-5 Vertex AI specifically -- not re-tested this pass, unchanged from original implementation, low risk given the fix only changed detection+response logic
+- [x] **Full live end-to-end test, in the real app, exactly as requested:** built `dist/main` with the fix, launched a second, fully isolated ACE instance (`--user-data-dir` pointed at a throwaway profile, so the user's own running instance and its `cpi.db` were never touched), enabled the toggle through the real Settings UI, launched a Guarded-mode agent against a brand-new (never-trusted) folder, and asked it to fetch today's weather for Oslo from yr.no. Result: the workspace-trust dialog and every subsequent WebFetch permission prompt were confirmed automatically -- no manual keystroke was sent for any of them -- and the agent replied with real data ("Today in Oslo (Monday, Aug 10): high of 21°C, low of 16°C..."). Repeated successfully across three separate fetches and multiple Claude Code permission modes (manual, plan). Driven via a raw Chrome DevTools Protocol client (`--remote-debugging-port`) since this Electron app has no existing browser-automation harness -- real mouse click to focus the xterm terminal, `Input.insertText` to type, real `Enter`/`Shift+Tab` key events, screenshots at each step.
 
 ---
 
@@ -121,3 +167,5 @@ This approach is more robust than the previous implementation and should not int
 ---
 
 ## Closed
+
+2026-08-10. Fully live-verified in the real app; see Testing above.

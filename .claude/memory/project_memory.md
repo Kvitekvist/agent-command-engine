@@ -15,6 +15,15 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
+* TICKET-0038 (auto-answer permission prompts) is fixed and fully
+  live-verified — see architecture.md's Terminal section and
+  ticket_memory.md. Worth noting for the rest of this list: a reusable
+  raw-CDP driving script (no new dependencies, see architecture.md's
+  Gotchas) now exists as a technique for exactly the kind of live-in-app
+  verification most of the items below are still waiting on — it isn't
+  saved anywhere in the repo (built ad hoc in a scratch dir this session),
+  but is cheap to rebuild if a future session wants to clear more of this
+  list the same way.
 * TICKET-0031 (in-chat model switcher, promoted from `WISHLIST.md`) is the
   only open ticket not yet started — everything else open is implemented
   and committed, awaiting only manual verification (see below) or, for

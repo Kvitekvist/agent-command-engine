@@ -23,6 +23,40 @@ function defaultShell() {
   return process.env.SHELL || '/bin/bash'
 }
 
+// TICKET-0038 follow-up: the real Claude/Codex CLI permission prompt is not
+// plain text like "Allow? (y/n)" (what the previous patterns below matched
+// against) -- it's an Ink-rendered TUI menu, positioned with cursor-movement
+// escape codes instead of literal spaces between words (e.g. the word gap in
+// "Yes, I trust" is a raw `\x1b[1C` cursor-forward code, not a space
+// character). Confirmed by capturing a real `claude` session's raw PTY
+// output via node-pty directly: both the workspace-trust dialog and a real
+// tool-permission prompt (WebFetch) render as
+//   ❯ 1. Yes
+//     2. Yes, and don't ask again for ...
+//     3. No, and tell Claude what to do differently (esc)
+// with "1. Yes" always the pre-selected default option. Plain regex against
+// raw chunks can never match this -- the words are interleaved with escape
+// codes -- so stripAnsi() below reconstructs approximate visible text
+// (cursor-forward -> space, cursor-absolute-position -> newline, every other
+// CSI/OSC sequence dropped) before pattern matching.
+function stripAnsi(s) {
+  return s
+    .replace(/\x1b\][^\x07]*\x07/g, '') // OSC sequences (window title, etc.)
+    .replace(/\x1b\[[0-9;]*[Hf]/g, '\n') // cursor absolute position -> new row
+    .replace(/\x1b\[[0-9]*C/g, ' ') // cursor forward N cols -> word gap
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '') // remaining CSI sequences (color, show/hide cursor, etc.)
+    .replace(/\x1b[>=]/g, '')
+}
+
+// The selection-arrow glyph in front of a numbered "1. Yes" is Ink's
+// SelectInput component -- it's how every one of these Claude/Codex
+// permission-style prompts (workspace trust, tool permission, etc.) marks
+// the currently-highlighted default option, and isn't something the
+// assistant's own prose ever emits. Confirmed against both prompt types
+// above; "Yes" is always option 1 and already selected, so accepting just
+// means submitting the current selection -- no digit needs to be typed.
+const PERMISSION_PROMPT_PATTERN = /❯\s*1\.\s*Yes\b/i
+
 function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
   if (sessions.has(id)) {
     return { success: false, error: `Session ${id} already exists` }
@@ -45,32 +79,23 @@ function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
       autoAnswerEnabled.set(id, true)
     }
 
-    // Buffer to detect permission prompts across chunks
+    // Raw rolling buffer to detect prompts split across chunks -- kept
+    // larger than the old 500-char window since a full Ink redraw of a
+    // permission box (workspace path, tool args, the menu itself) runs well
+    // past that before stripping.
     let outputBuffer = ''
     let lastAutoAnswerTime = 0
 
     proc.onData((chunk) => {
       // Auto-answer permission prompts if enabled for this session
       if (autoAnswerEnabled.get(id)) {
-        // Add chunk to rolling buffer (keep last 500 chars to catch prompts split across chunks)
         outputBuffer += chunk
-        if (outputBuffer.length > 500) {
-          outputBuffer = outputBuffer.slice(-500)
+        if (outputBuffer.length > 4000) {
+          outputBuffer = outputBuffer.slice(-4000)
         }
 
-        // Common Claude CLI permission prompt patterns (case-insensitive)
-        // These exact formats match the CLI's actual prompts
-        const permissionPatterns = [
-          /allow\?\s*\(y\/n\)/i,
-          /proceed\?\s*\(y\/n\)/i,
-          /continue\?\s*\(y\/n\)/i,
-          /approve\?\s*\(y\/n\)/i,
-          /grant\s+permission\?\s*\(y\/n\)/i,
-        ]
-
-        // Check if we just detected a permission prompt
         const now = Date.now()
-        const hasPrompt = permissionPatterns.some((pattern) => pattern.test(outputBuffer))
+        const hasPrompt = PERMISSION_PROMPT_PATTERN.test(stripAnsi(outputBuffer))
 
         // Auto-respond if: prompt detected AND enough time passed since last auto-answer (debounce)
         if (hasPrompt && now - lastAutoAnswerTime > 200) {
@@ -79,9 +104,9 @@ function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
           setTimeout(() => {
             const stillAlive = sessions.get(id)
             if (stillAlive) {
-              stillAlive.write('y\r') // Send 'y' + Enter
+              stillAlive.write('\r') // Confirm the already-selected "1. Yes" option
             }
-          }, 50)
+          }, 100)
           // Clear buffer after auto-answer so we don't match the same prompt twice
           outputBuffer = ''
         }

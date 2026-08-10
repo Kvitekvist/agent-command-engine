@@ -278,6 +278,37 @@ interactively — replacing what AgentPane used to render as a headless
   bridge) whenever the Windows build is ≥ 18309 (Windows 10 1903+/Windows
   11) and `ptyHost.js` doesn't override `useConpty` — confirmed via
   node-pty's own `WindowsPtyAgent` default logic, not just assumed.
+- **Auto-answer permission prompts (TICKET-0038), a global Settings
+  toggle** (`auto_accept_permissions`, loaded per-session by
+  `AgentTerminal.jsx` and passed to `TerminalService.spawn`/`ptyHost.js`'s
+  `spawnSession`): when on, `ptyHost.js` watches each session's raw PTY
+  output for a real Claude/Codex CLI permission prompt and auto-confirms
+  it, for models/setups that don't support `--dangerously-skip-permissions`.
+  The real prompt is an **Ink-rendered TUI menu**, not plain text — e.g.
+  `Do you want to allow Claude to fetch this content? ❯ 1. Yes` — and
+  critically its words aren't separated by literal spaces in the raw byte
+  stream: Ink uses a cursor-forward escape code (`\x1b[1C`) per word gap
+  and cursor-absolute-position codes (`\x1b[<row>;<col>H`) between
+  redrawn lines, so a plain-text regex against raw chunks can never match
+  it regardless of wording (confirmed by spawning a real `claude` session
+  through node-pty directly, bypassing ACE, and dumping raw output — see
+  TICKET-0038's Notes if this needs revisiting, that technique is the
+  reusable way to debug any future PTY-output-matching issue here rather
+  than guessing prompt formats from memory, which is exactly how this
+  shipped broken twice the same day). `ptyHost.js`'s `stripAnsi()`
+  reconstructs approximate visible text from a rolling 4000-char raw
+  buffer (cursor-forward → space, cursor-position → newline, other
+  CSI/OSC dropped), then matches `/❯\s*1\.\s*Yes\b/i` — the
+  selection-arrow-plus-default-option marker common to every one of these
+  Ink prompts (workspace-trust dialog included) — and responds with a
+  plain `\r` (Enter, confirming the pre-selected "Yes"; there's no
+  `(y/n)` text field, so a literal `y` keystroke would do nothing). 200ms
+  debounce and a buffer clear after each match prevent double-answering.
+  Live-verified end-to-end in a second, fully isolated ACE instance
+  (separate `--user-data-dir`, so the real `cpi.db` was never touched):
+  both the workspace-trust dialog and repeated WebFetch permission
+  prompts were auto-confirmed with zero manual input while an agent
+  fetched real Oslo weather data from yr.no.
 
 ### Screenshots (TICKET-0034, reworked from TICKET-0032)
 Interactive drag-to-select screen capture, saved into the active project's
@@ -510,6 +541,45 @@ platform-specific code paths are:
   change, check `netstat -ano | grep 5173` (or just try the window that's
   already open — Vite HMR keeps it current) rather than assuming a fresh
   `npm run dev` gives a clean instance (discovered verifying TICKET-0023).
+  **A second, genuinely isolated instance is still possible** without
+  touching the first: `electron.exe . --user-data-dir=<separate path>`
+  gives it its own `cpi.db` (Electron's userData path, which is what
+  `DBService`'s `path.join(app.getPath('userData'), 'cpi.db')` resolves
+  from, is normally derived from the app name — `--user-data-dir` is a
+  native Electron/Chromium switch that overrides it directly), and there's
+  no `app.requestSingleInstanceLock()` anywhere in `index.js` blocking a
+  second process from running at all. Reusing the already-running Vite
+  server on 5173 for that second instance's renderer is fine (read-only,
+  same unchanged renderer code) as long as only `src/main/**` changed.
+- **A shell with `ELECTRON_RUN_AS_NODE=1` set breaks launching
+  `electron.exe` as a real Electron app** — a session already running
+  inside Claude Code (or any tool that forks Node via
+  `ELECTRON_RUN_AS_NODE`, same trick `TerminalService._forkHost()` uses
+  intentionally for `ptyHost.js`) inherits that env var, and running
+  `electron.exe` directly in that shell makes Chromium/Electron init never
+  happen — `electron.exe` just runs `index.js` under plain Node instead,
+  so `require('electron')` resolves to a path string, not the API, and
+  `app.whenReady()` throws `Cannot read properties of undefined`. Fix:
+  unset it for the launch (`env -u ELECTRON_RUN_AS_NODE ... electron.exe`
+  in a POSIX shell) — discovered launching a second isolated instance to
+  live-verify TICKET-0038.
+- **Driving this app's UI programmatically** (for a live end-to-end test,
+  same need as TICKET-0022/0024's "verified via Chrome DevTools Protocol
+  automation" notes) has no existing harness/script in this repo — there's
+  no puppeteer/playwright dependency. Built ad hoc for TICKET-0038 with
+  nothing but Node's built-in `WebSocket`/`fetch` (Node 22+, no install
+  needed): launch with `--remote-debugging-port=<port>`, `GET
+  http://127.0.0.1:<port>/json` to find the target whose `url` is
+  `http://localhost:5173/` (there's also a `"DevTools"` target — skip it),
+  open a WebSocket to its `webSocketDebuggerUrl`, and speak raw CDP
+  (`Runtime.evaluate` for React-level clicks/reads — plain
+  `element.click()` works fine since React's delegated listeners still
+  fire on a real DOM `click` event — `Input.dispatchMouseEvent` /
+  `Input.insertText` / `Input.dispatchKeyEvent` for typing into the
+  xterm.js terminal specifically, since that's a real `<textarea>` xterm
+  owns, not a React-controlled input, and `Page.captureScreenshot` for
+  visual confirmation at each step). `Input.enable` is not a real CDP
+  method — don't call it, the domain needs no enable step.
 
 ## Future Improvements
 - WebSocket-based agent output stream

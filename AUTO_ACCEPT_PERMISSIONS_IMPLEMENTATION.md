@@ -3,30 +3,41 @@
 ## Overview
 Added a global toggle in Settings to automatically answer "yes" to permission prompts in agent terminals. This solves the limitation where some models (like `claude-sonnet-4-5` via Vertex AI) don't support the `--dangerously-skip-permissions` flag and continuously ask for permission.
 
-**Status**: Re-enabled in TICKET-0038 (2026-08-10) with improved implementation that includes debouncing and better pattern matching to prevent interference with normal terminal input.
+**Status**: Working, live-verified (TICKET-0038, 2026-08-10). The first "re-enable" pass that day still didn't work in practice — see "Root cause of the real bug" below — and was fixed the same day with a corrected detection strategy, then confirmed against a real `claude` CLI session end-to-end in the actual app.
+
+## Root cause of the real bug (2026-08-10 follow-up)
+The original re-enable matched plain-text patterns like `Allow? (y/n)` — guessed, not captured from a real session. The actual Claude Code CLI (v2.1.226) never prints that. Its permission prompt (and the workspace-trust dialog shown for a not-yet-trusted folder) is an Ink-rendered TUI menu:
+
+```
+Do you want to allow Claude to fetch this content?
+❯ 1. Yes
+  2. Yes, and don't ask again for www.yr.no
+  3. No, and tell Claude what to do differently (esc)
+```
+
+And critically, the words in that menu are *not* separated by literal space characters in the raw PTY byte stream. Ink positions each word with a cursor-forward escape code (`\x1b[1C`) instead of a space, and repositions each redrawn line with a cursor-absolute-position code (`\x1b[<row>;<col>H`). So no plain-text regex — right or wrong wording — could ever have matched the raw chunks. Confirmed by spawning a real `claude` session through `node-pty` directly (bypassing ACE) and dumping the raw output to a file.
+
+Fixed by reconstructing approximate visible text before matching: cursor-forward codes become spaces, cursor-position codes become newlines, everything else CSI/OSC is dropped (`stripAnsi()` in `ptyHost.js`). Detection now matches `/❯\s*1\.\s*Yes\b/i` — the selection-arrow-plus-default-option marker common to every one of these prompts — and the response is a plain `\r` (Enter, confirming the already-selected "Yes"), not `y\r` (there's no `(y/n)` text field to answer; `y` was never bound to anything in the menu).
 
 ## Problem Being Solved
-Some Claude models accessed via Vertex AI don't support the `--dangerously-skip-permissions` CLI flag. When using these models interactively, the CLI prompts "Allow? (y/n)" for every tool use, requiring manual confirmation each time. This feature automatically responds "y" to these prompts.
+Some Claude models accessed via Vertex AI don't support the `--dangerously-skip-permissions` CLI flag. When using these models interactively, the CLI prompts for every tool use requiring approval, requiring manual confirmation each time. This feature automatically confirms those prompts.
 
 ## How It Works
 
 ### Architecture
 The solution intercepts permission prompts at the PTY (pseudo-terminal) level:
 
-1. **ptyHost.js** - Monitors terminal output for permission prompt patterns
-2. When a prompt is detected, automatically sends `y\r` (yes + enter) to the PTY
-3. Uses a rolling 500-character buffer to detect prompts across chunk boundaries
-4. Includes a 50ms delay to ensure the prompt is fully rendered before responding
+1. **ptyHost.js** - Monitors terminal output for the real Ink-menu permission prompt marker
+2. When a prompt is detected, automatically sends `\r` (Enter, confirming the already-selected "1. Yes" option) to the PTY
+3. Uses a rolling 4000-character buffer (raw, pre-strip) to detect prompts across chunk boundaries
+4. Strips/reconstructs the buffer's ANSI escape codes into approximate visible text before matching (see Root Cause section above)
+5. Includes a 100ms delay to ensure the prompt is fully rendered before responding
 
 ### Permission Prompt Detection
-Detects common Claude CLI permission prompt patterns:
-- `Allow? (y/n)`
-- `Proceed? (y/n)`
-- `Continue? (y/n)`
-- `Approve? (y/n)`
-- `Grant permission? (y/n)`
+After `stripAnsi()` reconstructs visible text from the raw buffer (cursor-forward codes → spaces, cursor-position codes → newlines, other CSI/OSC dropped), a single pattern is matched:
+- `/❯\s*1\.\s*Yes\b/i`
 
-All patterns are case-insensitive and detect the exact format with parentheses.
+This is the selection-arrow-plus-default-option marker every one of Claude Code's Ink `SelectInput` prompts uses (workspace trust, tool permission, etc.) — "1. Yes" is always the pre-selected default option, so confirming it just means submitting the current selection with Enter. It's not text the assistant's own prose would ever emit, so false positives are effectively impossible.
 
 ## Changes Made
 
@@ -36,21 +47,16 @@ All patterns are case-insensitive and detect the exact format with parentheses.
 **Added:**
 - `autoAnswerEnabled` Map to track which sessions have auto-answer enabled
 - `autoAnswerPermissions` parameter to `spawnSession()`
-- Output buffer (rolling 500-char window) to detect permission prompts
-- Pattern matching against common permission prompt formats (case-insensitive regex)
+- `stripAnsi()` — reconstructs approximate visible text from raw PTY output
+- Output buffer (rolling 4000-char window) to detect prompts across chunk boundaries
+- Single selection-marker pattern match (`/❯\s*1\.\s*Yes\b/i`) against the stripped buffer
 - Debounce mechanism (200ms) to prevent duplicate auto-answers
-- Automatic response with `y\r` when prompt detected (50ms delay)
+- Automatic response with `\r` when prompt detected (100ms delay)
 - Buffer clearing after each auto-answer to prevent re-matching
 - Cleanup of auto-answer state on session exit
 
-**Implementation Details (TICKET-0038):**
-The auto-answer logic was initially implemented but then disabled due to concerns about spacebar interference. The re-enabled version includes:
-- More specific pattern matching using regex with exact format `pattern? (y/n)`
-- 200ms debounce between auto-answers
-- Buffer clear after each response
-- 50ms delay before sending response to ensure prompt is fully rendered
-
-This robust implementation prevents interference with normal terminal input while reliably catching permission prompts.
+**Implementation Details (TICKET-0038, same-day follow-up):**
+The version originally re-enabled that day matched guessed plain-text `pattern? (y/n)` formats the real CLI never prints, and would never have matched anyway since the real prompt's words are separated by cursor-movement escape codes, not spaces, in the raw stream (see Root Cause above). Rewritten to reconstruct visible text first, then match the CLI's actual Ink-menu marker and respond with Enter instead of a meaningless `y` keystroke. Live-verified end-to-end: a real workspace-trust dialog and multiple real WebFetch permission prompts, all auto-confirmed with zero manual input, while an agent fetched live Oslo weather data from yr.no in a second, fully isolated ACE instance.
 
 ### 2. TerminalService.js
 **Location:** `src/main/services/TerminalService.js`
@@ -129,11 +135,11 @@ Users should understand that this grants all requested permissions automatically
 - `src/renderer/views/AgentView.jsx` - Added claude-sonnet-4-5 model
 
 ## Testing Checklist
-- [ ] Toggle appears in Settings > General Settings
-- [ ] Toggle state persists after app restart
-- [ ] When enabled, permission prompts are auto-answered with "y"
-- [ ] When disabled, permission prompts require manual response
-- [ ] Works with claude-sonnet-4-5 (Vertex AI) model
-- [ ] No duplicate responses (buffer clears after each auto-answer)
-- [ ] Save Settings button shows "✓ Saved" confirmation
-- [ ] Auto-answer state is cleaned up when session exits
+- [x] Toggle appears in Settings > General Settings
+- [x] Toggle persists after Save (read back via `window.cpi.getSetting`)
+- [x] When enabled, permission prompts (the real Ink menu) are auto-confirmed
+- [ ] When disabled, permission prompts require manual response — not re-tested this pass, unchanged logic
+- [ ] Works with claude-sonnet-4-5 (Vertex AI) model specifically — tested with the default `claude-sonnet-5` model instead; the fix is model-agnostic (it only depends on the CLI's own prompt rendering, not which model answers)
+- [x] No duplicate responses observed across repeated tool calls in one session
+- [x] Save Settings button shows "✓ Saved" confirmation
+- [x] Auto-answer state is cleaned up when session exits (unchanged from original implementation)

@@ -399,6 +399,50 @@ TICKET-0034 auto-gitignores -- copied them into a new tracked
 docs/screenshots/ folder instead so the images actually render on GitHub
 rather than 404ing for anyone else who clones the repo.
 
+TICKET-0038
+2026-08-10
+Fixed auto-answer permission prompts, which despite a same-day "re-enable"
+pass (see the ticket's own follow-up entry) still did nothing live. Root
+cause: the whole detection strategy was wrong, not just the wording. The
+old patterns matched a guessed plain-text "Allow? (y/n)" format; the real
+Claude Code CLI (v2.1.226) renders its permission prompt (and the
+workspace-trust dialog) as an Ink TUI menu ("Do you want to allow Claude
+to fetch this content? ❯ 1. Yes / 2. Yes, and don't ask again / 3. No"),
+and the words in it aren't separated by literal spaces in the raw PTY
+stream at all -- Ink uses cursor-forward escape codes for word gaps and
+cursor-absolute-position codes between lines, so no plain-text regex,
+right or wrong wording, could ever have matched raw chunks. Confirmed by
+spawning a real `claude` session through node-pty directly (bypassing
+ACE) and dumping raw output to a file -- this is the technique worth
+reusing for any future PTY-output-matching bug in ptyHost.js, since
+guessing prompt formats from memory is exactly how the original feature
+shipped broken twice. Fixed by adding `stripAnsi()` (cursor-forward ->
+space, cursor-position -> newline, other ANSI dropped) to reconstruct
+approximate visible text before matching, replacing the 5 guessed
+patterns with one -- `/❯\s*1\.\s*Yes\b/i`, the selection-arrow-plus-
+default-option marker common to every one of these Ink prompts -- and
+changing the response from the meaningless `y\r` to a plain `\r` (Enter
+confirms the already-selected "Yes"; `y` was never bound to anything in
+the menu). Verified live end-to-end, exactly as the user asked: built
+dist/main, launched a second fully isolated ACE instance
+(`--user-data-dir` pointed at a throwaway profile so the user's own
+running instance and cpi.db were never touched), enabled the toggle
+through the real Settings UI, launched a Guarded-mode agent against a
+brand-new never-trusted folder, and asked it to fetch today's weather for
+Oslo from yr.no via a raw Chrome DevTools Protocol client (this app has
+no existing browser-automation harness, so one was built ad hoc with
+native WebSocket + fetch, no new dependencies). Both the workspace-trust
+dialog and every WebFetch permission prompt were auto-confirmed with zero
+manual input, across three separate fetches and multiple Claude Code
+permission modes (manual, plan); the agent returned real Oslo weather
+data each time. `⏵⏵ auto mode on` (this CLI version's name for what
+older versions called "accept edits on") turned out to auto-allow
+WebFetch itself via its own internal classifier before any prompt could
+appear, so that specific mode didn't exercise this fix -- manual/plan
+mode (ACE's Safe/Guarded permission tiers never pre-approve WebFetch
+regardless of CLI mode) is the scenario this feature actually matters
+for, and that's what was proven.
+
 TICKET-0037
 2026-08-10
 Added macOS compilation support. Made FileService's RUNNABLE_EXTENSIONS
