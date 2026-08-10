@@ -398,3 +398,22 @@ screenshots lived in the project's own `.cpi/screenshots/` folder, which
 TICKET-0034 auto-gitignores -- copied them into a new tracked
 docs/screenshots/ folder instead so the images actually render on GitHub
 rather than 404ing for anyone else who clones the repo.
+
+TICKET-0037
+2026-08-10
+Added macOS compilation support. Made FileService's RUNNABLE_EXTENSIONS
+and runFile() platform-aware (`.sh`/`.command`/`.app` on macOS vs
+`.exe`/`.bat`/`.cmd`/`.ps1`/`.vbs`/`.com`/`.msi` on Windows), with
+macOS spawn logic using `open` for `.app` bundles and `/bin/sh` for
+shell scripts. Exposed `process.platform` to the renderer via
+preload.js so FileTree.jsx can show the correct runnable extensions in
+the context menu per OS. Enhanced package.json's mac build config with
+dmg targets for both x64 and arm64, hardened runtime entitlements, and
+`public.app-category.developer-tools` category. Created macOS shell
+script equivalents (setup.sh, build.sh, run.sh, clear_cache.sh)
+alongside the existing .bat scripts. Most of the codebase was already
+cross-platform -- ptyHost.js, TerminalService, AgentService,
+TokscaleService, ScreenshotService, and index.js all had correct
+platform handling or used harmless-on-macOS flags (windowsHide) already.
+Verified via npm run build and npm test (11/11 pass); actual macOS dmg
+packaging not verifiable from this Windows environment.

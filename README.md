@@ -50,10 +50,19 @@ A specialized Electron desktop application for managing Claude and OpenAI Codex 
 
 ## Quick Start
 
+**Windows:**
 ```
 scripts\setup.bat   # install dependencies (run once)
 scripts\run.bat     # start in development mode
 scripts\build.bat   # build for production
+```
+
+**macOS / Linux:**
+```
+chmod +x scripts/*.sh
+scripts/setup.sh    # install dependencies (run once)
+scripts/run.sh      # start in development mode
+scripts/build.sh    # build for production
 ```
 
 Requires: Node.js 20+, Claude Code CLI (`claude`), OpenAI Codex CLI (`codex`) installed and authenticated.

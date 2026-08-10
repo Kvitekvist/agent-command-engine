@@ -29,6 +29,37 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return result.filePaths[0]
   })
 
+  ipcMain.handle('projects:createFromTemplate', async (_, projectName) => {
+    const fs = require('fs')
+    const path = require('path')
+
+    // Template source
+    const templatePath = 'C:\\Users\\JensPetterRøyseth\\Documents\\VS Code\\Template'
+
+    // Ask user where to create the new project
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: 'Select where to create the new project'
+    })
+    if (result.canceled) return null
+
+    const parentDir = result.filePaths[0]
+    const newProjectPath = path.join(parentDir, projectName)
+
+    // Check if directory already exists
+    if (fs.existsSync(newProjectPath)) {
+      return { error: 'A folder with this name already exists in the selected location' }
+    }
+
+    // Copy template to new location
+    try {
+      await fs.promises.cp(templatePath, newProjectPath, { recursive: true })
+      return { path: newProjectPath }
+    } catch (error) {
+      return { error: error.message }
+    }
+  })
+
   // ── Agents ──────────────────────────────────────────────────────────────────
   ipcMain.handle('agents:getByProject', (_, projectId) => {
     return DB.getAgentsByProject(projectId)

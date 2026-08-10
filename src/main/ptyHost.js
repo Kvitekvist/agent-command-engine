@@ -16,13 +16,14 @@ try {
 
 const sessions = new Map() // id -> node-pty process
 const exitWaiters = new Map() // id -> resolve fn, invoked once that session's onExit fires
+const autoAnswerEnabled = new Map() // id -> boolean, whether to auto-answer permission prompts for this session
 
 function defaultShell() {
   if (process.platform === 'win32') return 'powershell.exe'
   return process.env.SHELL || '/bin/bash'
 }
 
-function spawnSession({ id, shell, cwd, cols, rows }) {
+function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
   if (sessions.has(id)) {
     return { success: false, error: `Session ${id} already exists` }
   }
@@ -38,11 +39,30 @@ function spawnSession({ id, shell, cwd, cols, rows }) {
       env: process.env,
     })
     sessions.set(id, proc)
+
+    // Track auto-answer setting for this session
+    if (autoAnswerPermissions) {
+      autoAnswerEnabled.set(id, true)
+    }
+
+    // Buffer to detect permission prompts across chunks
+    let outputBuffer = ''
+    let lastAutoAnswerTime = 0
+
     proc.onData((chunk) => {
+      // TEMPORARILY DISABLED - Testing if auto-answer causes spacebar issue
+      // Will re-enable with better implementation after testing
+
+      // if (autoAnswerEnabled.get(id)) {
+      //   outputBuffer += chunk
+      //   ... auto-answer logic ...
+      // }
+
       try { process.send({ type: 'data', id, chunk }) } catch (_) { /* parent gone */ }
     })
     proc.onExit(({ exitCode, signal }) => {
       sessions.delete(id)
+      autoAnswerEnabled.delete(id)
       const waiter = exitWaiters.get(id)
       if (waiter) { exitWaiters.delete(id); waiter() }
       try { process.send({ type: 'exit', id, exitCode, signal }) } catch (_) { /* parent gone */ }
@@ -80,13 +100,17 @@ function disposeSession(id) {
 
 function killAndWait(id) {
   const proc = sessions.get(id)
-  if (!proc) return Promise.resolve()
+  if (!proc) {
+    autoAnswerEnabled.delete(id)
+    return Promise.resolve()
+  }
   return new Promise((resolve) => {
     let settled = false
     const finish = () => {
       if (settled) return
       settled = true
       clearTimeout(timer)
+      autoAnswerEnabled.delete(id)
       resolve()
     }
     const timer = setTimeout(finish, 1500)

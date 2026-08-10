@@ -77,7 +77,14 @@ export default function AgentTerminal({ agent }) {
 
     async function start() {
       const { cols, rows } = term
-      const result = await window.cpi.terminal.spawn({ cols, rows, cwd: agent.projectPath })
+      // Load auto-answer setting
+      const autoAnswerEnabled = await window.cpi.getSetting('auto_accept_permissions')
+      const result = await window.cpi.terminal.spawn({
+        cols,
+        rows,
+        cwd: agent.projectPath,
+        autoAnswerPermissions: autoAnswerEnabled === 'true'
+      })
       if (disposed) return
       if (!result.success) {
         setStatus('error')
@@ -105,6 +112,32 @@ export default function AgentTerminal({ agent }) {
 
       term.onData((data) => {
         if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, data)
+      })
+
+      // Enable clipboard support - Ctrl+C to copy, Ctrl+V to paste
+      term.attachCustomKeyEventHandler((event) => {
+        // Ctrl+C - copy selected text
+        if (event.ctrlKey && event.key === 'c' && term.hasSelection()) {
+          const selection = term.getSelection()
+          navigator.clipboard.writeText(selection)
+          return false // Prevent default
+        }
+        // Ctrl+V - paste from clipboard
+        if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
+          navigator.clipboard.readText().then(text => {
+            if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, text)
+          })
+          return false // Prevent default
+        }
+        return true // Allow all other keys
+      })
+
+      // Right-click paste support
+      containerRef.current.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        navigator.clipboard.readText().then(text => {
+          if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, text)
+        })
       })
 
       // Boot straight into the real CLI instead of leaving an empty shell.

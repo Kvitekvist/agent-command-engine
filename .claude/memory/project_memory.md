@@ -92,6 +92,12 @@ Make process execution, persistence, packaging, and provider behavior dependable
 
 ---
 
+## Supported Platforms
+- Windows (x64) — portable + NSIS installer
+- macOS (x64 + arm64) — dmg
+
+---
+
 ## Tech Stack
 - Electron (main process)
 - React 18 + Tailwind CSS (renderer process)

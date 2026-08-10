@@ -5,7 +5,7 @@ import AgentTerminal from '../components/AgentTerminal'
 import UsageBar from '../components/UsageBar'
 import { generateAgentName } from '../utils/agentNames'
 
-const CLAUDE_MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-5','claude-opus-4-8','claude-fable-5']
+const CLAUDE_MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-5','claude-sonnet-5','claude-opus-4-8','claude-fable-5']
 // `codex-mini-latest`/`o3`/`o4-mini` are raw OpenAI-platform (API-key) model
 // slugs -- Codex CLI rejects all three with "not supported when using Codex
 // with a ChatGPT account" for a ChatGPT-subscription login (TICKET-0026).

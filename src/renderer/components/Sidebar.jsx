@@ -29,6 +29,25 @@ export default function Sidebar() {
     setNewName('')
   }
 
+  async function handleCreateFromTemplate() {
+    const name = newName.trim()
+    if (!name) {
+      alert('Please enter a project name')
+      return
+    }
+    const result = await window.cpi.createFromTemplate(name)
+    if (!result) return // User canceled
+    if (result.error) {
+      alert(`Error: ${result.error}`)
+      return
+    }
+    await window.cpi.addProject(name, result.path)
+    const updated = await window.cpi.getProjects()
+    setProjects(updated)
+    setAdding(false)
+    setNewName('')
+  }
+
   async function handleRemove(e, id) {
     e.stopPropagation()
     await window.cpi.removeProject(id)
@@ -68,16 +87,22 @@ export default function Sidebar() {
         </div>
 
         {adding && (
-          <div className="px-3 pb-2 space-y-1">
+          <div className="px-3 pb-2 space-y-1.5">
             <input
               className="input text-xs"
-              placeholder="Project name (optional)"
+              placeholder="Project name (required for new projects)"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
+              autoFocus
             />
-            <button onClick={handlePickFolder} className="btn-primary w-full text-xs">
-              Pick Folder
-            </button>
+            <div className="flex gap-1.5">
+              <button onClick={handlePickFolder} className="btn-primary flex-1 text-xs" title="Connect to an existing folder">
+                📁 Existing
+              </button>
+              <button onClick={handleCreateFromTemplate} className="btn-primary flex-1 text-xs" title="Create new project from template">
+                ✨ New
+              </button>
+            </div>
           </div>
         )}
 

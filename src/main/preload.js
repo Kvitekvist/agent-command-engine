@@ -1,11 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('cpi', {
+  platform: process.platform,
+
   // Projects
   getProjects: () => ipcRenderer.invoke('projects:getAll'),
   addProject: (name, folderPath) => ipcRenderer.invoke('projects:add', name, folderPath),
   removeProject: (id) => ipcRenderer.invoke('projects:remove', id),
   pickFolder: () => ipcRenderer.invoke('projects:pickFolder'),
+  createFromTemplate: (projectName) => ipcRenderer.invoke('projects:createFromTemplate', projectName),
 
   // Agents
   getAgents: (projectId) => ipcRenderer.invoke('agents:getByProject', projectId),

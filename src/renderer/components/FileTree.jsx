@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react'
 import useStore from '../store/useStore'
 import ContextMenu from './ContextMenu'
 
-// TICKET-0033: kept in sync by hand with FileService's RUNNABLE_EXTENSIONS
-// (main process) -- this copy only gates which files show a "Run" item;
-// the main process is the real authority and re-checks it independently.
-const RUNNABLE_EXTENSIONS = new Set(['.exe', '.bat', '.cmd', '.ps1', '.vbs', '.com', '.msi'])
+// TICKET-0033/0037: kept in sync by hand with FileService's
+// RUNNABLE_EXTENSIONS (main process) -- this copy only gates which files
+// show a "Run" item; the main process is the real authority and
+// re-checks it independently. Platform-aware via cpi.platform.
+const RUNNABLE_EXTENSIONS = window.cpi?.platform === 'win32'
+  ? new Set(['.exe', '.bat', '.cmd', '.ps1', '.vbs', '.com', '.msi'])
+  : new Set(['.sh', '.command', '.app'])
 
 function isRunnable(name) {
   const dot = name.lastIndexOf('.')

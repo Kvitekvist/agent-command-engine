@@ -442,6 +442,33 @@ src/
 
 ---
 
+## Cross-Platform (TICKET-0037)
+Builds and runs on both Windows and macOS. Most of the codebase is
+inherently cross-platform (Electron, React, sql.js WASM, Vite). The
+platform-specific code paths are:
+- **`ptyHost.js`** — `defaultShell()`: `powershell.exe` on win32,
+  `$SHELL` or `/bin/bash` elsewhere
+- **`AgentService.js`** — `shell: process.platform === 'win32'` for
+  `.cmd` shim spawning
+- **`TokscaleService.js`** — win32 resolves the native binary directly
+  (TICKET-0029); elsewhere goes through the JS shim via
+  `ELECTRON_RUN_AS_NODE=1`
+- **`FileService.js`** — `RUNNABLE_EXTENSIONS` and `runFile()` use
+  platform-specific extension sets and spawn logic
+- **`FileTree.jsx`** — reads `window.cpi.platform` (exposed via
+  `preload.js`) to show the right runnable extensions in the context menu
+- **`TerminalService.js`** — `windowsHide: true` is harmless on
+  non-Windows (ignored)
+- **`ScreenshotService.js`** — uses cross-platform Electron APIs
+  (`desktopCapturer`, `screen`)
+- **`index.js`** — standard macOS `process.platform !== 'darwin'` quit
+  pattern already present
+- **`package.json`** — `build.mac` targets dmg for x64 + arm64 with
+  hardened runtime entitlements; `build.win` targets portable + NSIS
+  for x64
+
+---
+
 ## Design Principles
 - Main process owns all I/O (DB, file system, child processes)
 - Renderer is pure UI — sends IPC requests, renders results
