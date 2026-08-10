@@ -50,13 +50,42 @@ function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
     let lastAutoAnswerTime = 0
 
     proc.onData((chunk) => {
-      // TEMPORARILY DISABLED - Testing if auto-answer causes spacebar issue
-      // Will re-enable with better implementation after testing
+      // Auto-answer permission prompts if enabled for this session
+      if (autoAnswerEnabled.get(id)) {
+        // Add chunk to rolling buffer (keep last 500 chars to catch prompts split across chunks)
+        outputBuffer += chunk
+        if (outputBuffer.length > 500) {
+          outputBuffer = outputBuffer.slice(-500)
+        }
 
-      // if (autoAnswerEnabled.get(id)) {
-      //   outputBuffer += chunk
-      //   ... auto-answer logic ...
-      // }
+        // Common Claude CLI permission prompt patterns (case-insensitive)
+        // These exact formats match the CLI's actual prompts
+        const permissionPatterns = [
+          /allow\?\s*\(y\/n\)/i,
+          /proceed\?\s*\(y\/n\)/i,
+          /continue\?\s*\(y\/n\)/i,
+          /approve\?\s*\(y\/n\)/i,
+          /grant\s+permission\?\s*\(y\/n\)/i,
+        ]
+
+        // Check if we just detected a permission prompt
+        const now = Date.now()
+        const hasPrompt = permissionPatterns.some((pattern) => pattern.test(outputBuffer))
+
+        // Auto-respond if: prompt detected AND enough time passed since last auto-answer (debounce)
+        if (hasPrompt && now - lastAutoAnswerTime > 200) {
+          lastAutoAnswerTime = now
+          // Small delay to let the prompt fully render before responding
+          setTimeout(() => {
+            const stillAlive = sessions.get(id)
+            if (stillAlive) {
+              stillAlive.write('y\r') // Send 'y' + Enter
+            }
+          }, 50)
+          // Clear buffer after auto-answer so we don't match the same prompt twice
+          outputBuffer = ''
+        }
+      }
 
       try { process.send({ type: 'data', id, chunk }) } catch (_) { /* parent gone */ }
     })
