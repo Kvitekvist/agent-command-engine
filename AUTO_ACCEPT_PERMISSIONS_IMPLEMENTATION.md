@@ -3,7 +3,24 @@
 ## Overview
 Added a global toggle in Settings to automatically answer "yes" to permission prompts in agent terminals. This solves the limitation where some models (like `claude-sonnet-4-5` via Vertex AI) don't support the `--dangerously-skip-permissions` flag and continuously ask for permission.
 
-**Status**: Working, live-verified (TICKET-0038, 2026-08-10). The first "re-enable" pass that day still didn't work in practice — see "Root cause of the real bug" below — and was fixed the same day with a corrected detection strategy, then confirmed against a real `claude` CLI session end-to-end in the actual app.
+**Status**: Working (TICKET-0039, 2026-08-10). TICKET-0038 was closed the same day as "fully live-verified", but a fresh live report showed the exact prompt it was built to catch (a real WebFetch permission menu) sitting unanswered — see "Root cause of the TICKET-0039 regression" below. Detection itself (`stripAnsi()` + `/❯\s*1\.\s*Yes\b/i`) was not the problem and is unchanged; the gap was *when* it got to run and what happened if its response didn't land.
+
+## Root cause of the TICKET-0039 regression (2026-08-10, second follow-up)
+Two stacked gaps, either of which reproduces "prompt sits there forever, toggle is on":
+
+1. **Spawn-time-only setting.** `AgentTerminal.jsx` read `auto_accept_permissions` once, at terminal spawn, and passed it into `ptyHost.js`'s `spawnSession()`. Flipping the Settings toggle on for an agent that was *already running* — the natural thing to do the moment you notice it stuck on a prompt — had no effect until that agent was stopped and relaunched. This was even called out as a known limitation in this doc's own "Per-Session Behavior" section below, but the practical impact (an already-visible prompt just stays there) wasn't obvious until it was hit live.
+2. **No verification that the response landed.** `ptyHost.js` sent a single `\r` and immediately cleared its buffer. If that keystroke was dropped (ConPTY timing, CLI mid-redraw, anything), there was no way to tell — the prompt would sit there identically to detection never having matched at all.
+
+### Fix
+`ptyHost.js`:
+- The rolling output buffer is now accumulated on every chunk *regardless* of whether auto-answer is enabled for that session (cheap — just a string append). A new `setAutoAnswer(id, enabled)` command can flip the flag on a live session and, when turning it on, immediately checks the buffer that's already there — so enabling it while a prompt is on screen answers that exact prompt, not just future ones.
+- After sending `\r`, `respondAndVerify()` re-checks ~600ms later whether the same prompt marker is still present; if so it resends, up to 2 retries, instead of assuming success.
+
+Wired end-to-end: `TerminalService.setAutoAnswer()` → `terminal:setAutoAnswer` IPC → `window.cpi.terminal.setAutoAnswer(id, enabled)`.
+
+`AgentTerminal.jsx` now renders two controls on every running agent's terminal:
+- **🛡️ Auto-approve: On/Off** — live toggle for just that session, via the new IPC call. Still initialized from the global `auto_accept_permissions` setting at spawn, same as before.
+- **✅ Approve now** — sends `\r` directly, independent of detection or the toggle, as a one-click way to unstick a prompt that's visibly waiting.
 
 ## Root cause of the real bug (2026-08-10 follow-up)
 The original re-enable matched plain-text patterns like `Allow? (y/n)` — guessed, not captured from a real session. The actual Claude Code CLI (v2.1.226) never prints that. Its permission prompt (and the workspace-trust dialog shown for a not-yet-trusted folder) is an Ink-rendered TUI menu:
@@ -104,9 +121,9 @@ The version originally re-enabled that day matched guessed plain-text `pattern? 
 4. New agent sessions will require manual permission responses
 
 ### Per-Session Behavior
-- The setting is applied when the terminal session is spawned
-- Changing the setting doesn't affect already-running agents
-- Stop and relaunch the agent to apply the new setting
+- The global Settings toggle is still only read at terminal spawn (initial value for new agents)
+- **TICKET-0039:** each running agent's terminal now has its own live **🛡️ Auto-approve** pill — click it to turn auto-answer on/off for that session immediately, no relaunch needed. If a prompt is already on screen when you turn it on, it's answered right away.
+- **✅ Approve now** on the same terminal sends Enter directly, regardless of the toggle — a manual fallback for a prompt that's visibly stuck
 
 ## Important Notes
 
@@ -128,9 +145,11 @@ The UI description explicitly states:
 Users should understand that this grants all requested permissions automatically, similar to using Auto mode, but at the terminal interaction level.
 
 ## Files Modified
-- `src/main/ptyHost.js` - Core auto-answer logic and prompt detection
-- `src/main/services/TerminalService.js` - Pass autoAnswerPermissions option
-- `src/renderer/components/AgentTerminal.jsx` - Load setting and pass to spawn
+- `src/main/ptyHost.js` - Core auto-answer logic, prompt detection, live toggle + retry (TICKET-0039)
+- `src/main/services/TerminalService.js` - Pass autoAnswerPermissions option; `setAutoAnswer()` (TICKET-0039)
+- `src/main/ipc/handlers.js` - `terminal:setAutoAnswer` IPC (TICKET-0039)
+- `src/main/preload.js` - `window.cpi.terminal.setAutoAnswer` (TICKET-0039)
+- `src/renderer/components/AgentTerminal.jsx` - Load setting and pass to spawn; live toggle pill + manual Approve button (TICKET-0039)
 - `src/renderer/views/SettingsView.jsx` - UI toggle and persistence
 - `src/renderer/views/AgentView.jsx` - Added claude-sonnet-4-5 model
 
@@ -140,6 +159,9 @@ Users should understand that this grants all requested permissions automatically
 - [x] When enabled, permission prompts (the real Ink menu) are auto-confirmed
 - [ ] When disabled, permission prompts require manual response — not re-tested this pass, unchanged logic
 - [ ] Works with claude-sonnet-4-5 (Vertex AI) model specifically — tested with the default `claude-sonnet-5` model instead; the fix is model-agnostic (it only depends on the CLI's own prompt rendering, not which model answers)
+- [x] `npm run build` clean, `npm test` 11/11 pass (TICKET-0039)
+- [ ] Live: flip the 🛡️ Auto-approve pill on for an already-running agent sitting on a real unanswered prompt, confirm it resolves without a relaunch (TICKET-0039, not yet re-verified live — see ticket Notes)
+- [ ] Live: click ✅ Approve now on a real stuck prompt, confirm it submits "1. Yes" (TICKET-0039)
 - [x] No duplicate responses observed across repeated tool calls in one session
 - [x] Save Settings button shows "✓ Saved" confirmation
 - [x] Auto-answer state is cleaned up when session exits (unchanged from original implementation)

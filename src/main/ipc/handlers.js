@@ -313,6 +313,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   ipcMain.on('terminal:write', (_, { id, data } = {}) => TerminalSvc.write(id, data))
   ipcMain.on('terminal:resize', (_, { id, cols, rows } = {}) => TerminalSvc.resize(id, cols, rows))
   ipcMain.on('terminal:dispose', (_, { id } = {}) => TerminalSvc.dispose(id))
+  ipcMain.on('terminal:setAutoAnswer', (_, { id, enabled } = {}) => TerminalSvc.setAutoAnswer(id, enabled))
 }
 
 module.exports = { registerHandlers }

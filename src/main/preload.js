@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('cpi', {
     write: (id, data) => ipcRenderer.send('terminal:write', { id, data }),
     resize: (id, cols, rows) => ipcRenderer.send('terminal:resize', { id, cols, rows }),
     dispose: (id) => ipcRenderer.send('terminal:dispose', { id }),
+    setAutoAnswer: (id, enabled) => ipcRenderer.send('terminal:setAutoAnswer', { id, enabled }),
     onData: (cb) => {
       const handler = (_, d) => cb(d)
       ipcRenderer.on('terminal:data', handler)

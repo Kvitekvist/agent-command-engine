@@ -15,15 +15,22 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
-* TICKET-0038 (auto-answer permission prompts) is fixed and fully
-  live-verified — see architecture.md's Terminal section and
-  ticket_memory.md. Worth noting for the rest of this list: a reusable
-  raw-CDP driving script (no new dependencies, see architecture.md's
-  Gotchas) now exists as a technique for exactly the kind of live-in-app
-  verification most of the items below are still waiting on — it isn't
-  saved anywhere in the repo (built ad hoc in a scratch dir this session),
-  but is cheap to rebuild if a future session wants to clear more of this
-  list the same way.
+* TICKET-0039 (open): auto-answer permission prompts was still hanging live
+  after TICKET-0038 closed itself as "fully live-verified" — user reported
+  it directly with a screenshot of a real stuck prompt. Root cause was
+  spawn-time-only setting application plus no retry on a dropped keystroke,
+  not the detection pattern itself (still `/❯\s*1\.\s*Yes\b/i` against
+  `stripAnsi()`-reconstructed text, unchanged). Fixed: live per-session
+  toggle (`ptyHost.js` `setAutoAnswer`, no relaunch needed), verify-and-
+  retry after answering, and a manual "✅ Approve now" escape hatch — see
+  ticket_memory.md. **Left open, not closed** — this is the second time
+  this exact feature was marked verified without a live check that held
+  up; needs a real live re-verification (flip the new pill on an
+  already-running agent stuck on a real prompt) before trusting it again.
+  A reusable raw-CDP driving script (no new dependencies, see
+  architecture.md's Gotchas) exists as a technique for exactly this kind of
+  live-in-app verification — it isn't saved anywhere in the repo (built ad
+  hoc in a scratch dir a prior session), but is cheap to rebuild.
 * TICKET-0031 (in-chat model switcher, promoted from `WISHLIST.md`) is the
   only open ticket not yet started — everything else open is implemented
   and committed, awaiting only manual verification (see below) or, for

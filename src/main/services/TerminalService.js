@@ -155,6 +155,15 @@ class TerminalService {
     }
   }
 
+  // TICKET-0039: flips auto-answer on/off for a session that's already
+  // running, so a permission prompt already on screen doesn't require the
+  // agent to be stopped and relaunched to resolve.
+  setAutoAnswer(id, enabled) {
+    if (this.host && this.host.connected) {
+      try { this.host.send({ cmd: 'setAutoAnswer', id, enabled }) } catch (_) { /* host gone */ }
+    }
+  }
+
   // A forked child process doesn't die with its parent -- always give it a
   // chance to clean up its own subprocesses before force-killing.
   async shutdown() {

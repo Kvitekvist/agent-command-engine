@@ -47,6 +47,12 @@ export default function AgentTerminal({ agent }) {
   const sessionIdRef = useRef(null)
   const [status, setStatus] = useState('connecting') // connecting | ready | exited | error
   const [showBanner, setShowBanner] = useState(true)
+  // TICKET-0039: mirrors the global 'auto_accept_permissions' setting at
+  // spawn time (unchanged), but can now also be flipped live for just this
+  // session -- ptyHost.js no longer requires a respawn to pick it up, so a
+  // prompt that's already on screen when this is toggled on gets answered
+  // immediately instead of only affecting the *next* agent launch.
+  const [autoAnswer, setAutoAnswer] = useState(false)
 
   useEffect(() => {
     let disposed = false
@@ -79,11 +85,12 @@ export default function AgentTerminal({ agent }) {
       const { cols, rows } = term
       // Load auto-answer setting
       const autoAnswerEnabled = await window.cpi.getSetting('auto_accept_permissions')
+      const initialAutoAnswer = autoAnswerEnabled === 'true'
       const result = await window.cpi.terminal.spawn({
         cols,
         rows,
         cwd: agent.projectPath,
-        autoAnswerPermissions: autoAnswerEnabled === 'true'
+        autoAnswerPermissions: initialAutoAnswer
       })
       if (disposed) return
       if (!result.success) {
@@ -94,6 +101,7 @@ export default function AgentTerminal({ agent }) {
       }
       sessionIdRef.current = result.id
       setStatus('ready')
+      setAutoAnswer(initialAutoAnswer)
 
       unsubData = window.cpi.terminal.onData(({ id, chunk }) => {
         if (id === sessionIdRef.current) term.write(chunk)
@@ -179,11 +187,47 @@ export default function AgentTerminal({ agent }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // TICKET-0039: flips ptyHost's live per-session flag (no respawn needed)
+  // so this takes effect on whatever prompt is on screen right now, not
+  // just future ones.
+  function toggleAutoAnswer() {
+    if (!sessionIdRef.current) return
+    const next = !autoAnswer
+    setAutoAnswer(next)
+    window.cpi.terminal.setAutoAnswer(sessionIdRef.current, next)
+  }
+
+  // Manual escape hatch: submits the already-selected "1. Yes" option
+  // directly, independent of whether prompt detection fired. Useful the
+  // moment a prompt is visibly stuck, regardless of the auto-answer toggle.
+  function approveNow() {
+    if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, '\r')
+  }
+
   return (
     <div className="flex-1 min-h-0 flex flex-col relative">
       {(status === 'error' || status === 'exited') && (
         <div className="text-xs text-muted px-1 pb-1 shrink-0">
           {status === 'error' ? 'Failed to start terminal.' : 'Session ended.'}
+        </div>
+      )}
+      {status === 'ready' && (
+        <div className="flex items-center gap-1.5 px-1 pb-1 shrink-0">
+          <button
+            onClick={toggleAutoAnswer}
+            title="Auto-confirm permission prompts in this terminal, without needing to stop and relaunch the agent"
+            className={`text-xs py-0.5 px-2 rounded border transition-colors
+              ${autoAnswer
+                ? 'border-accent/40 bg-accent/20 text-accent'
+                : 'border-border text-muted hover:bg-border'}`}>
+            {autoAnswer ? '🛡️ Auto-approve: On' : '🛡️ Auto-approve: Off'}
+          </button>
+          <button
+            onClick={approveNow}
+            title="Immediately confirm 'Yes' on whatever permission prompt is currently showing"
+            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
+            ✅ Approve now
+          </button>
         </div>
       )}
       <div className="flex-1 min-h-0 [&_.xterm]:h-full" ref={containerRef} />

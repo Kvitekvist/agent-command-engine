@@ -461,3 +461,39 @@ TokscaleService, ScreenshotService, and index.js all had correct
 platform handling or used harmless-on-macOS flags (windowsHide) already.
 Verified via npm run build and npm test (11/11 pass); actual macOS dmg
 packaging not verifiable from this Windows environment.
+
+TICKET-0039
+2026-08-10
+Fixed auto-answer permission prompts (TICKET-0038) still hanging live,
+despite that ticket's own close-out claiming full end-to-end verification.
+User reported it directly with a screenshot: agent "Talia" stuck on a real
+WebFetch permission prompt for yr.no -- the exact Ink menu TICKET-0038 was
+built to detect -- with no auto-response ever sent. Two stacked gaps, either
+one reproduces the symptom: (1) `auto_accept_permissions` was only ever read
+once, at terminal spawn (AgentTerminal.jsx) -- toggling it on for an agent
+that's already running, the natural response to noticing it stuck, did
+nothing until the agent was stopped and relaunched; (2) `ptyHost.js` sent a
+single `\r` and cleared its buffer with no verification the keystroke
+landed, so a dropped response looked identical to detection never firing.
+TICKET-0038's detection logic itself (`stripAnsi()` + the
+`/❯\s*1\.\s*Yes\b/i` selection-arrow pattern) was not the problem and is
+unchanged. Fixed by making `ptyHost.js` always accumulate its rolling
+buffer regardless of the enabled flag, adding a `setAutoAnswer(id, enabled)`
+command that can flip a live session's flag and immediately act on
+whatever's already buffered (not just future output), and a
+verify-and-retry (`respondAndVerify`, up to 2 retries ~600ms apart) after
+every auto-answer instead of assuming it worked. Wired end-to-end through
+TerminalService/handlers.js/preload.js. `AgentTerminal.jsx` now shows two
+controls on every running agent's terminal: a live "🛡️ Auto-approve"
+toggle pill (acts on the current session immediately, no relaunch) and a
+manual "✅ Approve now" button (sends Enter directly, independent of
+detection). Verified via a clean npm run build and the full automated test
+suite (11/11 pass, no new coverage -- ptyHost.js has none, same as before
+this ticket). Left open rather than closed: this environment can't attach
+to a live running ACE instance to reproduce and re-verify the exact stuck-
+prompt scenario end-to-end, which is exactly the gap that let TICKET-0038
+close prematurely -- see the ticket's own Result section. Also worth
+noting: since the fix touches main-process files, applying it requires an
+app restart, which will end any currently-stuck session (including the one
+in the original report) rather than healing it in place -- relaunching the
+agent afterward starts it on the fixed path.

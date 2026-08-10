@@ -17,6 +17,7 @@ try {
 const sessions = new Map() // id -> node-pty process
 const exitWaiters = new Map() // id -> resolve fn, invoked once that session's onExit fires
 const autoAnswerEnabled = new Map() // id -> boolean, whether to auto-answer permission prompts for this session
+const autoAnswerState = new Map() // id -> { outputBuffer, lastAutoAnswerTime }, always populated regardless of enabled
 
 function defaultShell() {
   if (process.platform === 'win32') return 'powershell.exe'
@@ -57,6 +58,83 @@ function stripAnsi(s) {
 // means submitting the current selection -- no digit needs to be typed.
 const PERMISSION_PROMPT_PATTERN = /❯\s*1\.\s*Yes\b/i
 
+// TICKET-0039: TICKET-0038's detection pattern (above) was correct, but the
+// setting was only ever read once, at spawn time (AgentTerminal.jsx), and
+// baked into a session for its whole lifetime. Toggling auto-answer on
+// while an agent is *already* sitting on a prompt -- exactly the situation
+// a user hits the toggle to fix -- did nothing until the agent was stopped
+// and relaunched. So the buffer is now always accumulated (cheap: just a
+// string append) regardless of whether auto-answer is enabled, and
+// setAutoAnswer() below can act on it immediately the moment it's turned
+// on, instead of waiting for the next chunk of CLI output that may never
+// come if the prompt is just sitting there idle.
+const MAX_AUTO_ANSWER_RETRIES = 2
+const AUTO_ANSWER_RETRY_DELAY_MS = 600
+
+function getAutoAnswerState(id) {
+  let state = autoAnswerState.get(id)
+  if (!state) {
+    state = { outputBuffer: '', lastAutoAnswerTime: 0 }
+    autoAnswerState.set(id, state)
+  }
+  return state
+}
+
+// Sends Enter to confirm the pre-selected "1. Yes" option, then re-checks
+// the buffer a bit later -- if the same prompt marker is still showing,
+// the keystroke likely didn't land (dropped by ConPTY, CLI mid-render,
+// etc.) and it's resent, up to MAX_AUTO_ANSWER_RETRIES times. Without this,
+// a single dropped keystroke leaves the prompt hanging exactly as if
+// detection had never fired at all -- indistinguishable from the bug this
+// ticket exists to fix.
+function respondAndVerify(id, retriesLeft) {
+  const proc = sessions.get(id)
+  if (!proc) return
+  proc.write('\r')
+  if (retriesLeft <= 0) return
+  setTimeout(() => {
+    if (!autoAnswerEnabled.get(id)) return
+    const state = autoAnswerState.get(id)
+    if (state && PERMISSION_PROMPT_PATTERN.test(stripAnsi(state.outputBuffer))) {
+      respondAndVerify(id, retriesLeft - 1)
+      state.outputBuffer = ''
+    }
+  }, AUTO_ANSWER_RETRY_DELAY_MS)
+}
+
+// Called on every chunk of PTY output (buffer already updated by the
+// caller) and also directly from setAutoAnswer() when auto-answer is
+// switched on mid-session, so it can act on a prompt that's already fully
+// rendered on screen instead of waiting for new output that may never come.
+function maybeAutoAnswer(id) {
+  if (!autoAnswerEnabled.get(id)) return
+  const state = getAutoAnswerState(id)
+  const now = Date.now()
+  const hasPrompt = PERMISSION_PROMPT_PATTERN.test(stripAnsi(state.outputBuffer))
+
+  // Auto-respond if: prompt detected AND enough time passed since last auto-answer (debounce)
+  if (hasPrompt && now - state.lastAutoAnswerTime > 200) {
+    state.lastAutoAnswerTime = now
+    // Small delay to let the prompt fully render before responding
+    setTimeout(() => respondAndVerify(id, MAX_AUTO_ANSWER_RETRIES), 100)
+    // Clear buffer after auto-answer so we don't match the same prompt twice
+    state.outputBuffer = ''
+  }
+}
+
+// TICKET-0039: lets the renderer flip auto-answer on/off for a session
+// that's already running, without a respawn -- see the comment above
+// MAX_AUTO_ANSWER_RETRIES for why spawn-time-only was the actual bug.
+function setAutoAnswer(id, enabled) {
+  if (!sessions.has(id)) return
+  if (enabled) {
+    autoAnswerEnabled.set(id, true)
+    maybeAutoAnswer(id) // act on a prompt that's already on screen right now
+  } else {
+    autoAnswerEnabled.delete(id)
+  }
+}
+
 function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
   if (sessions.has(id)) {
     return { success: false, error: `Session ${id} already exists` }
@@ -73,50 +151,33 @@ function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
       env: process.env,
     })
     sessions.set(id, proc)
+    getAutoAnswerState(id)
 
     // Track auto-answer setting for this session
     if (autoAnswerPermissions) {
       autoAnswerEnabled.set(id, true)
     }
 
-    // Raw rolling buffer to detect prompts split across chunks -- kept
-    // larger than the old 500-char window since a full Ink redraw of a
-    // permission box (workspace path, tool args, the menu itself) runs well
-    // past that before stripping.
-    let outputBuffer = ''
-    let lastAutoAnswerTime = 0
-
     proc.onData((chunk) => {
-      // Auto-answer permission prompts if enabled for this session
-      if (autoAnswerEnabled.get(id)) {
-        outputBuffer += chunk
-        if (outputBuffer.length > 4000) {
-          outputBuffer = outputBuffer.slice(-4000)
-        }
-
-        const now = Date.now()
-        const hasPrompt = PERMISSION_PROMPT_PATTERN.test(stripAnsi(outputBuffer))
-
-        // Auto-respond if: prompt detected AND enough time passed since last auto-answer (debounce)
-        if (hasPrompt && now - lastAutoAnswerTime > 200) {
-          lastAutoAnswerTime = now
-          // Small delay to let the prompt fully render before responding
-          setTimeout(() => {
-            const stillAlive = sessions.get(id)
-            if (stillAlive) {
-              stillAlive.write('\r') // Confirm the already-selected "1. Yes" option
-            }
-          }, 100)
-          // Clear buffer after auto-answer so we don't match the same prompt twice
-          outputBuffer = ''
-        }
+      // Raw rolling buffer to detect prompts split across chunks -- kept
+      // larger than the old 500-char window since a full Ink redraw of a
+      // permission box (workspace path, tool args, the menu itself) runs
+      // well past that before stripping. Always maintained (not just while
+      // enabled) so switching auto-answer on mid-session has something to
+      // check immediately -- see setAutoAnswer().
+      const state = getAutoAnswerState(id)
+      state.outputBuffer += chunk
+      if (state.outputBuffer.length > 4000) {
+        state.outputBuffer = state.outputBuffer.slice(-4000)
       }
+      maybeAutoAnswer(id)
 
       try { process.send({ type: 'data', id, chunk }) } catch (_) { /* parent gone */ }
     })
     proc.onExit(({ exitCode, signal }) => {
       sessions.delete(id)
       autoAnswerEnabled.delete(id)
+      autoAnswerState.delete(id)
       const waiter = exitWaiters.get(id)
       if (waiter) { exitWaiters.delete(id); waiter() }
       try { process.send({ type: 'exit', id, exitCode, signal }) } catch (_) { /* parent gone */ }
@@ -156,6 +217,7 @@ function killAndWait(id) {
   const proc = sessions.get(id)
   if (!proc) {
     autoAnswerEnabled.delete(id)
+    autoAnswerState.delete(id)
     return Promise.resolve()
   }
   return new Promise((resolve) => {
@@ -165,6 +227,7 @@ function killAndWait(id) {
       settled = true
       clearTimeout(timer)
       autoAnswerEnabled.delete(id)
+      autoAnswerState.delete(id)
       resolve()
     }
     const timer = setTimeout(finish, 1500)
@@ -199,6 +262,9 @@ process.on('message', (msg) => {
       break
     case 'dispose':
       disposeSession(msg.id)
+      break
+    case 'setAutoAnswer':
+      setAutoAnswer(msg.id, !!msg.enabled)
       break
     default:
       break
