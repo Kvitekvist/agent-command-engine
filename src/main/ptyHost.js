@@ -49,14 +49,29 @@ function stripAnsi(s) {
     .replace(/\x1b[>=]/g, '')
 }
 
-// The selection-arrow glyph in front of a numbered "1. Yes" is Ink's
-// SelectInput component -- it's how every one of these Claude/Codex
-// permission-style prompts (workspace trust, tool permission, etc.) marks
-// the currently-highlighted default option, and isn't something the
-// assistant's own prose ever emits. Confirmed against both prompt types
-// above; "Yes" is always option 1 and already selected, so accepting just
-// means submitting the current selection -- no digit needs to be typed.
-const PERMISSION_PROMPT_PATTERN = /❯\s*1\.\s*Yes\b/i
+// TICKET-0039: matching the literal word "Yes" was the real bug behind
+// this ticket. Live-tested via a harness that forks this exact file and
+// drives a real `claude` session (see scratchpad -- not checked in): asking
+// an agent to fetch yr.no weather led it to use a browser tool instead of
+// WebFetch, whose permission prompt reads
+//   Claude in Chrome wants to create a browser window and read your tabs
+//   ❯ 1. Allow
+//     2. Deny (esc)
+// -- "Allow", not "Yes". Bash commands, file writes, MCP tools, etc. each
+// have their own first-option wording too; hardcoding one guessed word
+// ("Yes", inherited from TICKET-0038) was exactly the same mistake
+// TICKET-0038 itself diagnosed in the pre-0038 version, just one level
+// deeper. The actual reliable signal was already identified correctly --
+// the ❯ selection-arrow glyph is Ink's SelectInput component marking the
+// currently-highlighted option, and isn't something the assistant's own
+// prose ever emits -- it just needs to not also require specific text
+// after "1.". Option 1 is consistently the pre-selected, least-destructive
+// choice (confirmed against "Yes"/"No" and "Allow"/"Deny" so far), so
+// matching the structural marker alone and still responding with a plain
+// Enter (confirm-current-selection, no digit typed) generalizes correctly
+// to every prompt of this shape instead of just the one wording that
+// happened to get captured first.
+const PERMISSION_PROMPT_PATTERN = /❯\s*1\.\s*\S/
 
 // TICKET-0039: TICKET-0038's detection pattern (above) was correct, but the
 // setting was only ever read once, at spawn time (AgentTerminal.jsx), and
@@ -241,41 +256,50 @@ async function gracefulShutdown() {
   await disposeQueue
 }
 
-process.on('message', (msg) => {
-  if (!msg) return
-  if (msg.channel === 'shutdown') {
-    gracefulShutdown().finally(() => process.exit(0))
-    return
-  }
-  if (!msg.cmd) return
-  switch (msg.cmd) {
-    case 'spawn': {
-      const result = spawnSession(msg)
-      try { process.send({ type: 'spawned', id: msg.id, ...result }) } catch (_) { /* parent gone */ }
-      break
+// Only wired up when actually running under a forked IPC channel (has
+// process.send) -- guarded so this file can also be `require()`'d directly
+// (no IPC, no pty spawn) purely to unit-test the pure detection functions
+// above (stripAnsi/PERMISSION_PROMPT_PATTERN, exported below) against
+// captured raw output, without pulling in node-pty or Electron at all.
+if (typeof process.send === 'function') {
+  process.on('message', (msg) => {
+    if (!msg) return
+    if (msg.channel === 'shutdown') {
+      gracefulShutdown().finally(() => process.exit(0))
+      return
     }
-    case 'write':
-      writeSession(msg.id, msg.data)
-      break
-    case 'resize':
-      resizeSession(msg.id, msg.cols, msg.rows)
-      break
-    case 'dispose':
-      disposeSession(msg.id)
-      break
-    case 'setAutoAnswer':
-      setAutoAnswer(msg.id, !!msg.enabled)
-      break
-    default:
-      break
-  }
-})
+    if (!msg.cmd) return
+    switch (msg.cmd) {
+      case 'spawn': {
+        const result = spawnSession(msg)
+        try { process.send({ type: 'spawned', id: msg.id, ...result }) } catch (_) { /* parent gone */ }
+        break
+      }
+      case 'write':
+        writeSession(msg.id, msg.data)
+        break
+      case 'resize':
+        resizeSession(msg.id, msg.cols, msg.rows)
+        break
+      case 'dispose':
+        disposeSession(msg.id)
+        break
+      case 'setAutoAnswer':
+        setAutoAnswer(msg.id, !!msg.enabled)
+        break
+      default:
+        break
+    }
+  })
 
-// Subprocesses spawned via node-pty don't die automatically when this
-// process exits -- every live shell (and any CLI running inside it) must be
-// explicitly killed on shutdown or it's orphaned.
-process.on('SIGTERM', () => {
-  gracefulShutdown().finally(() => process.exit(0))
-})
+  // Subprocesses spawned via node-pty don't die automatically when this
+  // process exits -- every live shell (and any CLI running inside it) must
+  // be explicitly killed on shutdown or it's orphaned.
+  process.on('SIGTERM', () => {
+    gracefulShutdown().finally(() => process.exit(0))
+  })
 
-process.send({ ready: true })
+  process.send({ ready: true })
+}
+
+module.exports = { stripAnsi, PERMISSION_PROMPT_PATTERN }

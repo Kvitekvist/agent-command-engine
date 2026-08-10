@@ -3,12 +3,12 @@
 ## Overview
 Added a global toggle in Settings to automatically answer "yes" to permission prompts in agent terminals. This solves the limitation where some models (like `claude-sonnet-4-5` via Vertex AI) don't support the `--dangerously-skip-permissions` flag and continuously ask for permission.
 
-**Status**: Working (TICKET-0039, 2026-08-10). TICKET-0038 was closed the same day as "fully live-verified", but a fresh live report showed the exact prompt it was built to catch (a real WebFetch permission menu) sitting unanswered — see "Root cause of the TICKET-0039 regression" below. Detection itself (`stripAnsi()` + `/❯\s*1\.\s*Yes\b/i`) was not the problem and is unchanged; the gap was *when* it got to run and what happened if its response didn't land.
+**Status**: In progress (TICKET-0039, 2026-08-10). TICKET-0038 was closed the same day as "fully live-verified", but a fresh live report showed the exact prompt it was built to catch sitting unanswered. Two separate bugs turned out to be stacked here — see below. The second one is the real explanation for the user's original report and needed a live-captured example to find; detection is now fixed and offline-verified against real captured bytes, but a full live end-to-end rerun is still outstanding (see ticket TICKET-0039's Notes for exactly why).
 
-## Root cause of the TICKET-0039 regression (2026-08-10, second follow-up)
+## Root cause #1 of the TICKET-0039 regression (2026-08-10)
 Two stacked gaps, either of which reproduces "prompt sits there forever, toggle is on":
 
-1. **Spawn-time-only setting.** `AgentTerminal.jsx` read `auto_accept_permissions` once, at terminal spawn, and passed it into `ptyHost.js`'s `spawnSession()`. Flipping the Settings toggle on for an agent that was *already running* — the natural thing to do the moment you notice it stuck on a prompt — had no effect until that agent was stopped and relaunched. This was even called out as a known limitation in this doc's own "Per-Session Behavior" section below, but the practical impact (an already-visible prompt just stays there) wasn't obvious until it was hit live.
+1. **Spawn-time-only setting.** `AgentTerminal.jsx` read `auto_accept_permissions` once, at terminal spawn, and passed it into `ptyHost.js`'s `spawnSession()`. Flipping the Settings toggle on for an agent that was *already running* — the natural thing to do the moment you notice it stuck on a prompt — had no effect until that agent was stopped and relaunched.
 2. **No verification that the response landed.** `ptyHost.js` sent a single `\r` and immediately cleared its buffer. If that keystroke was dropped (ConPTY timing, CLI mid-redraw, anything), there was no way to tell — the prompt would sit there identically to detection never having matched at all.
 
 ### Fix
@@ -22,7 +22,23 @@ Wired end-to-end: `TerminalService.setAutoAnswer()` → `terminal:setAutoAnswer`
 - **🛡️ Auto-approve: On/Off** — live toggle for just that session, via the new IPC call. Still initialized from the global `auto_accept_permissions` setting at spawn, same as before.
 - **✅ Approve now** — sends `\r` directly, independent of detection or the toggle, as a one-click way to unstick a prompt that's visibly waiting.
 
-## Root cause of the real bug (2026-08-10 follow-up)
+## Root cause #2 of the TICKET-0039 regression, the real explanation (2026-08-10, live-tested)
+Fix #1 alone still wasn't enough — the user restarted the app, retested, and hit the identical symptom again with the toggle already on. Built a standalone harness that forks the real `ptyHost.js` and drives a real, unattended `claude` session with `autoAnswerPermissions: true` set from spawn (removing gap #1 above from the equation) and no manual intervention, asking it to fetch yr.no weather. The agent used a browser tool instead of `WebFetch`, and the real captured prompt was:
+
+```
+Claude in Chrome wants to create a browser window and read your tabs
+❯ 1. Allow
+2. Deny (esc)
+```
+
+`PERMISSION_PROMPT_PATTERN` was `/❯\s*1\.\s*Yes\b/i` — hardcoded to the literal word "Yes", inherited unquestioned from TICKET-0038. It never matches "Allow" (or, by the same logic, whatever wording Bash-command/file-write/other-MCP-tool prompts use). **This is the actual bug behind the original screenshot** — TICKET-0038's own live verification happened to only exercise a WebFetch ("Yes") prompt, so the narrowness never showed up.
+
+### Fix
+Broadened `PERMISSION_PROMPT_PATTERN` from `/❯\s*1\.\s*Yes\b/i` to `/❯\s*1\.\s*\S/` — the ❯ selection-arrow-next-to-option-1 marker is still the reliable, prose-proof signal (unchanged reasoning from TICKET-0038), it just no longer also requires specific text after "1.". The response (`\r`, confirming the pre-selected option) is unchanged.
+
+Verified **offline** against the real raw bytes captured from that live run (no new agent spawned for this check): the old pattern doesn't match; the new one does. A full live end-to-end rerun with the fix in place was attempted but blocked by Claude Code's own auto-mode safety classifier (an unattended script driving a full agent session with real tool/browser permissions) across three different invocation approaches — see TICKET-0039's Notes for the detail. That live confirmation is the one remaining open item.
+
+## Root cause of the original TICKET-0038 bug (2026-08-10, for context)
 The original re-enable matched plain-text patterns like `Allow? (y/n)` — guessed, not captured from a real session. The actual Claude Code CLI (v2.1.226) never prints that. Its permission prompt (and the workspace-trust dialog shown for a not-yet-trusted folder) is an Ink-rendered TUI menu:
 
 ```

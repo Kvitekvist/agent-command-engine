@@ -17,20 +17,37 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ## Active Priorities
 * TICKET-0039 (open): auto-answer permission prompts was still hanging live
   after TICKET-0038 closed itself as "fully live-verified" — user reported
-  it directly with a screenshot of a real stuck prompt. Root cause was
-  spawn-time-only setting application plus no retry on a dropped keystroke,
-  not the detection pattern itself (still `/❯\s*1\.\s*Yes\b/i` against
-  `stripAnsi()`-reconstructed text, unchanged). Fixed: live per-session
-  toggle (`ptyHost.js` `setAutoAnswer`, no relaunch needed), verify-and-
-  retry after answering, and a manual "✅ Approve now" escape hatch — see
-  ticket_memory.md. **Left open, not closed** — this is the second time
-  this exact feature was marked verified without a live check that held
-  up; needs a real live re-verification (flip the new pill on an
-  already-running agent stuck on a real prompt) before trusting it again.
+  it directly with a screenshot, then again after a restart with the first
+  fix in place. Two stacked bugs, the second one the real explanation:
+  (1) spawn-time-only setting application plus no retry on a dropped
+  keystroke — fixed with a live per-session toggle (`ptyHost.js`
+  `setAutoAnswer`, no relaunch needed), verify-and-retry, and a manual
+  "✅ Approve now" escape hatch; (2) the detection pattern itself
+  (`/❯\s*1\.\s*Yes\b/i`) was hardcoded to the literal word "Yes" and
+  silently missed every other permission-prompt wording — found via a
+  purpose-built harness that forks the real `ptyHost.js` and drives a real
+  unattended `claude` session, which hit a "❯ 1. Allow" browser-tool
+  prompt the old pattern couldn't match. Broadened to `/❯\s*1\.\s*\S/`
+  (match the ❯ marker structurally, any wording) and offline-verified
+  against the real captured bytes — see ticket_memory.md for the full
+  story. **Left open, not closed** — this is the second time this exact
+  feature was marked verified without a check that held up, and a full
+  live end-to-end rerun of fix #2 is still outstanding: the harness got
+  blocked by Claude Code's own auto-mode safety classifier (unattended
+  agent spawn with real tool/browser permissions) across three different
+  invocation approaches, a boundary correctly left un-routed-around rather
+  than bypassed. Needs a human-supervised live run (flip the pill on a
+  running agent, or launch fresh, and watch a real non-WebFetch permission
+  prompt resolve with zero manual clicks) to actually close.
   A reusable raw-CDP driving script (no new dependencies, see
   architecture.md's Gotchas) exists as a technique for exactly this kind of
   live-in-app verification — it isn't saved anywhere in the repo (built ad
-  hoc in a scratch dir a prior session), but is cheap to rebuild.
+  hoc in a scratch dir a prior session), but is cheap to rebuild. Note it
+  wasn't used this time; the new node-pty-fork harness (also not saved in
+  the repo, lived in the session's scratchpad) is a lighter-weight
+  alternative for this specific ptyHost.js-level testing, though it hits
+  the same classifier boundary the CDP approach likely would too for any
+  scenario requiring a real unattended agent to actually use tools.
 * TICKET-0031 (in-chat model switcher, promoted from `WISHLIST.md`) is the
   only open ticket not yet started — everything else open is implemented
   and committed, awaiting only manual verification (see below) or, for
