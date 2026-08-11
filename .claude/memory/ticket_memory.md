@@ -771,3 +771,19 @@ the same assets). So: yes, `scripts\release.bat` can now be run for the next
 version bump and will compile, commit, push, tag, and publish the GitHub release
 with the exes attached, using the .env token automatically. If .env has no
 token, it falls back to gh login and prints which path it took.
+
+TICKET-0047
+2026-08-11
+Cut the v0.1.4 patch release: a hotfix for the crash-on-launch that shipped in
+v0.1.3 (SyntaxError at DBService.js from backticks inside the agent_sessions
+schema comment terminating the db.run(`...`) template literal; the code fix was
+df1a7f2 under TICKET-0044). Because a broken 0.1.3 exe was already public, the
+fix ships as a new patch version rather than re-cutting 0.1.3. Bumped
+src/package.json 0.1.3->0.1.4 and version.txt (stale 0.1.1)->0.1.4, moved the
+CHANGELOG [Unreleased] items (TICKET-0044 crash fix + TICKET-0046 release.bat
+GH_TOKEN) into [0.1.4] - 2026-08-11. Also had to repair CHANGELOG.md: the
+working tree copy had been corrupted (stray "2"/"21" chars typed in, the whole
+[0.1.3] section + TICKET-0043 entry deleted) -- restored from HEAD (clean) before
+re-adding [0.1.4]. Released via scripts\release.bat (packages exes+Portable-ACE,
+commits, pushes main, tags v0.1.4, publishes GitHub release using the .env
+GH_TOKEN per TICKET-0046). Tests 13/13.

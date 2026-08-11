@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-11
+
+### Fixed
+- v0.1.3 crashed on launch (packaged app only) with `SyntaxError: missing ) after argument list` at `DBService.js`. The new `agent_sessions` schema block (TICKET-0044) had a SQL comment containing backticks (`` `claude --session-id <uuid>` ``, `` `label` ``) written inside the `db.run(\`…\`)` template literal, which terminated the JS string early. It slipped past CI because `build:main` only copies main-process files (never parses them) and no test loaded `DBService`. Removed the backticks from the comment; now verified with `node --check` on all changed main files plus a runtime schema round-trip harness (TICKET-0044)
+
 ### Changed
 - `scripts/release.bat` now loads a `GH_TOKEN`/`github_token` PAT from the repo-root `.env` (if present) before the GitHub-release step, so the release publishes even when the logged-in `gh` account lacks write access to the repo. Git push/commit/tag are unaffected (they use SSH); the token is scoped to the batch process only and never printed (TICKET-0046)
 
