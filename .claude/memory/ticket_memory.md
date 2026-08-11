@@ -600,3 +600,34 @@ which also discarded a local `src/.npmrc` edit; that edit was NOT the build fix
 Packaged-app launch smoke-test not run (opens a GUI window and touches the real
 cpi.db); structural verification (artifacts + node-pty prebuilds present) done
 instead.
+
+TICKET-0041
+2026-08-11
+Scripts-folder cleanup + release-workflow consolidation. Deleted the obsolete
+Electron-binary download rescue kit (download-electron.js, download-electron.ps1,
+fix-electron.bat) -- a one-time workaround for proxy/firewall-blocked Electron
+postinstall downloads, unreferenced by the working `npm install` setup flow, and
+the .ps1 was actually broken (used batch-style `goto`/labels that are invalid in
+PowerShell). Per user request, collapsed the separate git helpers into ONE
+`scripts/release.bat` that runs the whole release pipeline: (1) compile exe
+(`npm run package`), (2) commit pending changes (message arg, defaults to
+"Release v<version>" read cwd-independently from src/package.json), (3) push
+current branch, (4) if not on main, checkout main + ff-pull + `--no-ff` merge
+the branch + push main ("merge if needed"), (5) tag v<version> + publish a
+GitHub release with BOTH exes attached via `gh` (create if the release is
+missing, else `gh release upload --clobber`). Deleted git_commit.bat and
+git_push.bat (folded in; git_push.bat was also stale -- it printed "No remote
+configured" though origin exists and is pushed to). Kept build.bat: CLAUDE.md
+mandates it and it's the dev compile (`npm run build`, no packaging), distinct
+from release.bat's exe pipeline. Verified every release.bat component works
+(version parse -> 0.1.2, npm run package proven in TICKET-0040, gh 2.96.0
+authed, `gh release view v0.1.2` resolves so it takes the upload path, both
+exes present) but did NOT run the full pipeline live -- it's outward-facing
+(publishes a GitHub release) and running it against the current 0.1.2 would
+mislabel this chore commit as "Release v0.1.2"; it'll be exercised naturally on
+the next version bump. Discovered the existing v0.1.2 GitHub release only had
+the installer asset (Agent.Command.Engine.Setup.0.1.2.exe) -- the portable exe
+was never uploaded; release.bat's publish step would add it. Final scripts/
+folder: setup/run/build/clear_cache (each .bat + .sh) + release.bat. No
+release.sh made (user asked for a .bat; macOS packaging produces a dmg, a
+different flow) -- worth adding later for mac parity if needed.

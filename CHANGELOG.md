@@ -4,6 +4,10 @@
 
 ### Changed
 - Windows build now emits the portable (copy-anywhere) application folder as `Portable-ACE` instead of electron-builder's default `win-unpacked`, via an `afterAllArtifactBuild` hook that renames it after packaging (TICKET-0040)
+- Consolidated the release workflow into a single `scripts/release.bat`: compile the exe (`npm run package`), commit, push, merge into `main` if on a feature branch, then tag and publish a GitHub release with the exe attached (TICKET-0041)
+
+### Removed
+- Obsolete helper scripts: the Electron-binary download rescue kit (`download-electron.js`, `download-electron.ps1`, `fix-electron.bat`) — unreferenced by the working `npm install` setup flow, and the `.ps1` was broken (batch-style `goto`/labels invalid in PowerShell) — plus the separate `git_commit.bat` and `git_push.bat` (folded into `release.bat`; `git_push.bat` was also stale, falsely claiming no remote was configured) (TICKET-0041)
 
 ### Fixed
 - `npm run package` failed at the native-dependency rebuild step: electron-builder 24 invokes `npm rebuild node-pty --allow-scripts`, but npm 11 rejects that flag for project-scoped installs (`EALLOWSCRIPTS`). node-pty ships prebuilt binaries and never needed rebuilding, so the build now sets `npmRebuild: false` and packages the existing prebuilds directly (TICKET-0040)
