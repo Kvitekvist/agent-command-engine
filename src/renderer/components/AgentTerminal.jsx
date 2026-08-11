@@ -47,11 +47,11 @@ export default function AgentTerminal({ agent }) {
   const sessionIdRef = useRef(null)
   const [status, setStatus] = useState('connecting') // connecting | ready | exited | error
   const [showBanner, setShowBanner] = useState(true)
-  // TICKET-0039: mirrors the global 'auto_accept_permissions' setting at
-  // spawn time (unchanged), but can now also be flipped live for just this
-  // session -- ptyHost.js no longer requires a respawn to pick it up, so a
-  // prompt that's already on screen when this is toggled on gets answered
-  // immediately instead of only affecting the *next* agent launch.
+  // TICKET-0039: per-agent only, no global setting -- defaults off (silently
+  // auto-confirming every permission prompt shouldn't be on without an
+  // explicit per-agent opt-in) and can be flipped live via the pill below;
+  // ptyHost.js acts on it immediately, no respawn needed, so a prompt
+  // that's already on screen when this is toggled on gets answered too.
   const [autoAnswer, setAutoAnswer] = useState(false)
 
   useEffect(() => {
@@ -83,14 +83,12 @@ export default function AgentTerminal({ agent }) {
 
     async function start() {
       const { cols, rows } = term
-      // Load auto-answer setting
-      const autoAnswerEnabled = await window.cpi.getSetting('auto_accept_permissions')
-      const initialAutoAnswer = autoAnswerEnabled === 'true'
+      // Auto-answer starts off for every new session -- see the state
+      // comment above. Use the 🛡️ Auto-approve pill to turn it on.
       const result = await window.cpi.terminal.spawn({
         cols,
         rows,
         cwd: agent.projectPath,
-        autoAnswerPermissions: initialAutoAnswer
       })
       if (disposed) return
       if (!result.success) {
@@ -101,7 +99,6 @@ export default function AgentTerminal({ agent }) {
       }
       sessionIdRef.current = result.id
       setStatus('ready')
-      setAutoAnswer(initialAutoAnswer)
 
       unsubData = window.cpi.terminal.onData(({ id, chunk }) => {
         if (id === sessionIdRef.current) term.write(chunk)
@@ -197,13 +194,6 @@ export default function AgentTerminal({ agent }) {
     window.cpi.terminal.setAutoAnswer(sessionIdRef.current, next)
   }
 
-  // Manual escape hatch: submits the already-selected "1. Yes" option
-  // directly, independent of whether prompt detection fired. Useful the
-  // moment a prompt is visibly stuck, regardless of the auto-answer toggle.
-  function approveNow() {
-    if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, '\r')
-  }
-
   return (
     <div className="flex-1 min-h-0 flex flex-col relative">
       {(status === 'error' || status === 'exited') && (
@@ -221,12 +211,6 @@ export default function AgentTerminal({ agent }) {
                 ? 'border-accent/40 bg-accent/20 text-accent'
                 : 'border-border text-muted hover:bg-border'}`}>
             {autoAnswer ? '🛡️ Auto-approve: On' : '🛡️ Auto-approve: Off'}
-          </button>
-          <button
-            onClick={approveNow}
-            title="Immediately confirm 'Yes' on whatever permission prompt is currently showing"
-            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
-            ✅ Approve now
           </button>
         </div>
       )}

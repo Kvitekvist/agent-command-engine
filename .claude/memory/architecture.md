@@ -278,10 +278,15 @@ interactively — replacing what AgentPane used to render as a headless
   bridge) whenever the Windows build is ≥ 18309 (Windows 10 1903+/Windows
   11) and `ptyHost.js` doesn't override `useConpty` — confirmed via
   node-pty's own `WindowsPtyAgent` default logic, not just assumed.
-- **Auto-answer permission prompts (TICKET-0038), a global Settings
-  toggle** (`auto_accept_permissions`, loaded per-session by
-  `AgentTerminal.jsx` and passed to `TerminalService.spawn`/`ptyHost.js`'s
-  `spawnSession`): when on, `ptyHost.js` watches each session's raw PTY
+- **Auto-answer permission prompts (TICKET-0038/0039), a purely per-agent
+  live toggle** — the 🛡️ Auto-approve pill on each running agent's terminal
+  card (`AgentTerminal.jsx`), flipped via `window.cpi.terminal.setAutoAnswer
+  (id, enabled)` → `TerminalService.setAutoAnswer` → `ptyHost.js`'s
+  `setAutoAnswer`. No spawn-time parameter, no global Settings toggle
+  (removed in TICKET-0039's follow-up) — every session starts off, and
+  turning the pill on acts immediately, including on a prompt already on
+  screen (it checks the session's already-accumulated buffer, not just
+  future chunks). When on, `ptyHost.js` watches the session's raw PTY
   output for a real Claude/Codex CLI permission prompt and auto-confirms
   it, for models/setups that don't support `--dangerously-skip-permissions`.
   The real prompt is an **Ink-rendered TUI menu**, not plain text — e.g.
@@ -298,17 +303,37 @@ interactively — replacing what AgentPane used to render as a headless
   shipped broken twice the same day). `ptyHost.js`'s `stripAnsi()`
   reconstructs approximate visible text from a rolling 4000-char raw
   buffer (cursor-forward → space, cursor-position → newline, other
-  CSI/OSC dropped), then matches `/❯\s*1\.\s*Yes\b/i` — the
+  CSI/OSC dropped), then matches `/[❯>]\s*1\.\s*\S/` — the
   selection-arrow-plus-default-option marker common to every one of these
-  Ink prompts (workspace-trust dialog included) — and responds with a
-  plain `\r` (Enter, confirming the pre-selected "Yes"; there's no
-  `(y/n)` text field, so a literal `y` keystroke would do nothing). 200ms
-  debounce and a buffer clear after each match prevent double-answering.
-  Live-verified end-to-end in a second, fully isolated ACE instance
-  (separate `--user-data-dir`, so the real `cpi.db` was never touched):
-  both the workspace-trust dialog and repeated WebFetch permission
-  prompts were auto-confirmed with zero manual input while an agent
-  fetched real Oslo weather data from yr.no.
+  Ink prompts (workspace-trust dialog included), matching either glyph
+  Ink might render it as (see below) and any first-option wording, not
+  just "Yes" — and responds with a plain `\r` (Enter, confirming the
+  pre-selected option; there's no `(y/n)` text field, so a literal `y`
+  keystroke would do nothing), verified-and-retried up to twice (~600ms
+  apart) in case the keystroke didn't land. 200ms debounce and a buffer
+  clear after each match prevent double-answering.
+
+  **Three real bugs found across two tickets before this actually worked
+  live**, worth remembering as a pattern: (1) TICKET-0038 originally
+  guessed a plain-text `(y/n)` format the CLI never prints. (2) TICKET-0039
+  found the pattern was hardcoded to the literal word "Yes" — a real
+  browser-tool permission prompt read `❯ 1. Allow` instead; fixed by
+  matching the selection-arrow marker structurally, any wording. (3) Still
+  failed live for the *original* "Yes" case with the fix in place — the
+  real Electron-forked `ptyHost` process's spawn environment renders Ink's
+  selection arrow as a plain ASCII `>`, not the fancy Unicode `❯`, while a
+  standalone test harness spawning the same CLI differently got the fancy
+  glyph (other Unicode in the same buffer rendered fine, so not a blanket
+  encoding issue — specifically that one Ink indicator's fallback choice).
+  Found by adding temporary file-based debug logging to `ptyHost.js` and
+  reading it directly after asking the user to reproduce once in their own
+  already-open app — live-spawning a fresh unattended test agent, and
+  separately a PowerShell-based attempt to drive the user's open app via
+  simulated OS input, were both blocked by Claude Code's own auto-mode
+  safety classifier and correctly not routed around (see TICKET-0039).
+  Live-verified end-to-end by the user directly with the fix in place: a
+  single initial prompt drove a real WebFetch, Web Search, second Fetch,
+  and local save to completion with zero manual clicks.
 
 ### Screenshots (TICKET-0034, reworked from TICKET-0032)
 Interactive drag-to-select screen capture, saved into the active project's

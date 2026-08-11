@@ -17,24 +17,21 @@ export default function SettingsView() {
   const [provider, setProvider]                   = useState('claude')
   const [fallbackEnabled, setFallbackEnabled]     = useState(true)
   const [threshold, setThreshold]                 = useState('100000')
-  const [autoAcceptPermissions, setAutoAcceptPermissions] = useState(false)
   const [analyzing, setAnalyzing]                 = useState(false)
   const [saved, setSaved]                         = useState(false)
 
   useEffect(() => {
     async function load() {
-      const [m, p, f, t, a] = await Promise.all([
+      const [m, p, f, t] = await Promise.all([
         window.cpi.getSetting('default_model'),
         window.cpi.getSetting('default_provider'),
         window.cpi.getSetting('codex_fallback_enabled'),
         window.cpi.getSetting('claude_credit_threshold'),
-        window.cpi.getSetting('auto_accept_permissions'),
       ])
       if (m) setDefaultModel(m)
       if (p) setProvider(p)
       if (f !== null) setFallbackEnabled(f === 'true')
       if (t) setThreshold(t)
-      if (a !== null) setAutoAcceptPermissions(a === 'true')
     }
     load()
   }, [])
@@ -45,7 +42,6 @@ export default function SettingsView() {
       window.cpi.setSetting('default_provider', provider),
       window.cpi.setSetting('codex_fallback_enabled', String(fallbackEnabled)),
       window.cpi.setSetting('claude_credit_threshold', threshold),
-      window.cpi.setSetting('auto_accept_permissions', String(autoAcceptPermissions)),
     ])
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -89,25 +85,6 @@ export default function SettingsView() {
               </button>
             ))}
           </div>
-        </div>
-
-        <div>
-          <label className="text-xs text-muted block mb-2">Permission Prompts</label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div
-              onClick={() => setAutoAcceptPermissions((v) => !v)}
-              className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer
-                ${autoAcceptPermissions ? 'bg-accent' : 'bg-border'}`}
-            >
-              <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform
-                ${autoAcceptPermissions ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </div>
-            <span className="text-sm text-gray-200">Auto-answer permission prompts</span>
-          </label>
-          <p className="text-xs text-muted mt-1.5">
-            Automatically responds "yes" to all permission prompts in agent terminals.
-            Useful for models that don't support --dangerously-skip-permissions flag (like claude-sonnet-4-5 via Vertex AI).
-          </p>
         </div>
 
         <button onClick={saveSettings} className="btn-primary text-xs">

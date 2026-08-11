@@ -15,39 +15,30 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
-* TICKET-0039 (open): auto-answer permission prompts was still hanging live
-  after TICKET-0038 closed itself as "fully live-verified" — user reported
-  it directly with a screenshot, then again after a restart with the first
-  fix in place. Two stacked bugs, the second one the real explanation:
-  (1) spawn-time-only setting application plus no retry on a dropped
-  keystroke — fixed with a live per-session toggle (`ptyHost.js`
-  `setAutoAnswer`, no relaunch needed), verify-and-retry, and a manual
-  "✅ Approve now" escape hatch; (2) the detection pattern itself
-  (`/❯\s*1\.\s*Yes\b/i`) was hardcoded to the literal word "Yes" and
-  silently missed every other permission-prompt wording — found via a
-  purpose-built harness that forks the real `ptyHost.js` and drives a real
-  unattended `claude` session, which hit a "❯ 1. Allow" browser-tool
-  prompt the old pattern couldn't match. Broadened to `/❯\s*1\.\s*\S/`
-  (match the ❯ marker structurally, any wording) and offline-verified
-  against the real captured bytes — see ticket_memory.md for the full
-  story. **Left open, not closed** — this is the second time this exact
-  feature was marked verified without a check that held up, and a full
-  live end-to-end rerun of fix #2 is still outstanding: the harness got
-  blocked by Claude Code's own auto-mode safety classifier (unattended
-  agent spawn with real tool/browser permissions) across three different
-  invocation approaches, a boundary correctly left un-routed-around rather
-  than bypassed. Needs a human-supervised live run (flip the pill on a
-  running agent, or launch fresh, and watch a real non-WebFetch permission
-  prompt resolve with zero manual clicks) to actually close.
-  A reusable raw-CDP driving script (no new dependencies, see
-  architecture.md's Gotchas) exists as a technique for exactly this kind of
-  live-in-app verification — it isn't saved anywhere in the repo (built ad
-  hoc in a scratch dir a prior session), but is cheap to rebuild. Note it
-  wasn't used this time; the new node-pty-fork harness (also not saved in
-  the repo, lived in the session's scratchpad) is a lighter-weight
-  alternative for this specific ptyHost.js-level testing, though it hits
-  the same classifier boundary the CDP approach likely would too for any
-  scenario requiring a real unattended agent to actually use tools.
+* TICKET-0039 (closed 2026-08-11): auto-answer permission prompts, fixed and
+  **live-verified end-to-end by the user directly** — a single initial
+  prompt drove a real WebFetch, Web Search, second Fetch, and local save to
+  completion with zero manual clicks. Three stacked bugs across two passes
+  the same day, the third one the actual explanation for the user's
+  original screenshot: (1) spawn-time-only setting + no retry on a dropped
+  keystroke, (2) detection pattern hardcoded to the literal word "Yes"
+  (missed a real "❯ 1. Allow" browser-tool prompt), (3) the real app
+  renders the selection arrow as plain ASCII `>`, not the fancy Unicode `❯`
+  fix #2 still required — found by reading file-based debug logging after
+  the user reproduced it live in their own already-open app, since a
+  live-agent-spawn test harness and a PowerShell desktop-automation attempt
+  were both correctly blocked by Claude Code's own auto-mode safety
+  classifier (see feedback_safety_classifier_is_a_real_boundary.md in
+  user-scope memory). Pattern now matches both glyphs. Per follow-up user
+  requests once confirmed working: removed the manual "Approve now" button,
+  removed the global Settings toggle entirely (auto-answer is now purely a
+  per-agent live pill, off by default, no spawn-time setting at all), and
+  removed the Safe/Guarded/Auto permission-mode selector (new agents launch
+  fixed at `safe`). Full story in ticket_memory.md. Worth remembering
+  generally: a detection pattern captured against one real example doesn't
+  generalize until tested against more than one real prompt shape or
+  rendering mode — this happened three times on one feature before it
+  actually held up under live testing.
 * TICKET-0031 (in-chat model switcher, promoted from `WISHLIST.md`) is the
   only open ticket not yet started — everything else open is implemented
   and committed, awaiting only manual verification (see below) or, for

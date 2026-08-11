@@ -14,19 +14,21 @@ const CLAUDE_MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-5','claude-s
 // 2026-08-09, codex-cli 0.147.0) -- like CLAUDE_MODELS above, expect these
 // to go stale as Codex ships new models and need a manual refresh.
 const CODEX_MODELS  = ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna']
-const PERMISSION_MODES = [
-  { id: 'safe', label: '🔒 Safe',    title: 'Safe — file tools only (Read/Edit/Write/Glob/Grep). No shell access at all.' },
-  { id: 'ask',  label: '🛡️ Guarded', title: 'Guarded — shell access allowed, but rm, sudo, and Remove-Item are blocked automatically. Claude CLI can\'t pause to ask a human when run headlessly, so this is a fixed policy, not a live prompt.' },
-  { id: 'auto', label: '⚡ Auto',    title: 'Auto — dangerously-skip-permissions, all tools allowed, nothing blocked.' },
-]
+// TICKET-0039: the Safe/Guarded/Auto selector was removed from the launch
+// bar now that auto-answer permission prompts (see AgentTerminal.jsx) works
+// live -- Safe's restrictive allowedTools plus a working auto-approve
+// covers the same ground without asking the user to pick a tier upfront.
+// Fixed at 'safe' rather than 'auto' (--dangerously-skip-permissions)
+// deliberately: that would bypass the CLI's own permission system entirely
+// instead of relying on this app auto-confirming it.
+const PERMISSION_MODE = 'safe'
 
 export default function AgentView() {
   const { activeProject, agents, removeAgent } = useStore()
-  const [label, setLabel]                   = useState(() => generateAgentName())
-  const [provider, setProvider]             = useState('claude')
-  const [model, setModel]                   = useState('claude-sonnet-5')
-  const [permissionMode, setPermissionMode] = useState('safe')
-  const [launching, setLaunching]           = useState(false)
+  const [label, setLabel]         = useState(() => generateAgentName())
+  const [provider, setProvider]   = useState('claude')
+  const [model, setModel]         = useState('claude-sonnet-5')
+  const [launching, setLaunching] = useState(false)
 
   // `agents` (the store) holds every agent across every project visited
   // this session, not just the active one -- see the render below and
@@ -39,7 +41,7 @@ export default function AgentView() {
     if (!activeProject) return
     setLaunching(true)
     try {
-      await window.cpi.startAgent({ projectId: activeProject.id, projectPath: activeProject.path, label, provider, model, permissionMode })
+      await window.cpi.startAgent({ projectId: activeProject.id, projectPath: activeProject.path, label, provider, model, permissionMode: PERMISSION_MODE })
       const existingLabels = useStore.getState().agents
         .filter((a) => a.projectId === activeProject.id)
         .map((a) => a.label)
@@ -138,14 +140,6 @@ export default function AgentView() {
           ))}
         </div>
         <ModelSelector models={models} value={model} onChange={setModel} />
-        <div className="flex rounded overflow-hidden border border-border text-xs">
-          {PERMISSION_MODES.map((m) => (
-            <button key={m.id} title={m.title} onClick={() => setPermissionMode(m.id)}
-              className={'px-3 py-1.5 transition-colors ' + (permissionMode === m.id ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
-              {m.label}
-            </button>
-          ))}
-        </div>
         <button onClick={launchAgent} disabled={launching} className="btn-primary ml-auto text-xs">
           {launching ? 'Launching…' : '+ New Agent'}
         </button>

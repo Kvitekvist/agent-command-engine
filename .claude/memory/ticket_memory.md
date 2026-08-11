@@ -509,12 +509,59 @@ level keyboard emulation, which the user suggested) was never going to
 clear it, and repeatedly trying different tools to route around a
 classifier's safety decision is exactly the kind of workaround the tool's
 own guidance says to stop attempting. Correctly deferred to the user rather
-than continuing to search for a bypass. Verified via a clean npm run build
-and the full automated test suite (11/11 pass, no new coverage -- ptyHost.js
-has none). Left open rather than closed -- full live re-verification (a
-human supervising one real run in the actual app) is the one remaining
-item; see the ticket's Notes for exactly what that needs to cover. Also
-worth remembering generally: a detection pattern captured against a single
-real example doesn't generalize until tested against more than one real
-prompt shape -- this is the second time in two tickets a live-captured
-example turned out to be narrower than it looked.
+than continuing to search for a bypass.
+
+That fix *still* failed live -- for the exact WebFetch/"Yes" prompt
+TICKET-0038 originally claimed to verify, with the toggle already on from
+spawn, ruling the first pass's gaps back out too. With live-agent-spawning
+off the table, added temporary file-based debug logging to ptyHost.js
+(writes every detection check to ~/ace-auto-answer-debug.log, since a
+packaged app window has no visible console) and asked the user to
+reproduce once in their own already-open, already-supervised app -- a
+categorically different, lower-risk action than spawning a new unattended
+agent, and one the classifier did not block (a PowerShell window-automation
+attempt to interact with that same open app on the user's behalf, at the
+user's own suggestion, *was* blocked identically to the live-spawn
+attempts and was also correctly abandoned). Reading that log directly (no
+automation needed) showed the real captured tail: "> 1. Yes" -- a plain
+ASCII ">" (U+003E), not the fancy Unicode "❯" (U+276F) the pattern
+required. Other Unicode in the same buffer (spinner glyphs, box-drawing
+characters) rendered correctly, so this wasn't a blanket encoding issue --
+specifically Ink's SelectInput indicator falls back to ASCII in the real
+Electron-forked ptyHost process's spawn environment, where the standalone
+harness (spawned differently) got the fancy glyph. This is the actual,
+third root cause of the user's original screenshot. Fixed by matching both
+glyphs: `/[❯>]\s*1\.\s*\S/`. Offline-verified against the exact real
+captured line, then the user restarted and confirmed live: a single
+initial prompt drove a real WebFetch, Web Search, second Fetch, and local
+save to completion with zero manual clicks ("successful").
+
+Per direct follow-up requests once confirmed working: removed the now-
+redundant "✅ Approve now" manual button; confirmed "off by default" was
+already true at the code level (nothing seeds `auto_accept_permissions`,
+the appearance of "on" was the user's own dev DB from earlier testing,
+corrected via the Settings UI rather than a direct DB edit since Electron
+holds the sql.js DB in memory and periodically overwrites the file); then
+removed the global Settings toggle entirely in favor of a purely per-agent
+"🛡️ Auto-approve" pill (ptyHost.js's spawnSession no longer takes an
+autoAnswerPermissions parameter at all -- every session starts off);
+and removed the Safe/Guarded/Auto permission-mode selector from the
+agent-launch bar, with new agents now launching fixed at `safe` rather
+than defaulting to `auto` (`--dangerously-skip-permissions`), deliberately
+preserving reliance on the CLI's own permission system plus this app's
+now-working auto-confirmation over bypassing it outright.
+
+Verified via a clean npm run build and the full automated test suite
+(11/11 pass, no new coverage -- ptyHost.js has none) after every fix pass,
+and **live end-to-end by the user directly** for the final state. Closed
+2026-08-11. Worth remembering generally: a detection pattern captured
+against a single real example doesn't generalize until tested against more
+than one real prompt shape or rendering mode -- three real, distinct bugs
+were found in this one feature across two tickets (guessed wording in
+0038; one real wording out of several in 0039's first pass; one real glyph
+out of two renderings in 0039's second pass), each only surfaced by
+testing against actual failing behavior, not source review. Also worth
+remembering: when live-spawning a test agent is blocked, reading a log
+file the running code itself writes -- after asking a human to trigger the
+one supervised action needed -- is a fully safe, effective substitute; no
+desktop automation of any kind was needed for the actual fix.

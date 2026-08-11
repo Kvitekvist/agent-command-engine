@@ -49,29 +49,37 @@ function stripAnsi(s) {
     .replace(/\x1b[>=]/g, '')
 }
 
-// TICKET-0039: matching the literal word "Yes" was the real bug behind
-// this ticket. Live-tested via a harness that forks this exact file and
-// drives a real `claude` session (see scratchpad -- not checked in): asking
-// an agent to fetch yr.no weather led it to use a browser tool instead of
-// WebFetch, whose permission prompt reads
-//   Claude in Chrome wants to create a browser window and read your tabs
-//   ❯ 1. Allow
-//     2. Deny (esc)
-// -- "Allow", not "Yes". Bash commands, file writes, MCP tools, etc. each
-// have their own first-option wording too; hardcoding one guessed word
-// ("Yes", inherited from TICKET-0038) was exactly the same mistake
-// TICKET-0038 itself diagnosed in the pre-0038 version, just one level
-// deeper. The actual reliable signal was already identified correctly --
-// the ❯ selection-arrow glyph is Ink's SelectInput component marking the
-// currently-highlighted option, and isn't something the assistant's own
-// prose ever emits -- it just needs to not also require specific text
-// after "1.". Option 1 is consistently the pre-selected, least-destructive
-// choice (confirmed against "Yes"/"No" and "Allow"/"Deny" so far), so
-// matching the structural marker alone and still responding with a plain
-// Enter (confirm-current-selection, no digit typed) generalizes correctly
-// to every prompt of this shape instead of just the one wording that
-// happened to get captured first.
-const PERMISSION_PROMPT_PATTERN = /❯\s*1\.\s*\S/
+// TICKET-0039: matching the literal word "Yes" was one real bug behind this
+// ticket (see the ❯ + wording history below), but broadening to "any text
+// after ❯ 1." still failed live in the actual app for the exact "Yes"
+// prompt TICKET-0038 originally tested. Root-caused via file-based debug
+// logging read directly from a live, user-reproduced session
+// (~/ace-auto-answer-debug.log): the real captured tail was
+//   "               > 1. Yes\n   2. Yes, and don't ask again..."
+// -- a plain ASCII ">" (U+003E), not the fancy Unicode "❯" (U+276F) arrow
+// this pattern required. Other Unicode in the same buffer (spinner glyphs,
+// box-drawing characters) rendered fine, so this isn't a blanket encoding
+// problem -- it's specifically Ink's SelectInput indicator choosing an
+// ASCII fallback in the real Electron-forked ptyHost process's spawn
+// environment, where a standalone test harness spawning the same CLI
+// directly (used to diagnose the "Yes" vs "Allow" wording bug below) got
+// the fancy glyph. Rather than chase the exact terminal-capability check
+// Ink's SelectInput runs (fragile, could change across CLI versions),
+// matching both glyphs sidesteps the question entirely.
+//
+// Original history: the ❯/❯-plus-"Yes" reasoning is still correct as far
+// as it goes -- it's Ink's SelectInput component marking the currently-
+// highlighted option, not something the assistant's own prose emits, and
+// option 1 is consistently the pre-selected, least-destructive choice
+// (confirmed against "Yes"/"No" and "Allow"/"Deny"). Hardcoding one word
+// ("Yes", inherited from TICKET-0038) was the same mistake TICKET-0038
+// itself diagnosed in the pre-0038 version, just one level deeper -- found
+// live via a harness that forks this exact file and drives a real `claude`
+// session: asking an agent to fetch yr.no weather led it to a browser tool
+// instead of WebFetch, whose prompt read "❯ 1. Allow / 2. Deny (esc)", not
+// "Yes". Matching the marker structurally (any text after "1.") fixed
+// that, but not the ❯-vs-> rendering gap found afterward.
+const PERMISSION_PROMPT_PATTERN = /[❯>]\s*1\.\s*\S/
 
 // TICKET-0039: TICKET-0038's detection pattern (above) was correct, but the
 // setting was only ever read once, at spawn time (AgentTerminal.jsx), and
@@ -150,7 +158,12 @@ function setAutoAnswer(id, enabled) {
   }
 }
 
-function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
+// TICKET-0039: auto-answer is never set at spawn time -- every session
+// starts with it off (see AgentTerminal.jsx) and it's only ever turned on
+// afterward via setAutoAnswer(), through the per-agent 🛡️ Auto-approve
+// pill. Silently auto-confirming every permission prompt shouldn't be the
+// default for a freshly launched agent.
+function spawnSession({ id, shell, cwd, cols, rows }) {
   if (sessions.has(id)) {
     return { success: false, error: `Session ${id} already exists` }
   }
@@ -167,11 +180,6 @@ function spawnSession({ id, shell, cwd, cols, rows, autoAnswerPermissions }) {
     })
     sessions.set(id, proc)
     getAutoAnswerState(id)
-
-    // Track auto-answer setting for this session
-    if (autoAnswerPermissions) {
-      autoAnswerEnabled.set(id, true)
-    }
 
     proc.onData((chunk) => {
       // Raw rolling buffer to detect prompts split across chunks -- kept

@@ -128,7 +128,6 @@ class TerminalService {
           cwd: opts.cwd,
           cols: opts.cols,
           rows: opts.rows,
-          autoAnswerPermissions: opts.autoAnswerPermissions,
         })
       } catch (error) {
         this.pendingSpawns.delete(id)

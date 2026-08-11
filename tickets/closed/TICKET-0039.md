@@ -82,6 +82,75 @@ live run** (no new agent spawned): the old pattern doesn't match that real
 text, the new one does. See Notes for why a second live end-to-end rerun
 wasn't completed.
 
+### Third, actual root cause — found live, in the real app, by the user (same day)
+
+Fix #2 still failed live in the real app, for the *exact* WebFetch/"Yes"
+prompt TICKET-0038 originally claimed to have verified — with the toggle on
+from spawn, ruling fix #1's gap back out too. Added file-based diagnostic
+logging to `ptyHost.js` (writes every detection check to
+`~/ace-auto-answer-debug.log`, since a packaged app window has no visible
+console) rather than attempting another live-spawn test — the classifier
+boundary from fix #2 made that the only viable path. Asked the user to
+reproduce once through their own already-open, already-supervised app, then
+read the log directly.
+
+The real captured tail, at the exact moment the prompt was on screen and
+unanswered:
+
+```
+               > 1. Yes
+   2. Yes, and don't ask again for www.yr.no
+ 3. No, and tell Claude what to do differently (esc)
+```
+
+A plain ASCII `>` (U+003E), not the fancy Unicode `❯` (U+276F) `PERMISSION_PROMPT_PATTERN`
+required. Other Unicode in the same buffer (spinner glyphs, box-drawing
+characters) rendered correctly, so this wasn't a blanket encoding issue —
+specifically Ink's `SelectInput` indicator falls back to ASCII in this
+process's spawn environment (the real Electron-forked `ptyHost`), where the
+standalone harness used for fix #2 (spawned differently) got the fancy
+glyph. Root cause of *that* rendering difference wasn't chased further —
+matching both glyphs sidesteps it regardless of cause or future CLI
+changes: `PERMISSION_PROMPT_PATTERN` is now `/[❯>]\s*1\.\s*\S/`.
+
+Rebuilt, offline-verified against the exact real captured line (matches),
+then the user restarted and reproduced the full flow live: WebFetch, a Web
+Search, a second Fetch, and a local save all completed with the initial
+prompt only — **zero manual clicks, "Approve now" not needed.** Confirmed
+by the user directly ("successful").
+
+Also removed the now-unneeded **✅ Approve now** button (the working
+🛡️ Auto-approve toggle is sufficient) and the Safe/Guarded/Auto permission-
+mode selector on the agent-launch bar (`AgentView.jsx`) — with auto-answer
+actually working, Safe mode's restrictive `allowedTools` plus a working
+auto-approve covers the same ground without asking the user to pick a tier
+upfront; new agents launch fixed at `safe` (deliberately not `auto`, which
+would bypass the CLI's own permission system via
+`--dangerously-skip-permissions` instead of relying on this app to confirm
+it).
+
+### Follow-up cleanup, same session
+
+Two more direct user requests once the fix was confirmed working:
+
+1. **"Make sure auto-approve is off by default."** Already true at the code
+   level — `auto_accept_permissions` was never seeded anywhere, so an unset
+   value already read as `false` everywhere. The only reason it looked "on
+   by default" was that the user's own dev database already had it saved as
+   `'true'` from earlier testing; that's stored state, not a code default,
+   and needed a manual toggle-off in Settings (the app's own write path) to
+   correct rather than a direct DB edit — Electron holds the sql.js database
+   in memory and periodically overwrites the file, so an external edit
+   while it's running risks being silently clobbered.
+2. **"We can remove this button too from settings, we only need it per
+   agent."** Removed the global Settings toggle entirely (`SettingsView.jsx`)
+   — auto-answer is now purely a live, per-agent runtime control via the
+   🛡️ pill, with no spawn-time setting at all. Every new terminal session
+   starts with it off; `ptyHost.js`'s `spawnSession()` no longer accepts an
+   `autoAnswerPermissions` parameter (removed as dead code once nothing
+   passed it anymore), and `TerminalService.spawn()`/`AgentTerminal.jsx`
+   were simplified to match.
+
 ---
 
 ## Implementation Plan
@@ -109,7 +178,14 @@ wasn't completed.
       word "Yes" to the structural `❯` + `1.` marker alone
 * [x] Offline-verify the broadened pattern against the real captured prompt
       text from the live run (no new agent spawned)
-* [ ] Full live end-to-end re-run with the fix in place — blocked; see Notes
+* [x] Full live end-to-end re-run with the fix in place — completed by the
+      user directly after finding and fixing the third root cause (❯ vs
+      plain `>`); see "Third, actual root cause" above
+* [x] Add temporary file-based diagnostic logging to `ptyHost.js`, read
+      directly after a user-supervised reproduce, then remove it once the
+      real bug was found
+* [x] Remove the ✅ Approve now button and the Safe/Guarded/Auto selector
+      now that auto-answer actually works live (user request, same day)
 
 ---
 
@@ -120,35 +196,45 @@ wasn't completed.
 - `src/main/ipc/handlers.js`
 - `src/main/preload.js`
 - `src/renderer/components/AgentTerminal.jsx`
+- `src/renderer/views/AgentView.jsx` (removed permission-mode selector)
+- `src/renderer/views/SettingsView.jsx` (removed global auto-answer toggle)
 - `AUTO_ACCEPT_PERMISSIONS_IMPLEMENTATION.md`
 
 ---
 
 ## Testing
 
-- [x] `npm test` (existing suite)
-- [x] `npm run build`
-- [ ] Live: toggle the new per-agent pill on an already-running agent sitting
-      on a real unanswered prompt, confirm it resolves without relaunching
-- [ ] Live: click "Approve" manually and confirm it submits "1. Yes"
+- [x] `npm test` (existing suite, 11/11, re-run after every fix pass)
+- [x] `npm run build` (clean after every fix pass)
+- [x] Live, user-confirmed: full prompt → auto-answered WebFetch → Web
+      Search → second Fetch → local save, zero manual clicks, single
+      initial prompt only ("successful")
 
 ---
 
 ## Result
 
-Two fixes landed, both needed:
-1. Live per-session toggle + verify-and-retry (the original plan above)
-2. The actual reported failure's root cause: `PERMISSION_PROMPT_PATTERN`
-   only matched prompts worded "Yes", found via a live harness and fixed by
-   matching the ❯ selection-arrow structurally instead of specific text
+Three stacked fixes, all needed to actually resolve the user's original
+report:
+1. Live per-session toggle + verify-and-retry, so the setting doesn't need
+   a relaunch to take effect
+2. Detection pattern broadened from the literal word "Yes" to the ❯
+   selection-arrow marker structurally (found via a standalone harness
+   driving a real unattended `claude` session)
+3. **The actual root cause of the original screenshot:** the real app
+   renders Ink's selection arrow as a plain ASCII `>`, not the fancy `❯`
+   fix #2 still required — found by reading file-based debug logging after
+   the user reproduced it live in their own already-open app. Pattern now
+   matches both.
 
-`npm run build` and `npm test` (11/11) both clean, including after the
-pattern broadening. Left **Open** rather than closed. Live re-verification
-of fix #2 is incomplete — see Notes for exactly why and what would close it.
+Plus, per direct user request once auto-answer was confirmed working: the
+✅ Approve now button and the Safe/Guarded/Auto permission-mode selector
+were removed as no longer necessary.
 
-The main-process files touched (`ptyHost.js`, `TerminalService.js`,
-`handlers.js`, `preload.js`) mean the running app needs a restart to pick
-this up.
+`npm run build` and `npm test` (11/11) both clean after every pass. **Live
+end-to-end confirmed by the user directly** — the full weather-fetch flow
+(WebFetch, Web Search, a second Fetch, a local save) completed from a single
+initial prompt with zero manual clicks.
 
 ---
 
@@ -191,16 +277,30 @@ unmodified bytes offline (`node verify-fix-offline.js` against the saved
 is real evidence, not a guess, but it's not the same thing as watching a
 full prompt→auto-answer→tool-runs→data-returned cycle complete live.
 
-**To actually close this ticket:** a human (the user) needs to supervise one
-live run in the real app — restart ACE (already rebuilt), launch a fresh
-agent with the 🛡️ Auto-approve toggle on (or flip it live on an
-already-running one), give it a prompt that's likely to hit a non-WebFetch
-permission prompt (a browser/MCP tool request reproduced it reliably; a
-Bash-command request would too), and confirm it resolves with zero manual
-clicks — including "Approve now" being unnecessary.
+**Resolution:** exactly this happened. The user reproduced live in their own
+already-open, already-supervised app; file-based debug logging (read
+directly, no automation needed) surfaced the real root cause (❯ vs `>`) in
+one pass; the fix was confirmed live by the user immediately after. Worth
+remembering alongside the classifier note above: when live-spawning a test
+agent is off the table, reading a log file the running code itself writes —
+after asking a human to trigger the one supervised action needed — is a
+fully safe, effective substitute. No desktop automation of any kind was
+needed or used for the actual fix; two earlier attempts at that (PowerShell
+window automation, at the user's suggestion to try OS-level input) were
+also correctly blocked by the same classifier and abandoned per the same
+reasoning as the live-agent-spawn blocks.
+
+Three real bugs found in one feature across two tickets (TICKET-0038,
+TICKET-0039) is worth internalizing as a pattern, not just a one-off: a
+detection strategy built from a single captured example — however real —
+tends to be narrower than it looks, whether that's guessed wording (0038),
+one real wording out of several (0039 fix #2), or one real glyph out of two
+renderings (0039 fix #3). Live testing against the actual failure, not just
+plausible-sounding source review, is what actually closes that gap.
 
 ---
 
 ## Closed
 
-(pending)
+2026-08-11. Live-verified end-to-end by the user in the real app; see
+Result and Testing above.
