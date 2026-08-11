@@ -749,4 +749,25 @@ holds a `github_token` PAT with write access -- run the release with `GH_TOKEN=<
 gh release create ...`, which overrides the keyring auth for that one command
 without changing logged-in accounts. release.bat's plain `gh release create`
 would fail here for the same reason; use the GH_TOKEN override until gh is
-logged in as an account with write.
+logged in as an account with write. (TICKET-0046 wired this override into
+release.bat itself.)
+
+TICKET-0046
+2026-08-11
+Wired the TICKET-0045 GH_TOKEN workaround into scripts/release.bat so the whole
+release pipeline works on this machine unattended. After reading the version,
+release.bat now reads the repo-root `.env` and, if it finds a `GH_TOKEN` or
+`github_token` line, sets GH_TOKEN for the batch process (setlocal-scoped, never
+printed) before the gh release step -- overriding gh's keyring auth (the
+Schibsted work account that lacks write on Kvitekvist/agent-command-engine)
+without changing logged-in accounts. Git push/commit/tag were already fine (SSH
+key). Discovered while testing that the actual `.env` key is `GH_TOKEN`, not the
+`github_token` the user quoted in chat -- so the parse matches BOTH spellings
+(case-insensitive). Verified the parse in cmd against the real .env (GH_TOKEN
+defined, 93 chars -- a github_pat length -- value never echoed); the gh path
+itself was already proven live in TICKET-0045 with this same PAT. Full pipeline
+not re-run end-to-end (0.1.3 is already released; a re-run would just re-clobber
+the same assets). So: yes, `scripts\release.bat` can now be run for the next
+version bump and will compile, commit, push, tag, and publish the GitHub release
+with the exes attached, using the .env token automatically. If .env has no
+token, it falls back to gh login and prints which path it took.

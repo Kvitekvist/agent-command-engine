@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `scripts/release.bat` now loads a `GH_TOKEN`/`github_token` PAT from the repo-root `.env` (if present) before the GitHub-release step, so the release publishes even when the logged-in `gh` account lacks write access to the repo. Git push/commit/tag are unaffected (they use SSH); the token is scoped to the batch process only and never printed (TICKET-0046)
+
 ## [0.1.3] - 2026-08-11
 
 ### Fixed

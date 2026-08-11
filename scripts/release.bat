@@ -31,6 +31,25 @@ set "TAG=v%VERSION%"
 
 if "%~1"=="" (set "MSG=Release %TAG%") else (set "MSG=%~1")
 
+REM --- Load GitHub token from .env for the gh release step ----
+REM  gh's logged-in account may lack write access to this repo; the
+REM  .env `github_token` PAT does. Setting GH_TOKEN overrides gh's
+REM  keyring auth for THIS process only (setlocal), without changing
+REM  the user's logged-in accounts. Git push/commit/tag use SSH and
+REM  are unaffected either way. If no token is found, gh falls back
+REM  to whatever it's logged in as.
+if exist "%ROOT%\.env" (
+    for /f "usebackq tokens=1,* delims==" %%a in ("%ROOT%\.env") do (
+        if /i "%%a"=="GH_TOKEN" set "GH_TOKEN=%%b"
+        if /i "%%a"=="github_token" set "GH_TOKEN=%%b"
+    )
+)
+if defined GH_TOKEN (
+    echo   GitHub auth: using github_token from .env
+) else (
+    echo   GitHub auth: no .env github_token found - using gh login
+)
+
 echo ============================================================
 echo  Releasing %TAG%
 echo  Message: %MSG%
