@@ -649,3 +649,39 @@ best-effort -- the full key stays visible on hover. Only UsageCard renders the
 projects breakdown (UsageBar doesn't), so that's the only UI touch. Unit test
 added for shortenWorkspace; `node --test tests/tokscale-service.test.js` -> 5
 pass.
+
+TICKET-0043
+2026-08-11
+Fixed the user's report "I am not able to fill in project name when I try to
+make a new project" (packaged app: the Sidebar's new-project name field
+silently ignored typing, while typing worked elsewhere e.g. an agent
+terminal). Root cause was NOT the renderer: the input (Sidebar.jsx:91) is a
+correct controlled input, and driving the real packaged v0.1.2 build over
+the Chrome DevTools Protocol proved it accepts focus + keys under every
+reproducible condition, including with a running agent's xterm mounted (the
+"terminal steals focus" theory was tested and disproven -- focus stayed on
+the input for 3+ seconds and typing still updated the value). CDP input
+bypasses the OS layer, so it couldn't reproduce the actual problem, which
+was OS-level: ACE had no app.requestSingleInstanceLock(), so a second
+(forgotten) ACE window could be open and Windows routed real keystrokes to
+whichever window held OS focus rather than the one being clicked in -- the
+front window's transient name field got nothing. User confirmed both
+discriminators: typing works elsewhere, and closing every ACE window and
+reopening exactly one fixes it. Fixed in src/main/index.js: acquire
+app.requestSingleInstanceLock() early; if not acquired, app.quit() and the
+whenReady body early-returns (so a losing second instance never creates a
+window or opens cpi.db); a second-instance handler restores/shows/focuses
+the existing mainWindow. Also closes the documented two-instances-one-cpi.db
+corruption risk. Verified: npm run build:main clean, npm test 12/12, and
+live -- launched two instances sharing one throwaway --user-data-dir (must
+SHARE a profile to contend, since the lock is keyed to userData; a separate
+--user-data-dir gets its own lock namespace, which is why the isolation
+testing trick still works): the first stayed alive and the second exited
+code 0 immediately with no startup output at all (hit app.quit() before
+whenReady). Diagnostic technique worth reusing for any "packaged behaves
+differently from dev" report: launch the packaged build with
+--remote-debugging-port + throwaway --user-data-dir, attach a raw CDP client
+(native WebSocket/fetch, no deps), inspect activeElement/elementFromPoint
+and inject Input.* events to prove whether the renderer is at fault; kill
+only that instance afterward via the PID owning the unique debug port, never
+a blanket taskkill (would kill the user's real app).

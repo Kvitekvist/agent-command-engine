@@ -29,6 +29,7 @@ A specialized Electron desktop application for managing Claude and OpenAI Codex 
 - **Model Selector** — dropdown to choose Claude or Codex model per agent
 - **Load Balancing** — automatically falls back to OpenAI Codex when Claude token usage exceeds a configurable hourly threshold
 - **Optimization Advisor** — one-click analysis of recent prompts with actionable suggestions for reducing token spend
+- **Single Window** — ACE runs as a single instance; launching it again focuses the already-open window instead of starting a second one, so keyboard input and the local database always have exactly one owner
 
 ---
 

@@ -34,6 +34,27 @@ let mainWindow = null
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
+// Single-instance lock (TICKET-0043). Without this, nothing stops a second
+// ACE launch from opening a competing window. When more than one window is
+// open, Windows routes keyboard input to whichever window holds OS focus —
+// not necessarily the one the user is clicking in — so keystrokes aimed at
+// the front window (e.g. the transient "new project" name field) silently
+// land in a different ACE window. It also means two instances write the
+// same on-disk cpi.db (DBService rewrites the whole file on every write),
+// a corruption risk. A second launch now just surfaces the existing window.
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -61,6 +82,10 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Lost the single-instance lock — the first instance is already running
+  // (and has been focused via 'second-instance' above). Do nothing here so
+  // this process never creates a window or opens cpi.db before app.quit().
+  if (!gotTheLock) return
   try {
     console.log('Initializing DBService...')
     await DBService.init()

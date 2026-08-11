@@ -11,6 +11,7 @@
 - Obsolete helper scripts: the Electron-binary download rescue kit (`download-electron.js`, `download-electron.ps1`, `fix-electron.bat`) — unreferenced by the working `npm install` setup flow, and the `.ps1` was broken (batch-style `goto`/labels invalid in PowerShell) — plus the separate `git_commit.bat` and `git_push.bat` (folded into `release.bat`; `git_push.bat` was also stale, falsely claiming no remote was configured) (TICKET-0041)
 
 ### Fixed
+- Couldn't type a name when creating a new project: the new-project name field silently ignored the keyboard while the rest of the app worked (typing into an agent terminal was fine). Root cause was that ACE had no single-instance lock, so a second (often forgotten) ACE window could be open, and Windows routes keystrokes to whichever window holds OS focus rather than the one being clicked in — so keystrokes aimed at the front window's transient name field landed in the other window instead. ACE is now single-instance: a second launch focuses the already-running window instead of opening a competing one. This also removes the risk of two instances writing the same on-disk `cpi.db` (TICKET-0043)
 - `npm run package` failed at the native-dependency rebuild step: electron-builder 24 invokes `npm rebuild node-pty --allow-scripts`, but npm 11 rejects that flag for project-scoped installs (`EALLOWSCRIPTS`). node-pty ships prebuilt binaries and never needed rebuilding, so the build now sets `npmRebuild: false` and packages the existing prebuilds directly (TICKET-0040)
 
 ## [0.1.2] - 2026-08-11

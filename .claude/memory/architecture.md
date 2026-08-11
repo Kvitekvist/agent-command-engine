@@ -530,6 +530,10 @@ platform-specific code paths are:
 - Renderer is pure UI — sends IPC requests, renders results
 - Every AI interaction is logged before and after (audit-first)
 - Claude and Codex implement the same provider interface
+- Single-instance (TICKET-0043): `index.js` acquires
+  `app.requestSingleInstanceLock()`; a second launch quits and focuses the
+  existing window via the `second-instance` handler, so exactly one process
+  ever owns the on-disk `cpi.db` and one window ever owns OS keyboard focus
 
 ---
 
@@ -571,11 +575,18 @@ platform-specific code paths are:
   gives it its own `cpi.db` (Electron's userData path, which is what
   `DBService`'s `path.join(app.getPath('userData'), 'cpi.db')` resolves
   from, is normally derived from the app name — `--user-data-dir` is a
-  native Electron/Chromium switch that overrides it directly), and there's
-  no `app.requestSingleInstanceLock()` anywhere in `index.js` blocking a
-  second process from running at all. Reusing the already-running Vite
-  server on 5173 for that second instance's renderer is fine (read-only,
-  same unchanged renderer code) as long as only `src/main/**` changed.
+  native Electron/Chromium switch that overrides it directly). Since
+  TICKET-0043 `index.js` holds an `app.requestSingleInstanceLock()`, so a
+  second launch **on the same userData profile** quits immediately and just
+  focuses the running window instead of starting a competing process. The
+  lock is keyed to the userData path, so a second instance launched with its
+  own `--user-data-dir` (the isolation trick above) gets its own lock
+  namespace and still runs fine — which is exactly why verifying the lock
+  itself requires launching two instances that *share* one throwaway
+  `--user-data-dir` so they actually contend for it. Reusing the
+  already-running Vite server on 5173 for that second instance's renderer is
+  fine (read-only, same unchanged renderer code) as long as only
+  `src/main/**` changed.
 - **A shell with `ELECTRON_RUN_AS_NODE=1` set breaks launching
   `electron.exe` as a real Electron app** — a session already running
   inside Claude Code (or any tool that forks Node via

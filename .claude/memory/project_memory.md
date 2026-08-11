@@ -15,6 +15,20 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
+* TICKET-0043 (closed 2026-08-11): fixed the user's "can't type the new-
+  project name" report. It was NOT a renderer bug — the input is correct and
+  the packaged build accepts keys fine when driven over CDP (proven, incl.
+  with a running agent's xterm; the "terminal steals focus" theory was
+  disproven). Real cause: no `app.requestSingleInstanceLock()`, so a second
+  ACE window could be open and Windows sent real keystrokes to whichever
+  window held OS focus, not the one being clicked. Now single-instance (a
+  second launch focuses the existing window); also closes the two-instances-
+  one-cpi.db corruption risk noted in [[architecture]] Gotchas. User
+  confirmed the discriminators (typing works elsewhere; one-window fixes it);
+  build clean, tests 12/12, lock verified live with two shared-profile
+  launches. **Still worth a user confirmation in their own normal workflow**
+  (i.e. that they no longer end up unable to type after their usual multi-
+  window habits) once they run a build containing this fix.
 * TICKET-0039 (closed 2026-08-11): auto-answer permission prompts, fixed and
   **live-verified end-to-end by the user directly** — a single initial
   prompt drove a real WebFetch, Web Search, second Fetch, and local save to
