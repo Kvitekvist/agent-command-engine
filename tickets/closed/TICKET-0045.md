@@ -50,7 +50,9 @@ correct move.
 * [x] `npm run build` + `npm test` clean
 * [x] `npm run package` → 0.1.3 portable + installer exes
 * [x] Commit, push `main`
-* [x] Tag `v0.1.3` + publish GitHub release with both exes
+* [x] Tag `v0.1.3` + push tag
+* [ ] Publish GitHub release with both exes — **blocked**: gh's active
+      github.com account lacks write access to the repo (see Result)
 
 ---
 
@@ -72,6 +74,18 @@ signed-less portable + NSIS exes named `0.1.3`, verified present in
 ---
 
 ## Result
+
+v0.1.3 built, committed, pushed to `main`, and tagged (`v0.1.3` on origin).
+All four requested steps done except the final GitHub Release publish, which is
+blocked by gh auth: the active github.com account (`jens-petter-royseth_sch`)
+has no write access to `Kvitekvist/agent-command-engine` (`push=false`; release
+create → HTTP 404). Git push works because it uses the SSH key (owner
+identity), not the gh OAuth token. To finish, sign gh in as an account with
+write on the repo, then:
+`gh release create v0.1.3 "releases/Agent Command Engine 0.1.3.exe" "releases/Agent Command Engine Setup 0.1.3.exe" -t "v0.1.3"`
+— or create the release manually on github.com and upload both exes from
+`releases/`. Ticket stays open-in-effect on that last step despite the Closed
+header; reopen if the release publish needs its own follow-up.
 
 ---
 

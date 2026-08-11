@@ -732,7 +732,18 @@ npm run build clean, npm test 13/13, and npm run package produced both 0.1.3
 artifacts (Agent Command Engine 0.1.3.exe portable + Agent Command Engine Setup
 0.1.3.exe NSIS, ~92MB each) with the portable folder renamed to Portable-ACE.
 Committed, pushed main (also carried the previously-unpushed TICKET-0044
-commit), tagged v0.1.3, and published the GitHub release with both exes
-attached. Packaged-app launch smoke-test not run (GUI + touches real cpi.db),
-same as prior release tickets -- structural verification (artifacts present,
-correct version) done instead.
+commit), and tagged + pushed v0.1.3 -- all via the SSH key, which works.
+GitHub Release publish is the one step left undone: `gh`'s active github.com
+account (jens-petter-royseth_sch, the user's Schibsted work account) has no
+write access to Kvitekvist/agent-command-engine (`gh api repos/... .permissions`
+-> push=false admin=false; release create returns HTTP 404). Git push succeeds
+because it uses the SSH key (owner identity), a different credential than gh's
+OAuth token -- so the two can diverge. The prior v0.1.1/v0.1.2 releases were
+made by whatever account does have write. To finish: `gh auth login`/switch to
+an account with write on the Kvitekvist repo, then `gh release create v0.1.3
+"releases/Agent Command Engine 0.1.3.exe" "releases/Agent Command Engine Setup
+0.1.3.exe"`, or create the release manually on github.com and upload both exes
+from releases/. Packaged-app launch smoke-test not run (GUI + touches real
+cpi.db), same as prior release tickets -- structural verification (artifacts
+present, correct version) done instead. Worth remembering: `gh release view`
+succeeding (public read) does NOT imply the token can create releases here.
