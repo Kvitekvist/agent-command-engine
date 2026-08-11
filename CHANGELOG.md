@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Changed
+- Token Usage "Today by project" now shows just the leaf folder name (e.g. `ACE`) instead of tokscale's full flattened workspace key (`C--Users-...-VS-Code-ACE`); the full key is still shown on hover and used internally so distinct paths never merge (TICKET-0042)
 - Windows build now emits the portable (copy-anywhere) application folder as `Portable-ACE` instead of electron-builder's default `win-unpacked`, via an `afterAllArtifactBuild` hook that renames it after packaging (TICKET-0040)
 - Consolidated the release workflow into a single `scripts/release.bat`: compile the exe (`npm run package`), commit, push, merge into `main` if on a feature branch, then tag and publish a GitHub release with the exe attached (TICKET-0041)
 

@@ -631,3 +631,21 @@ was never uploaded; release.bat's publish step would add it. Final scripts/
 folder: setup/run/build/clear_cache (each .bat + .sh) + release.bat. No
 release.sh made (user asked for a .bat; macOS packaging produces a dmg, a
 different flow) -- worth adding later for mac parity if needed.
+
+TICKET-0042
+2026-08-11
+Token Usage "Today by project" card showed each project by tokscale's full
+workspace key -- the Claude Code project-dir name with every path separator
+flattened to a dash (e.g. C--Users-JensPetterR-yseth-Documents-VS-Code-ACE).
+User wanted just the leaf folder name (ACE). Added `shortenWorkspace(label)` to
+TokscaleService (splits on `-`, drops empty segments, returns the last one;
+`unknown` fallback). getTodayBreakdown now returns per-project
+{ name: <leaf>, fullName: <fullKey>, tokens } but still AGGREGATES/keys by the
+full key so two distinct paths sharing a leaf name never merge. UsageCard.jsx
+renders p.name, uses p.fullName for the tooltip + React key. Limitation
+(documented in the helper comment): a folder name containing its own dashes
+can't be recovered unambiguously from the flattened key, so leaf-segment is
+best-effort -- the full key stays visible on hover. Only UsageCard renders the
+projects breakdown (UsageBar doesn't), so that's the only UI touch. Unit test
+added for shortenWorkspace; `node --test tests/tokscale-service.test.js` -> 5
+pass.

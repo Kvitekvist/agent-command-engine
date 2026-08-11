@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { toUsageMap, sessionKey, rowTokenTotal } = require('../main/services/TokscaleService')
+const { toUsageMap, sessionKey, rowTokenTotal, shortenWorkspace } = require('../main/services/TokscaleService')
 
 // Sample shape verified against a real `tokscale --json --client claude
 // --group-by client,session,model` invocation.
@@ -53,4 +53,13 @@ test('ignores rows missing a client or session id, and malformed input', () => {
 test('rowTokenTotal excludes reasoning tokens to avoid double-counting (TICKET-0022)', () => {
   assert.equal(rowTokenTotal({ input: 10, output: 5, cacheRead: 100, cacheWrite: 20, reasoning: 999 }), 135)
   assert.equal(rowTokenTotal({}), 0)
+})
+
+test('shortenWorkspace reduces a dashed project key to its leaf folder (TICKET-0042)', () => {
+  assert.equal(shortenWorkspace('C--Users-JensPetterR-yseth-Documents-VS-Code-ACE'), 'ACE')
+  assert.equal(shortenWorkspace('ACE'), 'ACE')
+  assert.equal(shortenWorkspace(''), 'unknown')
+  assert.equal(shortenWorkspace(undefined), 'unknown')
+  // Trailing separator must not yield an empty label.
+  assert.equal(shortenWorkspace('foo-bar-'), 'bar')
 })

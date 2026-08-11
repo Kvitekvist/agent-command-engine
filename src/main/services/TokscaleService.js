@@ -82,6 +82,19 @@ function sessionKey(client, sessionId) {
   return `${client}:${sessionId}`
 }
 
+// tokscale reports a workspace by its Claude Code project-dir key, where every
+// path separator (and other non-alphanumerics) is flattened to a dash, e.g.
+// "C--Users-Jane-Documents-VS-Code-ACE". The UI only wants the leaf folder
+// name ("ACE"), so take the last dash-delimited segment. A folder name that
+// itself contains dashes can't be recovered unambiguously from this key, so
+// this is best-effort; callers keep the full key around for the tooltip
+// (TICKET-0042).
+function shortenWorkspace(label) {
+  if (!label) return 'unknown'
+  const segments = String(label).split('-').filter(Boolean)
+  return segments.length ? segments[segments.length - 1] : String(label)
+}
+
 // Sums every model row belonging to the same session into one usage
 // object. A session almost always uses one model throughout, but nothing
 // stops that (e.g. a manual model switch mid-session), so this must sum
@@ -160,6 +173,9 @@ const TokscaleService = {
       const tokens = rowTokenTotal(entry)
       bucket.totalTokens += tokens
       bucket.models.set(entry.model, (bucket.models.get(entry.model) || 0) + tokens)
+      // Key by the full workspace label so two distinct paths never merge, but
+      // keep it around so the UI can show the leaf folder name and still expose
+      // the full key on hover (TICKET-0042).
       const project = entry.workspaceLabel || entry.workspaceKey || 'unknown'
       bucket.projects.set(project, (bucket.projects.get(project) || 0) + tokens)
     }
@@ -168,7 +184,9 @@ const TokscaleService = {
       result[client] = {
         totalTokens: result[client].totalTokens,
         models: [...result[client].models].map(([name, tokens]) => ({ name, tokens })).sort((a, b) => b.tokens - a.tokens),
-        projects: [...result[client].projects].map(([name, tokens]) => ({ name, tokens })).sort((a, b) => b.tokens - a.tokens),
+        projects: [...result[client].projects]
+          .map(([fullName, tokens]) => ({ name: shortenWorkspace(fullName), fullName, tokens }))
+          .sort((a, b) => b.tokens - a.tokens),
       }
     }
     return result
@@ -177,4 +195,4 @@ const TokscaleService = {
   sessionKey,
 }
 
-module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal }
+module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal, shortenWorkspace }

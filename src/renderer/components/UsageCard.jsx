@@ -87,8 +87,8 @@ export default function UsageCard({ name, iconSvg, color, data }) {
           <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Today by project</div>
           <div className="grid grid-cols-2 gap-1.5">
             {projects.slice(0, 4).map((p) => (
-              <div key={p.name} className="bg-surface rounded px-2 py-1.5">
-                <div className="text-xs text-gray-300 truncate" title={p.name}>{p.name}</div>
+              <div key={p.fullName || p.name} className="bg-surface rounded px-2 py-1.5">
+                <div className="text-xs text-gray-300 truncate" title={p.fullName || p.name}>{p.name}</div>
                 <div className="text-sm font-semibold text-gray-100">{formatTokens(p.tokens)}</div>
               </div>
             ))}
