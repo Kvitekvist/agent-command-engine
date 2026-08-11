@@ -39,6 +39,7 @@ Agent Command Engine (ACE) is an Electron desktop application with a React rende
 - `projects` — id, name, path, created_at
 - `agents` — id, project_id, label, provider, model, status
 - `prompts` — id, agent_id, project_id, task_label, prompt_text, response_text, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, duration_ms, created_at
+- `agent_sessions` (TICKET-0044) — session_id, agent_id, project_id, label, created_at. Maps a Claude CLI session id (forced via `claude --session-id <uuid>` at launch) back to the ACE agent that owns it, so the Token Usage "By Agent" breakdown can name tokscale's per-session rows. One row per launch (an agent spans many sessions over its life); `label` is snapshotted so a rename/delete doesn't lose history.
 - `settings` — key, value
 
 ### Token Tracking (TICKET-0018)
@@ -77,10 +78,43 @@ response the user is waiting on:
   the (inaccurate) stdout-parsed value, effectively always `0` today, until
   a future ticket gives codex real session resumption. (Also: this whole
   headless path is unused by the UI as of TICKET-0019 anyway — see above.)
-- `TokenView.jsx`'s historical section prefers the reconciled `cost_usd`
-  from the DB when present and only falls back to the static `COST_PER_M`
-  estimate table for rows that were never reconciled (Codex, or a Claude
-  turn rendered before its correction lands).
+- **The `prompts`-table history has been fully retired from the UI
+  (TICKET-0044).** The Token Usage tab's "History (this project)" section
+  no longer reads `tokens:getStats`/`prompts` at all — see "Project History"
+  below. The headless pipeline and its DB columns remain only for any
+  pre-existing rows and the Audit Log.
+
+### Project History (Token Usage → "History (this project)", TICKET-0044)
+Replaces the dead `prompts`-table source with real, tokscale-sourced usage
+scoped to the active project — the fix the TICKET-0019 note anticipated
+("reconcile against tokscale's session transcripts directly, without the
+headless path"):
+- **`TokscaleService.getWorkspaceReport(workspaceKey, clients)`**: runs
+  `tokscale report --json --no-summarize --workspace <key> --client <c>` once
+  per client (report's `--client` is singular — comma-separated values return
+  nothing — so it's called per client and merged). Returns per-session rows,
+  each with real `total_input_tokens`/`total_output_tokens`/`total_cache_read`/
+  `total_cost`, `message_count`, `models_used[]` and a `created_at` epoch-ms
+  timestamp. `report` is the only tokscale mode that carries a per-session
+  date and session id; the `--group-by` modes don't. `--no-summarize` skips
+  the optional LLM titling so it's a pure, ~0.5s data read.
+- **`TokscaleService.pathToWorkspaceKey(path)`**: `path.replace(/[^a-zA-Z0-9]/g,
+  '-')` — the inverse of tokscale's workspace-key flattening, verified against
+  a real key. Maps `activeProject.path` to the `--workspace` filter.
+- **IPC `tokens:getProjectHistory({projectId, projectPath})`**: derives the
+  workspace key, fetches the report rows (claude + codex), joins each to
+  `DBService.getAgentSessionMap(projectId)` for the owning agent's name
+  (missing → "Untracked"), and returns a normalized flat row list. The
+  renderer (`TokenView.jsx`) aggregates it into Totals, By Day (bucketed by
+  `created_at`'s local calendar day), By Model (`models_used` joined for the
+  rare multi-model session), and By Agent.
+- **By Agent attribution** relies on ACE forcing a known session id per Claude
+  launch: `AgentTerminal.jsx` generates a UUID, injects it via
+  `buildLaunchCommand(agent, sessionId)` → `claude --session-id <uuid>`
+  (behaviour-neutral — each terminal mount already started a fresh session),
+  and records it through `agents:recordSession` into `agent_sessions`. Codex
+  has no equivalent flag and isn't reconciled, so Codex sessions (and anything
+  from before this shipped) appear under "Untracked".
 
 ### Live Token Usage Dashboard (TICKET-0022)
 The Token Usage tab's primary content (and the app's default tab) — real

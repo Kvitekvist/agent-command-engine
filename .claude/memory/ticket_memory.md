@@ -685,3 +685,34 @@ differently from dev" report: launch the packaged build with
 and inject Input.* events to prove whether the renderer is at fault; kill
 only that instance afterward via the PID owning the unique debug port, never
 a blanket taskkill (would kill the user's real app).
+
+TICKET-0044
+2026-08-11
+Fixed Token Usage "History (this project)" being empty for every project (Total
+Tokens/Cache Read/Total Prompts/Est. Cost all 0, charts blank). Root cause: it
+read ACE's own `prompts` DB table, which stopped being populated when TICKET-0019
+moved agents to the embedded terminal (the headless sendPrompt path that logged
+prompts is no longer called). Fix: source the section from tokscale instead --
+the same authoritative data the Live Usage cards use. New
+TokscaleService.getWorkspaceReport(key, clients) runs `tokscale report --json
+--no-summarize --workspace <key> --client <c>` once per client (report's
+--client is singular; comma values return nothing) and merges; report is the
+only tokscale mode carrying a per-session created_at + session_id. New
+pathToWorkspaceKey(path) = path.replace(/[^a-zA-Z0-9]/g,'-'), verified against a
+real workspace key. New IPC tokens:getProjectHistory joins report rows to agent
+names and returns a normalized flat list; TokenView aggregates into Totals/By
+Day/By Model/By Agent. Renamed the third tab "By Task" -> "By Agent" per user
+request. To get real agent names (tokscale only knows CLI sessions), ACE now
+forces a known session id per Claude launch: AgentTerminal generates a UUID,
+buildLaunchCommand injects `claude --session-id <uuid>` (behaviour-neutral -- each
+mount already started fresh), and agents:recordSession stores session->agent in a
+new `agent_sessions` table (one row per launch, label snapshotted). Codex can't
+be forced to a known id and isn't reconciled, so Codex + pre-existing sessions
+show as "Untracked". Verified: build:renderer + build:main clean, npm test 13/13
+(added a pathToWorkspaceKey test), and end-to-end against real tokscale for the
+ACE workspace (6 sessions -> 27.6M tokens, 304 prompts, $29.05, populated By
+Day/By Model) via a throwaway script. Not yet live-verified that a NEW agent
+launched with the injected --session-id shows up under its own name in By Agent
+(needs a real agent launch in the running app). Files: TokscaleService.js,
+DBService.js, ipc/handlers.js, preload.js, renderer utils/agentLaunch.js,
+components/AgentTerminal.jsx, views/TokenView.jsx, tests/tokscale-service.test.js.

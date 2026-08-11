@@ -40,9 +40,19 @@ function quoteArg(arg) {
   return /^[A-Za-z0-9_.-]+$/.test(arg) ? arg : `"${arg.replace(/"/g, '\\"')}"`
 }
 
-export function buildLaunchCommand({ provider, model, permissionMode }) {
+// TICKET-0044: `sessionId`, when given, is injected as `claude --session-id
+// <uuid>` so ACE knows exactly which CLI session belongs to this agent and can
+// attribute its tokscale usage to the agent's name in the "By Agent" breakdown.
+// Behaviour-neutral: each terminal mount already started a brand-new session
+// (no --resume), so forcing a fresh UUID per launch changes nothing the user
+// sees. Codex has no equivalent flag (and isn't reconciled), so it's skipped.
+export function buildLaunchCommand({ provider, model, permissionMode }, sessionId) {
   const args = provider === 'codex'
     ? ['codex', '--model', model, ...buildCodexArgs(permissionMode)]
-    : ['claude', '--model', model, ...buildClaudePermissionArgs(permissionMode)]
+    : [
+        'claude', '--model', model,
+        ...(sessionId ? ['--session-id', sessionId] : []),
+        ...buildClaudePermissionArgs(permissionMode),
+      ]
   return args.map(quoteArg).join(' ')
 }

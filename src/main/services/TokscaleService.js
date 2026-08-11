@@ -95,6 +95,15 @@ function shortenWorkspace(label) {
   return segments.length ? segments[segments.length - 1] : String(label)
 }
 
+// The inverse of shortenWorkspace's assumption: turn a real filesystem path
+// into the workspace key tokscale/Claude Code use, by flattening every
+// non-alphanumeric character to a single dash. Verified against a real key
+// ("C:\Users\Jane\Documents\VS Code\ACE" -> "C--Users-Jane-Documents-VS-Code-ACE").
+// Used to scope tokscale's per-workspace report to one ACE project (TICKET-0044).
+function pathToWorkspaceKey(projectPath) {
+  return String(projectPath || '').replace(/[^a-zA-Z0-9]/g, '-')
+}
+
 // Sums every model row belonging to the same session into one usage
 // object. A session almost always uses one model throughout, but nothing
 // stops that (e.g. a manual model switch mid-session), so this must sum
@@ -192,7 +201,39 @@ const TokscaleService = {
     return result
   },
 
+  // TICKET-0044: all-time, per-session usage for ONE workspace — the source
+  // for the Token Usage tab's "History (this project)" section, which used to
+  // read ACE's own `prompts` table (dead since TICKET-0019). `tokscale report`
+  // is the only mode that returns per-session rows carrying a `created_at`
+  // timestamp and `session_id`, which the History section needs for its By Day
+  // breakdown and to join sessions back to ACE agent names (see DBService
+  // agent_sessions). `--no-summarize` skips the optional LLM titling so this
+  // stays a pure, fast data read. `report --workspace` filters server-side to
+  // the one workspace; its `--client` is singular (comma-separated values are
+  // silently treated as one unknown client and return nothing), so call it
+  // once per client and merge, tagging each row with the client it came from.
+  async getWorkspaceReport(workspaceKey, clients) {
+    const perClient = await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const rows = await runTokscale([
+            'report', '--json', '--no-summarize',
+            '--workspace', workspaceKey,
+            '--client', client,
+          ], 30000)
+          return Array.isArray(rows) ? rows.map((r) => ({ ...r, client })) : []
+        } catch (error) {
+          // One provider being unavailable (logged out, not installed) must
+          // not blank out the other's history.
+          return []
+        }
+      })
+    )
+    return perClient.flat()
+  },
+
   sessionKey,
+  pathToWorkspaceKey,
 }
 
-module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal, shortenWorkspace }
+module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey }

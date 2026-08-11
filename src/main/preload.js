@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('cpi', {
   deleteAgent: (agentId) => ipcRenderer.invoke('agents:delete', agentId),
   clearContext: (agentId) => ipcRenderer.invoke('agents:clearContext', agentId),
   sendPrompt: (agentId, prompt) => ipcRenderer.invoke('agents:sendPrompt', agentId, prompt),
+  // TICKET-0044: record which CLI session id an agent launched with, so the
+  // Token Usage "By Agent" breakdown can map tokscale sessions to agent names.
+  recordAgentSession: (payload) => ipcRenderer.invoke('agents:recordSession', payload),
 
   // Audit log
   getPrompts: (filters) => ipcRenderer.invoke('prompts:get', filters),
@@ -25,6 +28,7 @@ contextBridge.exposeInMainWorld('cpi', {
 
   // Token stats
   getTokenStats: (filters) => ipcRenderer.invoke('tokens:getStats', filters),
+  getProjectHistory: (projectId, projectPath) => ipcRenderer.invoke('tokens:getProjectHistory', { projectId, projectPath }),
   getLiveTokenUsage: () => ipcRenderer.invoke('tokens:getLiveUsage'),
 
   // Settings

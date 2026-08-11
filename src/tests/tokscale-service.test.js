@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { toUsageMap, sessionKey, rowTokenTotal, shortenWorkspace } = require('../main/services/TokscaleService')
+const { toUsageMap, sessionKey, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey } = require('../main/services/TokscaleService')
 
 // Sample shape verified against a real `tokscale --json --client claude
 // --group-by client,session,model` invocation.
@@ -62,4 +62,17 @@ test('shortenWorkspace reduces a dashed project key to its leaf folder (TICKET-0
   assert.equal(shortenWorkspace(undefined), 'unknown')
   // Trailing separator must not yield an empty label.
   assert.equal(shortenWorkspace('foo-bar-'), 'bar')
+})
+
+test('pathToWorkspaceKey flattens a filesystem path to tokscale\'s workspace key (TICKET-0044)', () => {
+  // Verified against a real tokscale row's workspaceKey for this repo.
+  assert.equal(
+    pathToWorkspaceKey('C:\\Users\\JensPetterRøyseth\\Documents\\VS Code\\ACE'),
+    'C--Users-JensPetterR-yseth-Documents-VS-Code-ACE',
+  )
+  // Every non-alphanumeric run collapses to one dash each, drive colon + slash
+  // giving the leading double dash.
+  assert.equal(pathToWorkspaceKey('D:\\proj'), 'D--proj')
+  assert.equal(pathToWorkspaceKey(''), '')
+  assert.equal(pathToWorkspaceKey(undefined), '')
 })

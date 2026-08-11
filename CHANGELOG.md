@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- Token Usage "History (this project)" was empty for every project — Total Tokens, Cache Read, Total Prompts, Est. Cost all read 0 and the By Day/By Model/By Task charts were blank. It had been reading ACE's own `prompts` DB table, which stopped being populated once TICKET-0019 moved agents to the embedded terminal (nothing calls the old headless `sendPrompt` path anymore). It now sources real, all-time usage from `tokscale report --workspace <key>` scoped to the active project — the same authoritative data the Live Usage cards already use — so tokens, cache, prompt (message) counts, and real cost all populate again (TICKET-0044)
+
 ### Changed
+- Token Usage: the History section's third breakdown is now "By Agent" (was "By Task") and shows the real ACE agent names you set. To make this possible ACE now forces a known session id per Claude agent at launch (`claude --session-id <uuid>`, invisible to you — each terminal already started a fresh session) and maps tokscale's per-session usage back to the owning agent. Codex agents (which can't be given a known session id) and any sessions from before this shipped appear as "Untracked" (TICKET-0044)
 - Token Usage "Today by project" now shows just the leaf folder name (e.g. `ACE`) instead of tokscale's full flattened workspace key (`C--Users-...-VS-Code-ACE`); the full key is still shown on hover and used internally so distinct paths never merge (TICKET-0042)
 - Windows build now emits the portable (copy-anywhere) application folder as `Portable-ACE` instead of electron-builder's default `win-unpacked`, via an `afterAllArtifactBuild` hook that renames it after packaging (TICKET-0040)
 - Consolidated the release workflow into a single `scripts/release.bat`: compile the exe (`npm run package`), commit, push, merge into `main` if on a feature branch, then tag and publish a GitHub release with the exe attached (TICKET-0041)

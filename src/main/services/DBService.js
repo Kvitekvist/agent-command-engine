@@ -113,6 +113,21 @@ const DBService = {
         FOREIGN KEY (project_id) REFERENCES projects(id)
       );
 
+      -- TICKET-0044: maps a Claude CLI session id (which ACE now forces via
+      -- `claude --session-id <uuid>` at launch) back to the ACE agent that
+      -- owns it, so the Token Usage tab's "By Agent" breakdown can label
+      -- tokscale's per-session rows with real agent names. One row per launch:
+      -- an agent relaunched over its lifetime spans several sessions, all
+      -- attributed to the same agent. `label` is snapshotted at launch so a
+      -- later rename or delete of the agent doesn't lose historical rows.
+      CREATE TABLE IF NOT EXISTS agent_sessions (
+        session_id TEXT PRIMARY KEY,
+        agent_id TEXT,
+        project_id INTEGER,
+        label TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT
@@ -247,6 +262,24 @@ const DBService = {
     `
     return projectId ? prepare(sql).all(projectId) : prepare(sql).all()
   },
+  // Agent <-> CLI session mapping (TICKET-0044)
+  recordAgentSession: ({ session_id, agent_id, project_id, label }) =>
+    prepare(`
+      INSERT INTO agent_sessions (session_id, agent_id, project_id, label)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(session_id) DO UPDATE SET
+        agent_id = excluded.agent_id, project_id = excluded.project_id, label = excluded.label
+    `).run(session_id, agent_id, project_id, label),
+
+  // { [session_id]: { agent_id, label } } for one project — used to label
+  // tokscale's per-session report rows with the ACE agent that owns them.
+  getAgentSessionMap: (projectId) => {
+    const rows = prepare('SELECT session_id, agent_id, label FROM agent_sessions WHERE project_id = ?').all(projectId)
+    const map = {}
+    for (const r of rows) map[r.session_id] = { agent_id: r.agent_id, label: r.label }
+    return map
+  },
+
   getProjectTokenSummary: (projectId) =>
     prepare(`
       SELECT

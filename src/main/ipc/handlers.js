@@ -2,7 +2,7 @@ const { dialog } = require('electron')
 const { LoadBalancer } = require('../services/LoadBalancer')
 const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 const { FileService } = require('../services/FileService')
-const { TokscaleService } = require('../services/TokscaleService')
+const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
 const { ScreenshotService } = require('../services/ScreenshotService')
 
 function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
@@ -110,6 +110,15 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return { ok: true }
   })
 
+  // TICKET-0044: the renderer forces a known session id per Claude agent
+  // launch (`claude --session-id <uuid>`) and reports it here so the Token
+  // Usage tab's "By Agent" breakdown can join tokscale's per-session rows
+  // back to real agent names. Fire-and-forget from the renderer's side.
+  ipcMain.handle('agents:recordSession', (_, payload) => {
+    DB.recordAgentSession(payload || {})
+    return { ok: true }
+  })
+
   // Only this action may wipe a persisted conversation.
   ipcMain.handle('agents:clearContext', (_, agentId) => {
     const result = AgentSvc.clearContext(agentId)
@@ -198,6 +207,43 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // ── Token stats ─────────────────────────────────────────────────────────────
   ipcMain.handle('tokens:getStats', (_, filters) => DB.getTokenStats(filters || {}))
+
+  // TICKET-0044: "History (this project)" — real per-session usage for the
+  // active project, straight from tokscale (the `prompts` table this used to
+  // read has been dead since TICKET-0019). Rows are scoped to the project's
+  // workspace key, then annotated with the ACE agent that owns each session
+  // (via agent_sessions) so the renderer can build Totals / By Day / By Model /
+  // By Agent without any per-model or per-day tokscale calls. Sessions with no
+  // recorded owner (Codex, or anything from before this shipped) are labelled
+  // "Untracked". Returns a normalized, flat row list; the renderer aggregates.
+  ipcMain.handle('tokens:getProjectHistory', async (_, { projectId, projectPath } = {}) => {
+    if (!projectPath) return { rows: [] }
+    const workspaceKey = pathToWorkspaceKey(projectPath)
+    const sessionRows = await TokscaleService.getWorkspaceReport(workspaceKey, ['claude', 'codex'])
+    const ownerMap = projectId ? DB.getAgentSessionMap(projectId) : {}
+
+    const rows = sessionRows.map((r) => {
+      const owner = ownerMap[r.session_id]
+      // created_at is epoch ms; bucket by its local calendar day (YYYY-MM-DD).
+      const day = r.created_at ? new Date(r.created_at).toLocaleDateString('en-CA') : 'unknown'
+      const models = Array.isArray(r.models_used) && r.models_used.length ? r.models_used : ['unknown']
+      return {
+        sessionId: r.session_id,
+        client: r.client,
+        day,
+        // A session is almost always one model; join the rare multi-model case
+        // rather than misattribute its tokens to just one of them.
+        model: models.join(', '),
+        input: Number(r.total_input_tokens) || 0,
+        output: Number(r.total_output_tokens) || 0,
+        cacheRead: Number(r.total_cache_read) || 0,
+        cost: Number(r.total_cost) || 0,
+        prompts: Number(r.message_count) || 0,
+        agentLabel: owner?.label || 'Untracked',
+      }
+    })
+    return { rows }
+  })
 
   // Live usage dashboard (TICKET-0022) -- sourced straight from tokscale
   // (real subscription quota + today's session transcripts), independent

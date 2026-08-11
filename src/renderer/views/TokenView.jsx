@@ -13,33 +13,6 @@ import codexIcon from '../assets/icons/codex.svg?raw'
 // user pointed to, not token-monitor's own (slightly different) CSS palette.
 const PROVIDER_COLOR = { claude: '#d97757', codex: '#3b82f6' }
 
-// Cost estimates per 1M tokens (approximate mid-2026 pricing)
-const COST_PER_M = {
-  'claude-haiku-4-5-20251001': { input: 0.80,  output: 4.00  },
-  'claude-sonnet-5':           { input: 3.00,  output: 15.00 },
-  'claude-opus-4-8':           { input: 15.00, output: 75.00 },
-  'claude-fable-5':            { input: 5.00,  output: 25.00 },
-  'codex-mini-latest':         { input: 1.50,  output: 6.00  },
-  'o3':                        { input: 10.00, output: 40.00 },
-  'o4-mini':                   { input: 3.00,  output: 12.00 },
-}
-
-function estimateCost(model, inputTokens, outputTokens) {
-  const rates = COST_PER_M[model] || { input: 3, output: 15 }
-  return (inputTokens / 1_000_000) * rates.input + (outputTokens / 1_000_000) * rates.output
-}
-
-// tokscale reconciliation (see AgentService._reconcileTokens) writes a real,
-// CLI-reported cost onto reconciled rows; only fall back to the static
-// estimate above where that never happened — unreconciled Codex rows, or a
-// Claude turn whose reconciliation hasn't landed yet (self-corrects on the
-// next refresh).
-function rowCost(row) {
-  return row.total_cost_usd > 0
-    ? row.total_cost_usd
-    : estimateCost(row.model, row.total_input || 0, row.total_output || 0)
-}
-
 export default function TokenView() {
   // liveUsage/liveUsageLoading/loadLiveUsage (TICKET-0022, shared TICKET-0023):
   // polled once from App.jsx so this tab and the Agents tab's compact
@@ -47,28 +20,32 @@ export default function TokenView() {
   // tokscale subprocess call on its own timer.
   const { activeProject, tokenStats, setTokenStats, liveUsage, liveUsageLoading, loadLiveUsage } = useStore()
   const [loading, setLoading] = useState(false)
-  const [view, setView]       = useState('daily') // 'daily' | 'model' | 'task'
+  const [view, setView]       = useState('daily') // 'daily' | 'model' | 'agent'
 
+  // TICKET-0044: "History (this project)" now reads real per-session usage
+  // from tokscale (via getProjectHistory), scoped to the active project's
+  // workspace, instead of ACE's own `prompts` table (dead since TICKET-0019).
+  // `tokenStats` holds the normalized row list the main process returns.
   async function load() {
+    if (!activeProject) { setTokenStats([]); return }
     setLoading(true)
-    const filters = activeProject ? { projectId: activeProject.id } : {}
-    const rows = await window.cpi.getTokenStats(filters)
-    setTokenStats(rows)
+    const { rows } = await window.cpi.getProjectHistory(activeProject.id, activeProject.path)
+    setTokenStats(rows || [])
     setLoading(false)
   }
 
   useEffect(() => { load() }, [activeProject])
 
-  // Aggregate by day for the line chart
+  // Aggregate by day
   const byDay = Object.values(
     tokenStats.reduce((acc, row) => {
       const d = row.day || 'unknown'
       if (!acc[d]) acc[d] = { day: d, input: 0, output: 0, cacheRead: 0, cost: 0, prompts: 0 }
-      acc[d].input     += row.total_input        || 0
-      acc[d].output    += row.total_output       || 0
-      acc[d].cacheRead += row.total_cache_read   || 0
-      acc[d].prompts   += row.prompt_count       || 0
-      acc[d].cost      += rowCost(row)
+      acc[d].input     += row.input     || 0
+      acc[d].output    += row.output    || 0
+      acc[d].cacheRead += row.cacheRead  || 0
+      acc[d].prompts   += row.prompts    || 0
+      acc[d].cost      += row.cost       || 0
       return acc
     }, {})
   ).sort((a, b) => a.day.localeCompare(b.day))
@@ -78,29 +55,31 @@ export default function TokenView() {
     tokenStats.reduce((acc, row) => {
       const m = row.model || 'unknown'
       if (!acc[m]) acc[m] = { model: m, input: 0, output: 0, cost: 0 }
-      acc[m].input  += row.total_input  || 0
-      acc[m].output += row.total_output || 0
-      acc[m].cost   += rowCost(row)
+      acc[m].input  += row.input  || 0
+      acc[m].output += row.output || 0
+      acc[m].cost   += row.cost   || 0
       return acc
     }, {})
-  )
+  ).sort((a, b) => (b.input + b.output) - (a.input + a.output))
 
-  // Aggregate by task
-  const byTask = Object.values(
+  // Aggregate by agent (TICKET-0044) -- sessions whose id ACE recorded at
+  // launch resolve to their agent's name; everything else is "Untracked".
+  const byAgent = Object.values(
     tokenStats.reduce((acc, row) => {
-      const t = row.task_label || 'unlabeled'
-      if (!acc[t]) acc[t] = { task: t, input: 0, output: 0, cost: 0 }
-      acc[t].input  += row.total_input  || 0
-      acc[t].output += row.total_output || 0
-      acc[t].cost   += rowCost(row)
+      const t = row.agentLabel || 'Untracked'
+      if (!acc[t]) acc[t] = { agent: t, input: 0, output: 0, cost: 0, prompts: 0 }
+      acc[t].input   += row.input   || 0
+      acc[t].output  += row.output  || 0
+      acc[t].cost    += row.cost    || 0
+      acc[t].prompts += row.prompts || 0
       return acc
     }, {})
-  )
+  ).sort((a, b) => (b.input + b.output) - (a.input + a.output))
 
-  const totalTokens = byDay.reduce((s, d) => s + d.input + d.output, 0)
-  const totalCost   = byDay.reduce((s, d) => s + d.cost, 0)
-  const totalPrompts = byDay.reduce((s, d) => s + d.prompts, 0)
-  const totalCacheRead = byDay.reduce((s, d) => s + d.cacheRead, 0)
+  const totalTokens    = tokenStats.reduce((s, r) => s + (r.input || 0) + (r.output || 0) + (r.cacheRead || 0), 0)
+  const totalCost      = tokenStats.reduce((s, r) => s + (r.cost || 0), 0)
+  const totalPrompts   = tokenStats.reduce((s, r) => s + (r.prompts || 0), 0)
+  const totalCacheRead = tokenStats.reduce((s, r) => s + (r.cacheRead || 0), 0)
 
   const chartColors = { input: '#7c6af7', output: '#22c55e', cost: '#f59e0b' }
 
@@ -128,7 +107,7 @@ export default function TokenView() {
         <div>
           <h2 className="text-base font-semibold mt-4">History (this project)</h2>
           <p className="text-xs text-muted mt-0.5">
-            From ACE's own audit log — only reflects agents launched through the older headless path; see architecture.md.
+            All-time usage for this project, from tokscale's own session records. By Agent shows ACE agent names for sessions ACE launched; other sessions (and Codex) appear as “Untracked”.
           </p>
         </div>
         <button onClick={load} className="btn-ghost text-xs mt-4">↻ Refresh</button>
@@ -136,15 +115,22 @@ export default function TokenView() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Total Tokens" value={totalTokens.toLocaleString()} sub="all time" />
-        <StatCard label="Cache Read Tokens" value={totalCacheRead.toLocaleString()} sub="Claude prompt cache" />
-        <StatCard label="Total Prompts" value={totalPrompts.toLocaleString()} sub="logged" />
-        <StatCard label="Est. Cost" value={`$${totalCost.toFixed(4)}`} sub="from tokscale where reconciled" color="text-warning" />
+        <StatCard label="Total Tokens" value={totalTokens.toLocaleString()} sub="input + output + cache read" />
+        <StatCard label="Cache Read Tokens" value={totalCacheRead.toLocaleString()} sub="prompt cache" />
+        <StatCard label="Total Prompts" value={totalPrompts.toLocaleString()} sub="messages" />
+        <StatCard label="Cost" value={`$${totalCost.toFixed(4)}`} sub="from tokscale" color="text-warning" />
       </div>
+
+      {!loading && activeProject && tokenStats.length === 0 && (
+        <div className="text-xs text-muted">No recorded usage for this project yet.</div>
+      )}
+      {!activeProject && (
+        <div className="text-xs text-muted">Select a project to see its history.</div>
+      )}
 
       {/* View tabs */}
       <div className="flex gap-2">
-        {[['daily', 'By Day'], ['model', 'By Model'], ['task', 'By Task']].map(([id, label]) => (
+        {[['daily', 'By Day'], ['model', 'By Model'], ['agent', 'By Agent']].map(([id, label]) => (
           <button
             key={id}
             onClick={() => setView(id)}
@@ -210,14 +196,14 @@ export default function TokenView() {
         </div>
       )}
 
-      {!loading && view === 'task' && (
+      {!loading && view === 'agent' && (
         <div className="space-y-4">
-          <ChartCard title="Token Usage by Task">
-            <ResponsiveContainer width="100%" height={Math.max(200, byTask.length * 40)}>
-              <BarChart data={byTask} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
+          <ChartCard title="Token Usage by Agent">
+            <ResponsiveContainer width="100%" height={Math.max(200, byAgent.length * 40)}>
+              <BarChart data={byAgent} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" />
                 <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                <YAxis type="category" dataKey="task" tick={{ fill: '#6b7280', fontSize: 10 }} width={120} />
+                <YAxis type="category" dataKey="agent" tick={{ fill: '#6b7280', fontSize: 10 }} width={140} />
                 <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2a2d3a', fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="input"  name="Input"  fill={chartColors.input}  />
@@ -225,6 +211,7 @@ export default function TokenView() {
               </BarChart>
             </ResponsiveContainer>
           </ChartCard>
+          <AgentCostTable data={byAgent} />
         </div>
       )}
     </div>
@@ -260,13 +247,43 @@ function ModelCostTable({ data }) {
             <th className="text-left pb-2">Model</th>
             <th className="text-right pb-2">Input</th>
             <th className="text-right pb-2">Output</th>
-            <th className="text-right pb-2">Est. Cost</th>
+            <th className="text-right pb-2">Cost</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {data.map((row) => (
             <tr key={row.model}>
               <td className="py-1.5 text-gray-300">{row.model}</td>
+              <td className="text-right text-gray-400">{row.input.toLocaleString()}</td>
+              <td className="text-right text-gray-400">{row.output.toLocaleString()}</td>
+              <td className="text-right text-warning">${row.cost.toFixed(4)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function AgentCostTable({ data }) {
+  return (
+    <div className="card">
+      <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Cost Breakdown by Agent</div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-muted border-b border-border">
+            <th className="text-left pb-2">Agent</th>
+            <th className="text-right pb-2">Prompts</th>
+            <th className="text-right pb-2">Input</th>
+            <th className="text-right pb-2">Output</th>
+            <th className="text-right pb-2">Cost</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {data.map((row) => (
+            <tr key={row.agent}>
+              <td className="py-1.5 text-gray-300">{row.agent}</td>
+              <td className="text-right text-gray-400">{row.prompts.toLocaleString()}</td>
               <td className="text-right text-gray-400">{row.input.toLocaleString()}</td>
               <td className="text-right text-gray-400">{row.output.toLocaleString()}</td>
               <td className="text-right text-warning">${row.cost.toFixed(4)}</td>

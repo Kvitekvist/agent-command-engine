@@ -145,8 +145,22 @@ export default function AgentTerminal({ agent }) {
         })
       })
 
+      // TICKET-0044: force a known CLI session id for Claude agents so their
+      // tokscale usage can be attributed to this agent's name in the Token
+      // Usage "By Agent" breakdown. Codex has no equivalent flag, so it keeps
+      // its own auto-generated session and stays "Untracked" there.
+      const cliSessionId = agent.provider === 'codex' ? null : crypto.randomUUID()
+      if (cliSessionId) {
+        window.cpi.recordAgentSession({
+          session_id: cliSessionId,
+          agent_id: agent.agentId,
+          project_id: agent.projectId,
+          label: agent.label,
+        })
+      }
+
       // Boot straight into the real CLI instead of leaving an empty shell.
-      window.cpi.terminal.write(sessionIdRef.current, buildLaunchCommand(agent) + '\r')
+      window.cpi.terminal.write(sessionIdRef.current, buildLaunchCommand(agent, cliSessionId) + '\r')
 
       // See LAUNCH_BANNER_HIDE_MS above -- wipe the CLI's own splash once
       // it's had time to render, then reveal the already-clean session.
