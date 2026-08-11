@@ -114,12 +114,12 @@ const DBService = {
       );
 
       -- TICKET-0044: maps a Claude CLI session id (which ACE now forces via
-      -- `claude --session-id <uuid>` at launch) back to the ACE agent that
-      -- owns it, so the Token Usage tab's "By Agent" breakdown can label
-      -- tokscale's per-session rows with real agent names. One row per launch:
+      -- claude --session-id <uuid> at launch) back to the ACE agent that
+      -- owns it, so the Token Usage tab By Agent breakdown can label
+      -- tokscale per-session rows with real agent names. One row per launch:
       -- an agent relaunched over its lifetime spans several sessions, all
-      -- attributed to the same agent. `label` is snapshotted at launch so a
-      -- later rename or delete of the agent doesn't lose historical rows.
+      -- attributed to the same agent. The label is snapshotted at launch so a
+      -- later rename or delete of the agent does not lose historical rows.
       CREATE TABLE IF NOT EXISTS agent_sessions (
         session_id TEXT PRIMARY KEY,
         agent_id TEXT,
