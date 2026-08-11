@@ -9,6 +9,7 @@
 
 ### Changed
 - `scripts/release.bat` now loads a `GH_TOKEN`/`github_token` PAT from the repo-root `.env` (if present) before the GitHub-release step, so the release publishes even when the logged-in `gh` account lacks write access to the repo. Git push/commit/tag are unaffected (they use SSH); the token is scoped to the batch process only and never printed (TICKET-0046)
+- The `afterAllArtifactBuild` hook that renames `win-unpacked` → `Portable-ACE` no longer aborts the whole build when the old `Portable-ACE` is locked (Windows `EPERM`, e.g. an ACE instance launched from it is still running). Since the release deliverables — the portable + installer exes — are already built by that point and the folder is only a local convenience (never a release asset), it now warns and leaves the fresh build in `win-unpacked` instead of throwing (TICKET-0047)
 
 ## [0.1.3] - 2026-08-11
 
