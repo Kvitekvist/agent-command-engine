@@ -565,3 +565,38 @@ remembering: when live-spawning a test agent is blocked, reading a log
 file the running code itself writes -- after asking a human to trigger the
 one supervised action needed -- is a fully safe, effective substitute; no
 desktop automation of any kind was needed for the actual fix.
+
+TICKET-0040
+2026-08-11
+Built the v0.1.2 Windows release artifacts (no binaries existed locally after
+pulling v0.1.2 -- release exes aren't committed, only the git tag) and, per
+user request, made the portable copy-anywhere app folder come out named
+`Portable-ACE` instead of electron-builder's default `win-unpacked`. The
+electron-builder `portable` win target is a single self-extracting .exe, not a
+folder -- the only folder form of the app is the intermediate `win-unpacked`,
+so that's what was renamed. Done repeatably via an `afterAllArtifactBuild` hook
+(`src/build/afterAllArtifactBuild.js`, wired in via package.json build config)
+rather than a one-off manual rename, so every future build produces the name;
+the hook runs after the portable/nsis targets finish reading `win-unpacked`
+(afterPack would run before them and break packaging), and is existsSync-guarded
+so non-Windows builds are untouched. Hit a build blocker first: `npm run
+package` failed at the native-dependency rebuild with `EALLOWSCRIPTS` --
+electron-builder 24.13.3 hardcodes `npm rebuild node-pty --allow-scripts`, but
+npm 11.16 rejects that CLI flag for project-scoped installs (no `.npmrc`
+allow-scripts entry or package.json allowScripts field satisfies electron-
+builder's specific invocation; adding node-pty to `.npmrc` was tried and did
+NOT help, so it was reverted). Real fix: `"npmRebuild": false` in the build
+config -- node-pty ships prebuilt binaries under `prebuilds/win32-x64/` (dev
+already runs off those; `build/Release/` has no compiled .node), so no rebuild
+was ever needed, only packaging. Verified the prebuilt binaries actually landed
+in `Portable-ACE/resources/app.asar.unpacked/node_modules/node-pty/prebuilds/
+win32-x64/` (pty.node, conpty.node, winpty.dll, etc.), so skipping the rebuild
+didn't drop the native module. Output: `Agent Command Engine 0.1.2.exe`
+(portable), `Agent Command Engine Setup 0.1.2.exe` (NSIS installer), and
+`Portable-ACE/`. Context: this session started by pulling v0.1.2, which was
+blocked by discarded local changes -- user chose a hard reset to origin/main,
+which also discarded a local `src/.npmrc` edit; that edit was NOT the build fix
+(npm rejects the .npmrc path here regardless), the real fix is npmRebuild:false.
+Packaged-app launch smoke-test not run (opens a GUI window and touches the real
+cpi.db); structural verification (artifacts + node-pty prebuilds present) done
+instead.

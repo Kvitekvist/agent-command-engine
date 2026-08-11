@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+- Windows build now emits the portable (copy-anywhere) application folder as `Portable-ACE` instead of electron-builder's default `win-unpacked`, via an `afterAllArtifactBuild` hook that renames it after packaging (TICKET-0040)
+
+### Fixed
+- `npm run package` failed at the native-dependency rebuild step: electron-builder 24 invokes `npm rebuild node-pty --allow-scripts`, but npm 11 rejects that flag for project-scoped installs (`EALLOWSCRIPTS`). node-pty ships prebuilt binaries and never needed rebuilding, so the build now sets `npmRebuild: false` and packages the existing prebuilds directly (TICKET-0040)
+
 ## [0.1.2] - 2026-08-11
 
 ### Fixed

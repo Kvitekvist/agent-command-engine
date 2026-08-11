@@ -42,6 +42,8 @@
   "build": {
     "appId": "com.ace.app",
     "productName": "Agent Command Engine",
+    "npmRebuild": false,
+    "afterAllArtifactBuild": "build/afterAllArtifactBuild.js",
     "directories": {
       "output": "../releases"
     },
