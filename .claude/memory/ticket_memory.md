@@ -716,3 +716,23 @@ launched with the injected --session-id shows up under its own name in By Agent
 (needs a real agent launch in the running app). Files: TokscaleService.js,
 DBService.js, ipc/handlers.js, preload.js, renderer utils/agentLaunch.js,
 components/AgentTerminal.jsx, views/TokenView.jsx, tests/tokscale-service.test.js.
+
+TICKET-0045
+2026-08-11
+Cut the v0.1.3 release. Six commits had landed on main since v0.1.2 was tagged
+and released (TICKET-0040 build tooling + Portable-ACE naming, 0041 release.bat
+consolidation, 0042 leaf folder name in Today-by-project, 0043 single-instance
+lock, 0044 tokscale-sourced project history + By Agent), but the version was
+still 0.1.2 and the CHANGELOG kept them under [Unreleased]; the exe in releases/
+was also stale (built at 0040, missing 0041-0044). Per user choice, bumped
+src/package.json 0.1.2 -> 0.1.3, moved CHANGELOG [Unreleased] -> [0.1.3], and
+gitignored a stray `.git.tmp/` folder (nested git internals left in the working
+tree that release.bat's `git add -A` would otherwise have committed). Verified
+npm run build clean, npm test 13/13, and npm run package produced both 0.1.3
+artifacts (Agent Command Engine 0.1.3.exe portable + Agent Command Engine Setup
+0.1.3.exe NSIS, ~92MB each) with the portable folder renamed to Portable-ACE.
+Committed, pushed main (also carried the previously-unpushed TICKET-0044
+commit), tagged v0.1.3, and published the GitHub release with both exes
+attached. Packaged-app launch smoke-test not run (GUI + touches real cpi.db),
+same as prior release tickets -- structural verification (artifacts present,
+correct version) done instead.

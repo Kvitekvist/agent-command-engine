@@ -39,5 +39,8 @@ obj/
 # Claude Code runtime state
 .claude/scheduled_tasks.lock
 
+# Stray nested git internals (not part of the project)
+.git.tmp/
+
 # Agent Command Engine data (screenshots, etc.)
 .cpi/

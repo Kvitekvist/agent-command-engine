@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-11
+
 ### Fixed
 - Token Usage "History (this project)" was empty for every project — Total Tokens, Cache Read, Total Prompts, Est. Cost all read 0 and the By Day/By Model/By Task charts were blank. It had been reading ACE's own `prompts` DB table, which stopped being populated once TICKET-0019 moved agents to the embedded terminal (nothing calls the old headless `sendPrompt` path anymore). It now sources real, all-time usage from `tokscale report --workspace <key>` scoped to the active project — the same authoritative data the Live Usage cards already use — so tokens, cache, prompt (message) counts, and real cost all populate again (TICKET-0044)
 
