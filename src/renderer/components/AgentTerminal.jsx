@@ -44,6 +44,7 @@ const LAUNCH_BANNER_HIDE_MS = 1200
 // switch; only Stop/Delete/app quit end it.
 export default function AgentTerminal({ agent }) {
   const containerRef = useRef(null)
+  const terminalRef = useRef(null)
   const sessionIdRef = useRef(null)
   const [status, setStatus] = useState('connecting') // connecting | ready | exited | error
   const [showBanner, setShowBanner] = useState(true)
@@ -80,6 +81,10 @@ export default function AgentTerminal({ agent }) {
     term.loadAddon(fitAddon)
     term.open(containerRef.current)
     fitAddon.fit()
+    // Store terminal instance for focus restoration
+    terminalRef.current = term
+    // Ensure terminal has focus for keyboard input
+    term.focus()
 
     async function start() {
       const { cols, rows } = term
@@ -228,7 +233,15 @@ export default function AgentTerminal({ agent }) {
           </button>
         </div>
       )}
-      <div className="flex-1 min-h-0 [&_.xterm]:h-full" ref={containerRef} />
+      <div
+        className="flex-1 min-h-0 [&_.xterm]:h-full"
+        ref={containerRef}
+        onClick={() => {
+          // Refocus terminal when clicking anywhere in the terminal area
+          // to restore keyboard input if focus was lost
+          if (terminalRef.current) terminalRef.current.focus()
+        }}
+      />
       {showBanner && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface text-muted text-xs gap-1">
           <div className="text-lg">⚡</div>

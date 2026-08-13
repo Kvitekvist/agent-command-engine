@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Terminal spacebar not working: xterm.js terminal lost keyboard focus in certain scenarios, causing keyboard input (especially spacebar) to stop working until clicking certain buttons inadvertently restored focus. Fixed by explicitly calling `term.focus()` after creating the terminal and adding a click handler to refocus when clicking anywhere in the terminal area (TICKET-0048)
+
 ## [0.1.4] - 2026-08-11
 
 ### Fixed
