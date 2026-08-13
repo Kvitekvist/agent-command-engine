@@ -787,3 +787,18 @@ working tree copy had been corrupted (stray "2"/"21" chars typed in, the whole
 re-adding [0.1.4]. Released via scripts\release.bat (packages exes+Portable-ACE,
 commits, pushes main, tags v0.1.4, publishes GitHub release using the .env
 GH_TOKEN per TICKET-0046). Tests 13/13.
+
+TICKET-0048
+2026-08-13
+Fixed terminal spacebar not working. User reported that the spacebar stopped
+inputting spaces in the agent terminal, but clicking the screenshot button (📸)
+mysteriously restored functionality. Root cause: the xterm.js terminal instance
+was losing keyboard focus in certain scenarios. Clicking the screenshot button
+inadvertently "fixed" it by triggering React state updates that coincidentally
+helped restore focus - a red herring. Real fix: (1) store terminal instance in a
+terminalRef, (2) explicitly call term.focus() immediately after term.open() to
+ensure initial focus, (3) add onClick handler to terminal container div that
+refocuses the terminal when clicked anywhere in the terminal area. This is a
+common xterm.js pattern - terminals need explicit focus management since they're
+not standard HTML input elements. Build clean, tests 13/13 pass. Committed and
+pushed.
