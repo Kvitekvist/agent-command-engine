@@ -54,6 +54,45 @@ export default function AgentTerminal({ agent }) {
   // ptyHost.js acts on it immediately, no respawn needed, so a prompt
   // that's already on screen when this is toggled on gets answered too.
   const [autoAnswer, setAutoAnswer] = useState(false)
+  const [canBuild, setCanBuild] = useState(false)
+
+  // Check if the project can build executables
+  useEffect(() => {
+    async function checkBuildCapability() {
+      try {
+        const pkgPath = `${agent.projectPath}/src/package.json`
+        const pkgContent = await window.cpi.fs.readFile(agent.projectPath, 'src/package.json')
+        if (!pkgContent) {
+          // Try root package.json
+          const rootPkgContent = await window.cpi.fs.readFile(agent.projectPath, 'package.json')
+          if (!rootPkgContent) {
+            setCanBuild(false)
+            return
+          }
+          const pkg = JSON.parse(rootPkgContent)
+          // Check if it's an Electron app with build config
+          setCanBuild(
+            pkg.build &&
+            (pkg.build.win || pkg.build.mac) &&
+            pkg.scripts &&
+            pkg.scripts.package
+          )
+          return
+        }
+        const pkg = JSON.parse(pkgContent)
+        // Check if it's an Electron app with build config
+        setCanBuild(
+          pkg.build &&
+          (pkg.build.win || pkg.build.mac) &&
+          pkg.scripts &&
+          pkg.scripts.package
+        )
+      } catch (err) {
+        setCanBuild(false)
+      }
+    }
+    checkBuildCapability()
+  }, [agent.projectPath])
 
   useEffect(() => {
     let disposed = false
@@ -239,7 +278,17 @@ export default function AgentTerminal({ agent }) {
             }}
             title="Send: Commit, push, and merge changes if needed"
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
-            📦 Commit & Push
+            ⬆️ Commit & Push
+          </button>
+          <button
+            onClick={() => {
+              if (sessionIdRef.current) {
+                window.cpi.terminal.write(sessionIdRef.current, 'Pull changes from remote\r')
+              }
+            }}
+            title="Send: Pull changes from remote"
+            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
+            ⬇️ Pull
           </button>
           <button
             onClick={() => {

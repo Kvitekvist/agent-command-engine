@@ -802,3 +802,16 @@ refocuses the terminal when clicked anywhere in the terminal area. This is a
 common xterm.js pattern - terminals need explicit focus management since they're
 not standard HTML input elements. Build clean, tests 13/13 pass. Committed and
 pushed.
+
+TICKET-0049
+2026-08-14
+Added quick action buttons to agent terminal UI and prompt count to model cost
+breakdown table. User requested three buttons for common operations: (1) "Commit &
+Push" sends "Commit, push, and merge changes if needed", (2) "Calibrate" runs
+`/calibrate` skill, (3) "Clear" runs `/clear` command. All buttons only appear when
+terminal is ready, write commands directly to terminal with auto-submit (`\r`),
+include tooltips, and flex-wrap responsively. Also added "Prompts" column to Token
+Usage "Cost by Model" breakdown table, showing per-model message counts and matching
+the existing "By Agent" table layout. Updated byModel aggregation in TokenView.jsx
+to track prompts alongside input/output/cost. Build clean, tests 13/13 pass.
+Committed and pushed.
