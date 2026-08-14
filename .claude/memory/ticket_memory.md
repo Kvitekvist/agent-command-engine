@@ -815,3 +815,106 @@ Usage "Cost by Model" breakdown table, showing per-model message counts and matc
 the existing "By Agent" table layout. Updated byModel aggregation in TokenView.jsx
 to track prompts alongside input/output/cost. Build clean, tests 13/13 pass.
 Committed and pushed.
+
+TICKET-0050
+2026-08-14
+Added progress + success/fail feedback to the terminal's direct git/build
+actions (Commit & Push, Pull, Build) and made the missing Build button visible.
+Context: at session start the working tree already had uncommitted WIP extending
+TICKET-0049 -- "Commit & Push" had been reworked from an AI prompt into a
+direct no-AI git op via new IPC handlers (git:commitAndPush, git:pull) plus a
+"Pull" button, a canBuild capability check (reads src/package.json then root
+package.json for an Electron build config + scripts.package), and three unused
+status states (commitPushStatus/pullStatus/buildStatus). Those buttons gave no
+UI feedback (results only hit the dev console) and no Build button was ever
+rendered despite canBuild being computed. This ticket folds in and completes
+that WIP. New project:build IPC handler (handlers.js) locates the buildable
+package.json -- src/ first, then root, since ACE keeps package.json under src/
+(project_memory.md Technical Debt) so a plain root check would miss it -- runs
+`npm run build` (falls back to `package`) via spawn(shell:true,
+windowsHide:true), returning one settled { ok, message } / { ok:false, error }
+with the last 5 lines of npm output on failure. Exposed as
+window.cpi.project.build (preload.js). globals.css gained a
+.progress-indeterminate utility (sliding-highlight keyframe) -- deliberately
+indeterminate since npm/git output has no reliable percentage; an animated bar
+during the op + a definitive checkmark/cross line is the honest representation.
+AgentTerminal.jsx: a shared runOperation(status,setStatus,label,invoke) helper
+drives each action through loading -> success (auto-clears after 6s) / error
+(sticky), a module-level OperationFeedback component renders the bar-then-line
+strip per action, buttons disable while their own op runs, and a Build button
+is rendered gated on the pre-existing canBuild (true for ACE). Build clean,
+tests 13/13. Live verification (real push/pull/build in the running app) still
+open. Not yet committed -- left for the user to review/commit.
+
+Follow-up (same day, from a user screenshot of a live test): two bugs surfaced.
+(1) Clicking Commit & Push showed "Cannot read properties of undefined (reading
+'commitAndPush')" -- window.cpi.git was undefined because preload.js is a
+main-process file that does NOT hot-reload (architecture.md gotcha: `npm run dev`
+never rebuilds/reloads main or preload); the renderer HMR'd the new feedback UI
+(the red error line rendering IS the new OperationFeedback component, so that
+part was confirmed working) but the running app kept the old preload without the
+git/project namespaces. Resolution: full app restart required (rebuild dist/main
++ relaunch electron), not a Vite reload. (2) The Build button never appeared
+because canBuild was always false: the inherited WIP called
+JSON.parse(window.cpi.fs.readFile(...)) but fs.readFile resolves to
+{ ok, content } (FileService.readFile), not a raw string, so JSON.parse got
+"[object Object]" and threw every time -> caught -> canBuild=false. Fixed
+checkBuildCapability to read res.ok/res.content (helper readPkg, src/ then root)
+and also accept scripts.build in addition to scripts.package. Renderer rebuild
+clean. Lesson: fs.readFile returns a result object, not a string -- same shape
+EditorView/FileTree already consume.
+
+Third fix (same follow-up): the OperationFeedback strip carried `select-none`
+(copied from the screenshot-toast anti-clipboard-clobber pattern), which meant
+the user couldn't highlight/copy the very error text they wanted -- and it also
+disabled TICKET-0051's right-click Copy (that needs a selection). Removed
+select-none from the container; the success/error line is now explicitly
+`select-text` (the animated loading label+bar stay select-none since they carry
+no copyable text). Rule of thumb: error/status text should always be selectable;
+only reserve select-none for clipboard-handoff toasts whose own text sitting next
+to the real clipboard payload is a selection hazard (TICKET-0032).
+
+Fourth fix (after user restarted so preload loaded and window.cpi.git existed):
+Commit & Push failed with "pathspec 'commit'/'from'/'ACE' did not match any
+file(s)". Root cause: the git handlers spawned with `shell: true`, so spawn
+re-joins argv into one string and cmd.exe re-splits it on spaces -- the commit
+message "Quick commit from ACE" fragmented into separate args, and git read the
+tail words as pathspecs. Proven on this machine: spawnSync('node', [...,'Quick
+commit from ACE'], {shell:true}) -> ["Quick","commit","from","ACE"] vs
+{shell:false} -> ["Quick commit from ACE"]. Fixed by removing shell:true from
+both git:commitAndPush and git:pull (also added proc.on('error') rejection).
+git is git.exe, found on PATH without a shell (libuv auto-appends .exe;
+`git --version` via shell:false returned clean), so no shell was ever needed.
+The project:build handler KEEPS shell:true on purpose -- npm is npm.cmd (a batch
+file libuv won't auto-resolve) and its args ('run','build') are single words
+with no splitting hazard. General rule for this repo: spawn .exe tools
+(git) WITHOUT shell so multi-word args survive; only use shell for .cmd/.bat
+shims (npm, claude, codex) and then keep their args single-word. Main-process
+change -> needs build:main (done) + app restart to take effect.
+
+TICKET-0051
+2026-08-14
+Added an app-wide right-click Copy / Paste / Select all context menu so any text
+in the ACE UI can be highlighted and copied. Diagnosis first: there was NEVER a
+global user-select:none (plain content text -- divs/spans/table cells -- was
+always selectable) and there's no custom application menu, so Electron's default
+menu already wired Ctrl+C; the real gap was that nothing offered a discoverable
+right-click Copy, and text inside <button>/form controls is non-selectable per
+the UA stylesheet, which reinforced the "can't copy anything" impression.
+Implemented in the RENDERER (App.jsx) reusing the existing ContextMenu.jsx
+(TICKET-0033), NOT as a main-process Menu -- a main-process webContents
+'context-menu' handler fires regardless of the renderer's preventDefault, which
+would collide with AgentTerminal's right-click-paste. App.jsx root gets an
+onContextMenu that opens the menu with 📋 Copy (disabled when no
+window.getSelection() text; writes selection to clipboard), 📥 Paste (only when
+the target is INPUT/TEXTAREA/contentEditable; readText + execCommand
+insertText), and Select all (target.select() for inputs, else selectNodeContents
+on <main>). AgentTerminal.jsx's contextmenu handler now stopPropagation()s so
+the terminal keeps its own copy (Ctrl+C) / paste (right-click) and this menu
+doesn't double-fire over it (its native listener on containerRef stops the
+bubble before React's root-delegated onContextMenu sees it). globals.css states
+user-select:text on body as a safety net (base layer, so the intentional
+select-none utilities in AgentTerminal/AgentView still win). Files: App.jsx,
+components/AgentTerminal.jsx, styles/globals.css. Build clean, tests 13/13. Live
+verification (right-click Copy in a view, Paste in an input, terminal paste
+still works) still open. Not yet committed -- left for the user to review.

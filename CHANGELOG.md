@@ -3,8 +3,11 @@
 ## [Unreleased]
 
 ### Added
-- Quick action buttons in agent terminal UI: "Commit & Push" (sends "Commit, push, and merge changes if needed"), "Calibrate" (runs `/calibrate`), and "Clear" (runs `/clear`) for one-click access to frequently used operations (TICKET-0049)
+- Quick action buttons in agent terminal UI: "Commit & Push", "Pull", "Calibrate" (runs `/calibrate`), and "Clear" (runs `/clear`) for one-click access to frequently used operations. Commit & Push and Pull run git directly (no AI) via IPC (TICKET-0049)
 - Prompt count column in Token Usage "Cost by Model" breakdown table, matching the existing "By Agent" table layout and providing per-model usage metrics (TICKET-0049)
+- Progress bar (indeterminate) and success/fail feedback for the terminal's direct Commit & Push, Pull, and Build actions, so results are visible in the UI instead of only the dev console (TICKET-0050)
+- "Build" button in the agent terminal, shown for buildable projects (Electron apps with a build/package script). Runs the project's own `npm run build` (falling back to `package`) with progress and success/fail feedback (TICKET-0050)
+- App-wide right-click context menu (Copy / Paste / Select all) so any text in the ACE UI can be highlighted and copied. The agent terminal keeps its own copy/paste behaviour (TICKET-0051)
 
 ## [0.1.5] - 2026-08-13
 

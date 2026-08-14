@@ -351,6 +351,141 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     }
   })
 
+  // ── Git operations ──────────────────────────────────────────────────────────
+  ipcMain.handle('git:commitAndPush', async (_, { projectPath } = {}) => {
+    if (!projectPath) return { ok: false, error: 'No project path' }
+    const { spawn } = require('child_process')
+    const path = require('path')
+
+    try {
+      // Helper to run git command. NOTE: no `shell: true` -- with a shell,
+      // spawn re-joins argv into one string and cmd.exe re-splits it on spaces,
+      // so a multi-word arg like the commit message ("Quick commit from ACE")
+      // fragments and git reads "commit"/"from"/"ACE" as pathspecs. git is
+      // git.exe (found on PATH without a shell; libuv auto-appends .exe), so
+      // shell:false both works and keeps each argv element intact.
+      const runGit = (args) => new Promise((resolve, reject) => {
+        const proc = spawn('git', args, {
+          cwd: projectPath,
+          windowsHide: true,
+        })
+        let stdout = ''
+        let stderr = ''
+        proc.stdout?.on('data', d => stdout += d)
+        proc.stderr?.on('data', d => stderr += d)
+        proc.on('error', err => reject(err))
+        proc.on('close', code => {
+          if (code === 0) resolve(stdout)
+          else reject(new Error(stderr || `git exited with code ${code}`))
+        })
+      })
+
+      // Check status
+      const status = await runGit(['status', '--porcelain'])
+      if (!status.trim()) {
+        return { ok: true, message: 'No changes to commit' }
+      }
+
+      // Stage all changes
+      await runGit(['add', '-A'])
+
+      // Commit
+      const commitMsg = 'Quick commit from ACE\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>'
+      await runGit(['commit', '-m', commitMsg])
+
+      // Push
+      await runGit(['push'])
+
+      return { ok: true, message: 'Committed and pushed successfully' }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('git:pull', async (_, { projectPath } = {}) => {
+    if (!projectPath) return { ok: false, error: 'No project path' }
+    const { spawn } = require('child_process')
+
+    try {
+      // No `shell: true` -- see the note in git:commitAndPush above.
+      const proc = spawn('git', ['pull'], {
+        cwd: projectPath,
+        windowsHide: true,
+      })
+
+      let stdout = ''
+      let stderr = ''
+      proc.stdout?.on('data', d => stdout += d)
+      proc.stderr?.on('data', d => stderr += d)
+
+      return new Promise((resolve) => {
+        proc.on('error', err => resolve({ ok: false, error: err.message }))
+        proc.on('close', code => {
+          if (code === 0) {
+            resolve({ ok: true, message: stdout || 'Pulled successfully' })
+          } else {
+            resolve({ ok: false, error: stderr || `git pull exited with code ${code}` })
+          }
+        })
+      })
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  // ── Project build (TICKET-0050) ──────────────────────────────────────────────
+  // Runs the project's own build script (prefers `build`, falls back to
+  // `package`) in whichever directory actually holds a package.json with one --
+  // ACE keeps its package.json under src/ (see project_memory.md Technical
+  // Debt), so a plain `<projectPath>/package.json` check would miss it. Returns
+  // one settled result the renderer turns into a success/fail line; the last few
+  // lines of npm output are surfaced on failure so the error is actionable
+  // without opening a terminal.
+  ipcMain.handle('project:build', async (_, { projectPath } = {}) => {
+    if (!projectPath) return { ok: false, error: 'No project path' }
+    const { spawn } = require('child_process')
+    const fs = require('fs')
+    const path = require('path')
+
+    // src/ first (ACE's own layout), then the project root.
+    let cwd = null
+    let script = null
+    for (const dir of [path.join(projectPath, 'src'), projectPath]) {
+      const pkgPath = path.join(dir, 'package.json')
+      if (!fs.existsSync(pkgPath)) continue
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        if (pkg.scripts?.build) { cwd = dir; script = 'build'; break }
+        if (pkg.scripts?.package) { cwd = dir; script = 'package'; break }
+      } catch (_) { /* unreadable/invalid package.json -- keep looking */ }
+    }
+    if (!cwd) return { ok: false, error: 'No build/package script found in package.json' }
+
+    try {
+      const result = await new Promise((resolve) => {
+        const proc = spawn('npm', ['run', script], {
+          cwd,
+          windowsHide: true,
+          shell: true,
+        })
+        let stdout = ''
+        let stderr = ''
+        proc.stdout?.on('data', d => stdout += d)
+        proc.stderr?.on('data', d => stderr += d)
+        proc.on('close', code => resolve({ code, stdout, stderr }))
+        proc.on('error', err => resolve({ code: -1, stderr: err.message }))
+      })
+      if (result.code === 0) {
+        return { ok: true, message: `Build complete (npm run ${script})` }
+      }
+      const tail = (result.stderr || result.stdout || '')
+        .split('\n').filter(Boolean).slice(-5).join('\n')
+      return { ok: false, error: tail || `Build exited with code ${result.code}` }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
   // ── Terminal (TICKET-0019) ──────────────────────────────────────────────────
   // Keystrokes/resize/dispose are fire-and-forget (ipcMain.on) -- there's no
   // meaningful single response to a keystroke. Spawn is the one call with a

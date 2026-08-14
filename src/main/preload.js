@@ -53,6 +53,17 @@ contextBridge.exposeInMainWorld('cpi', {
     captureRegion: (projectPath) => ipcRenderer.invoke('screenshots:captureRegion', projectPath),
   },
 
+  // Git operations
+  git: {
+    commitAndPush: (projectPath) => ipcRenderer.invoke('git:commitAndPush', { projectPath }),
+    pull: (projectPath) => ipcRenderer.invoke('git:pull', { projectPath }),
+  },
+
+  // Project build (TICKET-0050)
+  project: {
+    build: (projectPath) => ipcRenderer.invoke('project:build', { projectPath }),
+  },
+
   // Terminal
   terminal: {
     spawn: (opts) => ipcRenderer.invoke('terminal:spawn', opts),
