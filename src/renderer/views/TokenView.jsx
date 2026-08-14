@@ -54,10 +54,11 @@ export default function TokenView() {
   const byModel = Object.values(
     tokenStats.reduce((acc, row) => {
       const m = row.model || 'unknown'
-      if (!acc[m]) acc[m] = { model: m, input: 0, output: 0, cost: 0 }
-      acc[m].input  += row.input  || 0
-      acc[m].output += row.output || 0
-      acc[m].cost   += row.cost   || 0
+      if (!acc[m]) acc[m] = { model: m, input: 0, output: 0, cost: 0, prompts: 0 }
+      acc[m].input   += row.input   || 0
+      acc[m].output  += row.output  || 0
+      acc[m].cost    += row.cost    || 0
+      acc[m].prompts += row.prompts || 0
       return acc
     }, {})
   ).sort((a, b) => (b.input + b.output) - (a.input + a.output))
@@ -245,6 +246,7 @@ function ModelCostTable({ data }) {
         <thead>
           <tr className="text-muted border-b border-border">
             <th className="text-left pb-2">Model</th>
+            <th className="text-right pb-2">Prompts</th>
             <th className="text-right pb-2">Input</th>
             <th className="text-right pb-2">Output</th>
             <th className="text-right pb-2">Cost</th>
@@ -254,6 +256,7 @@ function ModelCostTable({ data }) {
           {data.map((row) => (
             <tr key={row.model}>
               <td className="py-1.5 text-gray-300">{row.model}</td>
+              <td className="text-right text-gray-400">{row.prompts.toLocaleString()}</td>
               <td className="text-right text-gray-400">{row.input.toLocaleString()}</td>
               <td className="text-right text-gray-400">{row.output.toLocaleString()}</td>
               <td className="text-right text-warning">${row.cost.toFixed(4)}</td>

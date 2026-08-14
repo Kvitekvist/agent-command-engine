@@ -221,7 +221,7 @@ export default function AgentTerminal({ agent }) {
         </div>
       )}
       {status === 'ready' && (
-        <div className="flex items-center gap-1.5 px-1 pb-1 shrink-0">
+        <div className="flex items-center gap-1.5 px-1 pb-1 shrink-0 flex-wrap">
           <button
             onClick={toggleAutoAnswer}
             title="Auto-confirm permission prompts in this terminal, without needing to stop and relaunch the agent"
@@ -230,6 +230,36 @@ export default function AgentTerminal({ agent }) {
                 ? 'border-accent/40 bg-accent/20 text-accent'
                 : 'border-border text-muted hover:bg-border'}`}>
             {autoAnswer ? '🛡️ Auto-approve: On' : '🛡️ Auto-approve: Off'}
+          </button>
+          <button
+            onClick={() => {
+              if (sessionIdRef.current) {
+                window.cpi.terminal.write(sessionIdRef.current, 'Commit, push, and merge changes if needed\r')
+              }
+            }}
+            title="Send: Commit, push, and merge changes if needed"
+            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
+            📦 Commit & Push
+          </button>
+          <button
+            onClick={() => {
+              if (sessionIdRef.current) {
+                window.cpi.terminal.write(sessionIdRef.current, '/calibrate\r')
+              }
+            }}
+            title="Run /calibrate to review and improve session patterns"
+            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
+            🎯 Calibrate
+          </button>
+          <button
+            onClick={() => {
+              if (sessionIdRef.current) {
+                window.cpi.terminal.write(sessionIdRef.current, '/clear\r')
+              }
+            }}
+            title="Clear the conversation context"
+            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
+            🧹 Clear
           </button>
         </div>
       )}

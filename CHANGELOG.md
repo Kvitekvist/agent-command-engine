@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- Quick action buttons in agent terminal UI: "Commit & Push" (sends "Commit, push, and merge changes if needed"), "Calibrate" (runs `/calibrate`), and "Clear" (runs `/clear`) for one-click access to frequently used operations (TICKET-0049)
+- Prompt count column in Token Usage "Cost by Model" breakdown table, matching the existing "By Agent" table layout and providing per-model usage metrics (TICKET-0049)
+
 ## [0.1.5] - 2026-08-13
 
 ### Fixed
