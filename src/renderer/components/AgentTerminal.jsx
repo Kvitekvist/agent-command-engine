@@ -94,6 +94,44 @@ export default function AgentTerminal({ agent }) {
   const [commitPushStatus, setCommitPushStatus] = useState(null) // { type: 'loading' | 'success' | 'error', message: string }
   const [pullStatus, setPullStatus] = useState(null)
   const [buildStatus, setBuildStatus] = useState(null)
+  const [pasteStatus, setPasteStatus] = useState(null) // For large paste feedback
+
+  // TICKET-0052: chunked paste for large clipboard content. Pastes over
+  // this threshold get split into chunks with small delays between them to
+  // avoid overwhelming the PTY buffer.
+  const LARGE_PASTE_THRESHOLD = 8192 // 8KB
+  const PASTE_CHUNK_SIZE = 4096 // 4KB chunks
+  const PASTE_CHUNK_DELAY_MS = 50 // 50ms between chunks
+
+  // Paste text to the terminal, chunking if needed for large pastes
+  async function pasteToTerminal(text) {
+    if (!sessionIdRef.current || !text) return
+
+    if (text.length <= LARGE_PASTE_THRESHOLD) {
+      // Small paste - write immediately
+      window.cpi.terminal.write(sessionIdRef.current, text)
+      return
+    }
+
+    // Large paste - chunk it with feedback
+    setPasteStatus({ type: 'loading' })
+    try {
+      const chunks = Math.ceil(text.length / PASTE_CHUNK_SIZE)
+      for (let i = 0; i < text.length; i += PASTE_CHUNK_SIZE) {
+        const chunk = text.slice(i, i + PASTE_CHUNK_SIZE)
+        window.cpi.terminal.write(sessionIdRef.current, chunk)
+        // Brief delay between chunks to let PTY buffer drain
+        if (i + PASTE_CHUNK_SIZE < text.length) {
+          await new Promise(resolve => setTimeout(resolve, PASTE_CHUNK_DELAY_MS))
+        }
+      }
+      setPasteStatus({ type: 'success', message: `Pasted ${(text.length / 1024).toFixed(1)}KB` })
+      setTimeout(() => setPasteStatus(null), 3000)
+    } catch (err) {
+      setPasteStatus({ type: 'error', message: `Paste failed: ${err.message}` })
+      setTimeout(() => setPasteStatus(null), 6000)
+    }
+  }
 
   // Check if the project can build executables. fs.readFile resolves to
   // { ok, content } (or { ok:false, reason } -- see FileService.readFile), NOT
@@ -207,26 +245,38 @@ export default function AgentTerminal({ agent }) {
           navigator.clipboard.writeText(selection)
           return false // Prevent default
         }
-        // Ctrl+V - paste from clipboard
+        // Ctrl+V - paste from clipboard (TICKET-0052: chunked for large pastes)
         if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
-          navigator.clipboard.readText().then(text => {
-            if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, text)
+          navigator.clipboard.readText().then(pasteToTerminal).catch(err => {
+            console.error('Paste failed:', err)
+            term.write('\r\n\x1b[31mPaste failed\x1b[0m\r\n')
           })
           return false // Prevent default
         }
         return true // Allow all other keys
       })
 
-      // Right-click paste support. stopPropagation keeps the app-wide
-      // Copy/Paste context menu (TICKET-0051, wired in App.jsx) from also
-      // firing over the terminal -- the terminal owns its own copy (Ctrl+C
-      // on a selection) and paste (right-click / Ctrl+V) behaviour.
+      // Right-click paste support (TICKET-0052: chunked for large pastes).
+      // stopPropagation keeps the app-wide Copy/Paste context menu
+      // (TICKET-0051, wired in App.jsx) from also firing over the terminal --
+      // the terminal owns its own copy (Ctrl+C on a selection) and paste
+      // (right-click / Ctrl+V) behaviour.
       containerRef.current.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         e.stopPropagation()
-        navigator.clipboard.readText().then(text => {
-          if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, text)
+        navigator.clipboard.readText().then(pasteToTerminal).catch(err => {
+          console.error('Paste failed:', err)
+          term.write('\r\n\x1b[31mPaste failed\x1b[0m\r\n')
         })
+      })
+
+      // Prevent xterm.js's default paste handler from also firing when the user
+      // pastes (via Ctrl+V or right-click), which would cause a double-paste.
+      // We handle paste explicitly above via attachCustomKeyEventHandler for Ctrl+V
+      // and contextmenu listener for right-click.
+      containerRef.current.addEventListener('paste', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
       })
 
       // TICKET-0044: force a known CLI session id for Claude agents so their
@@ -388,6 +438,8 @@ export default function AgentTerminal({ agent }) {
       <OperationFeedback label="Commit & Push" status={commitPushStatus} />
       <OperationFeedback label="Pull" status={pullStatus} />
       <OperationFeedback label="Build" status={buildStatus} />
+      {/* TICKET-0052: feedback for large paste operations */}
+      <OperationFeedback label="Pasting" status={pasteStatus} />
       <div
         className="flex-1 min-h-0 [&_.xterm]:h-full"
         ref={containerRef}
