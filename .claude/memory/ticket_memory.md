@@ -941,3 +941,41 @@ stage-specific error messages (Stage/Commit/Push/Verification failed:) for
 immediate actionability. The original implementation was functionally correct
 (runGit rejects on non-zero exit), but lacked verification and detailed error
 reporting. Build clean, tests 13/13 pass.
+
+TICKET-0052 (follow-up)
+2026-08-17
+User reported the double-paste bug was still happening ("every time i paste in
+info in to project (ACE) it paste the info twice"), disproving this same
+ticket's earlier close-out entry above (2026-08-14), which claimed a
+containerRef 'paste' listener with preventDefault()/stopPropagation() fixed
+it. That listener does exist but fires too late: xterm.js's own internal paste
+handling lives on its underlying textarea, in the target phase, and completes
+before the event bubbles up to the container's listener -- so the earlier fix
+never actually blocked xterm's default write. Real root cause: the Ctrl+V
+branch in attachCustomKeyEventHandler (AgentTerminal.jsx) returned `false` to
+stop xterm from processing the keystroke, but never called
+event.preventDefault() -- and returning false does NOT imply preventDefault().
+Without it, the browser's native paste still fires on xterm's textarea, xterm
+writes the pasted text once via its own onData path, and the handler's own
+`navigator.clipboard.readText().then(pasteToTerminal)` writes it a second
+time. Fixed by adding event.preventDefault() before the `return false`. Live-
+verified the mechanism (not just build+tests, per prior guidance that this
+project's bugs need real runtime verification): built a standalone harness
+using the actual @xterm/xterm 6.0.0 UMD bundle, served locally, driven in a
+real Chrome tab with a genuine Ctrl+V keystroke and real OS clipboard content
+(via PowerShell Set-Clipboard) -- pre-fix, one write arrived from xterm's own
+`onData` purely from the native paste path firing (confirming the missing
+preventDefault is what lets that path run at all); post-fix, that same real
+Ctrl+V produced zero writes, confirming the native path is fully suppressed.
+Chrome's extension-sandboxed clipboard-read permission blocked
+navigator.clipboard.readText() in the harness itself (hung indefinitely, no
+resolve/reject), so the app's own second write couldn't be directly observed
+in the harness -- but that call path is unchanged from before and unrelated to
+the fix. Build clean, tests 13/13 pass. Full live verification inside the
+actual packaged/dev Electron app (real PTY, unrestricted clipboard) not
+additionally performed. Lesson for this project: a fix claimed "done" from
+source reasoning alone (the 2026-08-14 entry) can be wrong even when the code
+looks plausible -- the specific DOM event-ordering detail here (attachCustom-
+KeyEventHandler's `false` != preventDefault, and a listener on an ancestor
+firing after xterm's own listener on the target) is exactly the kind of thing
+that only shows up by tracing real event flow, not by re-reading the diff.

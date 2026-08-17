@@ -247,6 +247,11 @@ export default function AgentTerminal({ agent }) {
         }
         // Ctrl+V - paste from clipboard (TICKET-0052: chunked for large pastes)
         if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
+          // Returning false only stops xterm from handling the keystroke -- it does
+          // NOT call preventDefault(), so without this the browser still fires its
+          // native paste on xterm's underlying textarea, which xterm handles itself
+          // and pastes once, on top of the manual clipboard read below (double-paste).
+          event.preventDefault()
           navigator.clipboard.readText().then(pasteToTerminal).catch(err => {
             console.error('Paste failed:', err)
             term.write('\r\n\x1b[31mPaste failed\x1b[0m\r\n')

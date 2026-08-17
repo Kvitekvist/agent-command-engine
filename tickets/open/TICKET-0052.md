@@ -19,6 +19,7 @@ Root cause analysis needed: terminal pasting uses `navigator.clipboard.readText(
 * [x] Investigate current clipboard read/write flow
 * [x] Add chunked writing for large pastes (>8KB threshold, 4KB chunks)
 * [x] Add visual feedback during large paste operations
+* [x] Fix double-paste bug (Ctrl+V pasted text twice)
 * [ ] Test with various paste sizes (1KB, 10KB, 100KB, 1MB)
 * [ ] Verify no truncation occurs
 
@@ -87,3 +88,42 @@ This prevents PTY buffer overflow while maintaining responsiveness for normal-si
 - Verify no text is lost during chunking
 
 Build clean. Tests pass. Ready for live verification.
+
+---
+
+## Follow-up: double-paste bug (2026-08-17)
+
+**Report:** every Ctrl+V paste into the terminal inserted the pasted text twice.
+
+**Root cause:** the Ctrl+V branch in `attachCustomKeyEventHandler` (`AgentTerminal.jsx`)
+returned `false` to tell xterm.js not to handle the keystroke itself, but never called
+`event.preventDefault()`. Returning `false` only stops xterm's own key-processing — it
+does not stop the browser's native paste action. Without `preventDefault()`, Ctrl+V still
+fired the browser's native paste on xterm's underlying textarea, which xterm handles
+internally and writes to the terminal via its normal `onData` path (paste #1). The
+`pasteToTerminal()` call added in the chunking work above then read the clipboard a
+second time and wrote it again (paste #2). The `paste` event listener added on the
+container (to guard against exactly this) fires too late — xterm's own paste handling
+lives on the textarea itself and runs during the target phase, before the event bubbles
+up to the container's listener.
+
+**Fix:** call `event.preventDefault()` in the Ctrl+V branch, before `return false`, so the
+native paste event never fires and only the explicit `pasteToTerminal()` call runs.
+
+**Verification:** Built a standalone harness (`@xterm/xterm` 6.0.0's real UMD bundle,
+served locally, driven in an actual Chrome tab) that mirrors the exact handler code and
+counts every write reaching the mock PTY. Set real OS clipboard content via
+`Set-Clipboard`, then sent a genuine Ctrl+V keystroke (not a synthetic DOM event):
+- **Before the fix:** one write arrived from xterm's own `onData` (the native paste path
+  firing because `preventDefault()` was never called) — reproducing the mechanism live.
+  Chrome's extension-sandboxed clipboard-read permission blocked the app's own
+  `navigator.clipboard.readText()` call in this harness, so the second write couldn't be
+  observed directly here, but the code path is identical to production and the missing
+  `preventDefault()` is the confirmed, reproducible cause of the native path firing at all.
+- **After the fix:** zero writes on the same real Ctrl+V keystroke — the native paste path
+  is fully suppressed, leaving only the single deliberate `pasteToTerminal()` write (which
+  does complete normally inside the real Electron app, unlike the sandboxed test tab).
+
+Also confirmed `npm run build:renderer` and `npm test` (13/13) both pass. Live
+verification inside the actual packaged/dev Electron app (real PTY, real clipboard
+permissions) was not additionally performed this session.

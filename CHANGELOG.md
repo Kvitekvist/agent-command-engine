@@ -8,6 +8,11 @@
 - Progress bar (indeterminate) and success/fail feedback for the terminal's direct Commit & Push, Pull, and Build actions, so results are visible in the UI instead of only the dev console (TICKET-0050)
 - "Build" button in the agent terminal, shown for buildable projects (Electron apps with a build/package script). Runs the project's own `npm run build` (falling back to `package`) with progress and success/fail feedback (TICKET-0050)
 - App-wide right-click context menu (Copy / Paste / Select all) so any text in the ACE UI can be highlighted and copied. The agent terminal keeps its own copy/paste behaviour (TICKET-0051)
+- Chunked clipboard paste into the agent terminal for large text (>8KB, written in 4KB chunks with brief delays), with progress/success feedback, to prevent PTY buffer overflow on big pastes (TICKET-0052)
+
+### Fixed
+- `git:commitAndPush` now verifies the push actually landed (checks for zero unpushed commits against the upstream) and reports stage-specific errors (Stage/Commit/Push/Verification failed), instead of silently leaving a commit unpushed with no indication (TICKET-0053)
+- Terminal paste (Ctrl+V) inserted the pasted text twice. The Ctrl+V handler returned `false` to stop xterm.js from processing the keystroke, but never called `event.preventDefault()` — since `false` alone doesn't suppress the browser's native paste, xterm's own internal paste handling still ran and wrote the text once, and the app's own clipboard read then wrote it again. Fixed by calling `event.preventDefault()` in the handler so only the app's explicit paste path runs (TICKET-0052)
 
 ## [0.1.5] - 2026-08-13
 
