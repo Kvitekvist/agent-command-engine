@@ -979,3 +979,25 @@ looks plausible -- the specific DOM event-ordering detail here (attachCustom-
 KeyEventHandler's `false` != preventDefault, and a listener on an ancestor
 firing after xterm's own listener on the target) is exactly the kind of thing
 that only shows up by tracing real event flow, not by re-reading the diff.
+
+TICKET-0054
+2026-08-17
+Made `scripts/build.bat` (and `build.sh`, for parity) auto-bump the version
+number on every run, per direct user request -- version bumps had previously
+always been manual, done by hand per release ticket (TICKET-0045, TICKET-0047).
+New `scripts/bump-version.js` reads `src/package.json`'s version, increments
+the patch segment, writes it back preserving the file's existing CRLF/2-space
+formatting, and mirrors the new version into root `version.txt` (kept in sync
+since TICKET-0047 treats both as the version source of record). Called from
+`build.bat`/`build.sh` before `npm run build`, errorlevel-guarded so a failed
+bump aborts before compiling. Deliberately NOT wired into any npm script or
+`release.bat` -- `npm run build`/`npm run package` called directly stay
+unaffected, and release.bat already just reads whatever version is current in
+package.json at release time, so it automatically picks up whatever build.bat
+last bumped it to with no changes needed there. Live-verified: ran
+`scripts\build.bat` twice end-to-end via cmd.exe (exit code 0 both times),
+version went 0.1.5 -> 0.1.6 -> 0.1.7 (a standalone node script check) ->
+0.1.8 (second full build.bat run, both build:renderer and build:main
+completing), src/package.json and version.txt confirmed in sync at 0.1.8
+afterward, CRLF preserved (checked via xxd). npm test still 13/13 after the
+version-field changes. Closed same day.
