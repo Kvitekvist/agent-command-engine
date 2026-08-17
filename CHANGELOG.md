@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.8] - 2026-08-17
 
 ### Added
 - Quick action buttons in agent terminal UI: "Commit & Push", "Pull", "Calibrate" (runs `/calibrate`), and "Clear" (runs `/clear`) for one-click access to frequently used operations. Commit & Push and Pull run git directly (no AI) via IPC (TICKET-0049)
@@ -13,6 +13,7 @@
 - In-app prerequisite check + one-click installer for the Claude Code and Codex CLIs. A new setup screen appears on launch if either is missing (dismissible), with a matching "Prerequisites" section in Settings for re-running anytime; installs via `npm install -g @anthropic-ai/claude-code` / `@openai/codex`. Does not install Node.js itself (links to nodejs.org) or automate CLI sign-in (`claude login`/`codex login` remain manual, interactive steps) (TICKET-0055)
 
 ### Fixed
+- `npm run package` crashed at the very end ("Cannot read properties of null (reading 'provider')") while generating auto-update metadata electron-builder auto-triggers for NSIS builds, even though ACE doesn't use Electron's auto-updater at all. Fixed by adding `"publish": null` to the build config, which disables that step entirely (TICKET-0056)
 - `git:commitAndPush` now verifies the push actually landed (checks for zero unpushed commits against the upstream) and reports stage-specific errors (Stage/Commit/Push/Verification failed), instead of silently leaving a commit unpushed with no indication (TICKET-0053)
 - Terminal paste (Ctrl+V) inserted the pasted text twice. The Ctrl+V handler returned `false` to stop xterm.js from processing the keystroke, but never called `event.preventDefault()` — since `false` alone doesn't suppress the browser's native paste, xterm's own internal paste handling still ran and wrote the text once, and the app's own clipboard read then wrote it again. Fixed by calling `event.preventDefault()` in the handler so only the app's explicit paste path runs (TICKET-0052)
 

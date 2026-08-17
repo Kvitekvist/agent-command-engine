@@ -1062,3 +1062,27 @@ bound to the debug port (never a blanket taskkill), leaving the user's real
 running environment untouched throughout. macOS unverified (no Mac available
 from this Windows machine) -- the win32-conditional shell branches are
 unexercised there, flagged as a known gap. Closed same day.
+
+TICKET-0056
+2026-08-17
+Found live while cutting the v0.1.8 release: `npm run package` (via
+release.bat) built both the portable exe and the NSIS installer successfully,
+then crashed at the very end -- "Cannot read properties of null (reading
+'provider')" in electron-builder's createUpdateInfoTasks, preceded by
+"Cannot detect repository by .git/config" warnings. release.bat treats any
+non-zero exit as fatal and aborted before commit/push/tag/publish, even
+though the artifacts were already sitting in releases/. Root cause:
+src/package.json's electron-builder config has no `publish` key, so
+electron-builder auto-triggers update-metadata (latest.yml/blockmap)
+generation for the NSIS target and tries to auto-detect a publish provider
+from `repository` (missing) or the git remote -- neither resolves, and
+electron-builder's own code doesn't handle that null case, crashing instead
+of skipping. ACE doesn't use electron-updater/autoUpdater anywhere (releases
+are published manually via release.bat's own `gh release create`), so this
+whole step is dead weight. Fixed with the documented electron-builder
+escape hatch: `"publish": null` in the build config, fully disabling
+publish-provider detection. Live-verified: re-ran `npm run package` after the
+fix, completed cleanly with no crash and no more repository-detection
+warnings; portable + NSIS installer for 0.1.8 both rebuilt with fresh
+timestamps; npm test still 13/13. Rolled into the same v0.1.8 release this
+was found while cutting. Closed same day.
