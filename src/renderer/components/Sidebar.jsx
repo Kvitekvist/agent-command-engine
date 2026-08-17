@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import useStore from '../store/useStore'
 import FileTree from './FileTree'
+import Modal from './Modal'
 
 const NAV = [
   { id: 'agents',   icon: '⚡', label: 'Agents' },
@@ -12,40 +13,61 @@ const NAV = [
 export default function Sidebar() {
   const { projects, activeProject, setProjects, setActiveProject, activeView, setActiveView, openFiles } = useStore()
   const [adding, setAdding] = useState(false)
-  const [newName, setNewName] = useState('')
+
+  // TICKET-0057: name comes from a real popup (Electron doesn't implement
+  // window.prompt()), then the location comes from the native OS folder
+  // picker -- two popups, no inline text field in the sidebar itself.
+  const [nameModalOpen, setNameModalOpen] = useState(false)
+  const [pendingName, setPendingName] = useState('')
+  const [nameError, setNameError] = useState('')
 
   useEffect(() => {
     window.cpi.getProjects().then(setProjects)
   }, [])
 
+  async function refreshProjects() {
+    const updated = await window.cpi.getProjects()
+    setProjects(updated)
+  }
+
   async function handlePickFolder() {
     const folderPath = await window.cpi.pickFolder()
     if (!folderPath) return
-    const name = newName.trim() || folderPath.split(/[\\/]/).pop()
+    const name = folderPath.split(/[\\/]/).pop()
     await window.cpi.addProject(name, folderPath)
-    const updated = await window.cpi.getProjects()
-    setProjects(updated)
+    await refreshProjects()
     setAdding(false)
-    setNewName('')
   }
 
-  async function handleCreateFromTemplate() {
-    const name = newName.trim()
+  function openNameModal() {
+    setPendingName('')
+    setNameError('')
+    setNameModalOpen(true)
+  }
+
+  // Popup 1 (name) confirmed -> popup 2 is the native OS folder picker,
+  // defaulting to ACE's own parent folder but fully navigable -- then the
+  // folder is actually created there.
+  async function handleNameConfirmed() {
+    const name = pendingName.trim()
     if (!name) {
-      alert('Please enter a project name')
+      setNameError('Please enter a project name')
       return
     }
-    const result = await window.cpi.createFromTemplate(name)
-    if (!result) return // User canceled
-    if (result.error) {
+    setNameModalOpen(false)
+
+    const defaultParent = await window.cpi.getDefaultParentDir()
+    const parentDir = await window.cpi.pickFolder(defaultParent)
+    if (!parentDir) return // user canceled the location picker
+
+    const result = await window.cpi.createNewProject(name, parentDir)
+    if (result?.error) {
       alert(`Error: ${result.error}`)
       return
     }
     await window.cpi.addProject(name, result.path)
-    const updated = await window.cpi.getProjects()
-    setProjects(updated)
+    await refreshProjects()
     setAdding(false)
-    setNewName('')
   }
 
   async function handleRemove(e, id) {
@@ -88,22 +110,33 @@ export default function Sidebar() {
 
         {adding && (
           <div className="px-3 pb-2 space-y-1.5">
-            <input
-              className="input text-xs"
-              placeholder="Project name (required for new projects)"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              autoFocus
-            />
             <div className="flex gap-1.5">
               <button onClick={handlePickFolder} className="btn-primary flex-1 text-xs" title="Connect to an existing folder">
                 📁 Existing
               </button>
-              <button onClick={handleCreateFromTemplate} className="btn-primary flex-1 text-xs" title="Create new project from template">
+              <button onClick={openNameModal} className="btn-primary flex-1 text-xs" title="Create a new project folder">
                 ✨ New
               </button>
             </div>
           </div>
+        )}
+
+        {nameModalOpen && (
+          <Modal title="New project" onClose={() => setNameModalOpen(false)}>
+            <input
+              className="input text-xs"
+              placeholder="Project name"
+              value={pendingName}
+              onChange={(e) => { setPendingName(e.target.value); setNameError('') }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleNameConfirmed() }}
+              autoFocus
+            />
+            {nameError && <p className="text-xs text-danger mt-1.5">{nameError}</p>}
+            <div className="flex justify-end gap-1.5 mt-3">
+              <button onClick={() => setNameModalOpen(false)} className="btn-ghost text-xs">Cancel</button>
+              <button onClick={handleNameConfirmed} className="btn-primary text-xs">OK</button>
+            </div>
+          </Modal>
         )}
 
         <ul className="space-y-0.5 px-2 pb-2">

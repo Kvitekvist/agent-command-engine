@@ -1,4 +1,4 @@
-const { dialog, shell } = require('electron')
+const { app, dialog, shell } = require('electron')
 const { LoadBalancer } = require('../services/LoadBalancer')
 const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 const { FileService } = require('../services/FileService')
@@ -23,37 +23,59 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return DB.getProjects()
   })
 
-  ipcMain.handle('projects:pickFolder', async () => {
-    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+  // `defaultPath` is optional -- the "New" flow (TICKET-0057) passes ACE's
+  // own parent folder (from projects:getDefaultParentDir below); the
+  // "Existing" flow calls this with no arg and gets the OS's own default.
+  // createDirectory lets the user make a new subfolder from inside the
+  // native dialog itself, standard on both Windows and Mac.
+  ipcMain.handle('projects:pickFolder', async (_, defaultPath) => {
+    const opts = { properties: ['openDirectory', 'createDirectory'] }
+    if (defaultPath) opts.defaultPath = defaultPath
+    const result = await dialog.showOpenDialog(opts)
     if (result.canceled) return null
     return result.filePaths[0]
   })
 
-  ipcMain.handle('projects:createFromTemplate', async (_, projectName) => {
+  // TICKET-0057: "parent folder of ACE" for the New-project folder picker's
+  // default location -- same isDev split main/index.js already uses for
+  // loadURL vs loadFile. In dev, app.getAppPath() resolves to the repo's
+  // src/ folder (where package.json lives), so its parent is the repo root
+  // ("ACE" itself) and the grandparent is what we want. In a packaged
+  // build, app.getAppPath() resolves inside app.asar, which isn't a
+  // meaningful filesystem location to browse from -- app.getPath('exe')'s
+  // directory (the install folder, or wherever a portable exe/Portable-ACE
+  // was placed) is the real on-disk "ACE folder" there instead. Cross-
+  // platform by construction: path.dirname/app.getAppPath/app.getPath are
+  // all already OS-agnostic, no separate Windows/Mac branches needed.
+  ipcMain.handle('projects:getDefaultParentDir', () => {
+    try {
+      const path = require('path')
+      const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+      const aceDir = isDev
+        ? path.dirname(app.getAppPath())
+        : path.dirname(app.getPath('exe'))
+      return path.dirname(aceDir)
+    } catch (_) {
+      return null
+    }
+  })
+
+  // TICKET-0057: replaces the old template-copy flow (createFromTemplate),
+  // which copied from a hardcoded, no-longer-existing, Windows-only path --
+  // dead code that could never have worked on Mac regardless. Just creates
+  // an empty project folder at <parentDir>/<name>; fs.promises.mkdir is
+  // already cross-platform.
+  ipcMain.handle('projects:createNew', async (_, { name, parentDir } = {}) => {
+    if (!name || !parentDir) return { error: 'Missing project name or location' }
     const fs = require('fs')
     const path = require('path')
 
-    // Template source
-    const templatePath = 'C:\\Users\\JensPetterRøyseth\\Documents\\VS Code\\Template'
-
-    // Ask user where to create the new project
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: 'Select where to create the new project'
-    })
-    if (result.canceled) return null
-
-    const parentDir = result.filePaths[0]
-    const newProjectPath = path.join(parentDir, projectName)
-
-    // Check if directory already exists
+    const newProjectPath = path.join(parentDir, name)
     if (fs.existsSync(newProjectPath)) {
       return { error: 'A folder with this name already exists in the selected location' }
     }
-
-    // Copy template to new location
     try {
-      await fs.promises.cp(templatePath, newProjectPath, { recursive: true })
+      await fs.promises.mkdir(newProjectPath, { recursive: true })
       return { path: newProjectPath }
     } catch (error) {
       return { error: error.message }

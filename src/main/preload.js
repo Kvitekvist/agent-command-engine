@@ -7,8 +7,11 @@ contextBridge.exposeInMainWorld('cpi', {
   getProjects: () => ipcRenderer.invoke('projects:getAll'),
   addProject: (name, folderPath) => ipcRenderer.invoke('projects:add', name, folderPath),
   removeProject: (id) => ipcRenderer.invoke('projects:remove', id),
-  pickFolder: () => ipcRenderer.invoke('projects:pickFolder'),
-  createFromTemplate: (projectName) => ipcRenderer.invoke('projects:createFromTemplate', projectName),
+  pickFolder: (defaultPath) => ipcRenderer.invoke('projects:pickFolder', defaultPath),
+  // TICKET-0057: replaces createFromTemplate (dead code -- copied from a
+  // hardcoded, no-longer-existing, Windows-only template path).
+  getDefaultParentDir: () => ipcRenderer.invoke('projects:getDefaultParentDir'),
+  createNewProject: (name, parentDir) => ipcRenderer.invoke('projects:createNew', { name, parentDir }),
 
   // Agents
   getAgents: (projectId) => ipcRenderer.invoke('agents:getByProject', projectId),

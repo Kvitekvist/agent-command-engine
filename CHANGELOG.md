@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- New-project creation: removed the shared project-name text field from the Sidebar's add-project panel. Clicking "✨ New" now shows a popup for the name, then the native OS folder picker (defaulting to ACE's own parent folder, fully navigable) for where to save it, then creates the folder there. Replaces the old "create from template" flow, which was already dead code (hardcoded to a nonexistent, Windows-only template path) (TICKET-0057)
+
 ## [0.1.8] - 2026-08-17
 
 ### Added

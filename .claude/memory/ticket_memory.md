@@ -1086,3 +1086,43 @@ fix, completed cleanly with no crash and no more repository-detection
 warnings; portable + NSIS installer for 0.1.8 both rebuilt with fresh
 timestamps; npm test still 13/13. Rolled into the same v0.1.8 release this
 was found while cutting. Closed same day.
+
+TICKET-0057
+2026-08-17
+Redesigned new-project creation per user request: removed the shared
+project-name text input from Sidebar.jsx's add-project panel; clicking
+"✨ New" now shows a popup asking for the name, then (after OK) the native OS
+folder picker asking where to save it, defaulting to ACE's own parent
+folder but fully navigable. Investigating the existing "New" flow
+(projects:createFromTemplate) found it was already fully dead code: it
+copied from a hardcoded `C:\Users\JensPetterRøyseth\...\Template` path -- a
+different username than this machine's actual user (jensr) -- confirmed via
+`ls` that the folder doesn't exist at all, and Windows-only by construction
+regardless (would never have satisfied "must work on...Mac"). Replaced
+outright with plain `fs.promises.mkdir` instead of trying to preserve a
+non-functional template mechanism. New `components/Modal.jsx` (generic
+centered popup, Escape/click-outside to close) is the first of its kind in
+this app -- needed because Electron doesn't implement `window.prompt()`, so
+a real React modal was the only option for the name popup.
+`projects:pickFolder` extended to accept an optional `defaultPath` (existing
+"Existing" flow callers unaffected); new `projects:getDefaultParentDir`
+computes ACE's own parent folder using the same isDev split main/index.js
+already uses for loadURL vs loadFile (dev: parent of `app.getAppPath()`'s
+parent i.e. repo root's parent; packaged: parent of the folder holding
+`app.getPath('exe')`); new `projects:createNew` creates `<parentDir>/<name>`
+with collision detection. Live-verified via a throwaway-profile dev instance
+driven over raw CDP (same technique as TICKET-0043/0055): `getDefaultParentDir()`
+resolved to `...\VS Projects` -- the real parent of this repo, matching
+where this user's other sibling projects (API, JobHunter, seen in the app's
+own Token Usage view) already live; `createNewProject` verified to actually
+create the folder on disk (direct filesystem check) and register correctly
+via addProject/getProjects; a same-name collision correctly errored instead
+of overwriting; the real UI clicked through end to end (name modal opens,
+empty name shows inline validation without proceeding, Cancel closes cleanly
+with no side effects). The native OS folder-picker dialog itself (the
+"where to save it" popup) wasn't driven by automation -- native dialogs sit
+outside what CDP can reach -- but it's the same `dialog.showOpenDialog` API
+the pre-existing Existing-folder flow already used successfully, just now
+also given a defaultPath, so risk there is narrow. macOS unverified (no Mac
+available) -- the new path logic has no Windows-specific branches though,
+unlike the old hardcoded template path it replaced. Closed same day.
