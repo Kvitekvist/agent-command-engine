@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import useStore from '../store/useStore'
 import ModelSelector from '../components/ModelSelector'
+import PrereqChecklist from '../components/PrereqChecklist'
 
 const CLAUDE_MODELS = [
   'claude-haiku-4-5-20251001',
@@ -63,6 +64,18 @@ export default function SettingsView() {
 
   return (
     <div className="p-6 max-w-2xl space-y-8 overflow-y-auto h-full">
+      {/* Prerequisites (TICKET-0055) */}
+      <section className="card space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold">Prerequisites</h2>
+          <p className="text-xs text-muted mt-0.5">
+            The CLIs ACE launches agents through. Re-run this anytime a launch fails with
+            "command not found", e.g. after reinstalling Node.js.
+          </p>
+        </div>
+        <PrereqChecklist />
+      </section>
+
       {/* General settings */}
       <section className="card space-y-4">
         <h2 className="text-sm font-semibold">General Settings</h2>

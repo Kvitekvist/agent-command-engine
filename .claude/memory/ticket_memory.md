@@ -1001,3 +1001,64 @@ version went 0.1.5 -> 0.1.6 -> 0.1.7 (a standalone node script check) ->
 completing), src/package.json and version.txt confirmed in sync at 0.1.8
 afterward, CRLF preserved (checked via xxd). npm test still 13/13 after the
 version-field changes. Closed same day.
+
+TICKET-0055
+2026-08-17
+Added an in-app prerequisite check + one-click installer for the claude/codex
+CLIs, per user request to make the app "true plug and play for mac and
+windows." ACE spawns `claude`/`codex` directly (AgentService.js,
+agentLaunch.js) -- with neither on PATH every agent launch just silently
+fails, with no guidance anywhere in the app. Asked the user to choose between
+three approaches (installer-time/NSIS postinstall, fully offline-bundled
+Node+CLIs, or a first-run in-app check) -- they picked the first-run in-app
+check as the safer, more visible/consensual option that doesn't touch the
+electron-builder config or require internet/elevated privileges just to
+install ACE itself. New `prereqs:check` (spawns `--version` for node/npm/
+claude/codex, `shell:false` for node matching git's convention, `shell:true`/
+`win32`-conditional for the others matching npm's/AgentService's existing
+convention) and `prereqs:install` (spawns `npm install -g @anthropic-ai/
+claude-code` or `@openai/codex` -- confirmed as the exact packages via this
+machine's own `npm ls -g` -- buffers to one settled {ok, message/error} like
+project:build/git:pull, with an EACCES-specific hint for the common macOS
+sudo-required-for-global-npm-installs failure) added to handlers.js, exposed
+via a new `window.cpi.prereqs` preload namespace. Deliberately does NOT
+attempt to install Node.js itself (links to nodejs.org instead) or automate
+`claude login`/`codex login` (interactive OAuth, can't be scripted) -- both
+explicitly scoped out as bigger/riskier than "install two CLI npm packages."
+New `PrereqChecklist.jsx` (status rows + install buttons) is shown two ways:
+full-screen via new `SetupView.jsx`, gating the whole app on launch when
+claude or codex is missing (App.jsx, dismissible via a `prereqs_setup_
+dismissed` settings-table flag, "Continue to ACE" always available so it
+never hard-blocks), and inline as a new "Prerequisites" section in
+SettingsView.jsx for re-running anytime later. Extracted AgentTerminal.jsx's
+module-local OperationFeedback component + runOperation helper into shared
+`components/OperationFeedback.jsx` / `utils/runOperation.js` first, so this
+reuses the exact same loading-bar/success/error pattern the git/build buttons
+already use instead of duplicating ~40 lines (AgentTerminal.jsx's three
+existing call sites needed zero changes after the extraction).
+
+Live-verified per this project's standing rule that runtime-behavior claims
+need a real repro, not just build+tests: (1) backend spawn logic checked with
+standalone scripts mirroring handlers.js's exact code -- real environment
+correctly reported all four present with real versions matching `npm ls -g`
+exactly; an artificially restricted PATH correctly reported all four as
+missing, without touching the real installs; install mechanics verified
+end-to-end against a real disposable npm package (is-odd -- installed then
+immediately uninstalled, confirmed back to the original three global
+packages) plus the failure path (a nonexistent package name correctly surfaced
+npm's real 404, tail-sliced same as project:build). (2) Full GUI integration
+checked by launching the real dev app with a throwaway --user-data-dir +
+--remote-debugging-port (same isolated-profile technique TICKET-0043
+established for this exact project) and driving it via a raw CDP client
+(Node's built-in global WebSocket, no new dependency) -- confirmed no setup
+gate appears (claude/codex both present), then clicked the real Settings
+button and confirmed the Prerequisites section renders all four as "✓
+Installed" with correct live versions. Found and fixed one real bug this way:
+claude/codex `--version` print their own label text (`codex-cli 0.147.0`),
+not plain semver, so the UI's added "v" prefix produced "vcodex-cli 0.147.0"
+-- fixed and re-verified live via Vite HMR in the same running instance.
+Terminated only the throwaway instance afterward, found via the PID actually
+bound to the debug port (never a blanket taskkill), leaving the user's real
+running environment untouched throughout. macOS unverified (no Mac available
+from this Windows machine) -- the win32-conditional shell branches are
+unexercised there, flagged as a known gap. Closed same day.

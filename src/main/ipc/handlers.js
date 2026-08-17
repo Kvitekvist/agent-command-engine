@@ -1,4 +1,4 @@
-const { dialog } = require('electron')
+const { dialog, shell } = require('electron')
 const { LoadBalancer } = require('../services/LoadBalancer')
 const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 const { FileService } = require('../services/FileService')
@@ -503,6 +503,82 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     } catch (error) {
       return { ok: false, error: error.message }
     }
+  })
+
+  // ── Prerequisites (TICKET-0055) ─────────────────────────────────────────────
+  // ACE spawns the real `claude`/`codex` CLIs directly (AgentService.js,
+  // agentLaunch.js), so a fresh machine without them on PATH just fails every
+  // agent launch with no useful guidance. Checks presence/version of node,
+  // npm, and both CLIs, and can install the CLIs via their official npm
+  // packages -- confirmed against this project's own working install via
+  // `npm ls -g` (@anthropic-ai/claude-code, @openai/codex). Deliberately does
+  // NOT attempt to install Node.js itself (see prereqs:openNodeDownload) --
+  // that's a much bigger system change than two CLI packages, so the setup
+  // UI links out and lets the user handle it, the same as any other
+  // dev-tool prerequisite.
+  const PREREQ_PACKAGES = {
+    claude: '@anthropic-ai/claude-code',
+    codex: '@openai/codex',
+  }
+
+  ipcMain.handle('prereqs:check', async () => {
+    const { spawn } = require('child_process')
+    // node/git resolve to real .exe's on Windows (shell:false, same reasoning
+    // as git:commitAndPush above); npm/claude/codex are .cmd shims there and
+    // need a shell to run at all (same convention as project:build's `npm run`
+    // and AgentService.js's `spawn(provider, args, {shell: win32})`).
+    const checks = [
+      { name: 'node', cmd: 'node', args: ['--version'], shell: false },
+      { name: 'npm', cmd: 'npm', args: ['--version'], shell: true },
+      { name: 'claude', cmd: 'claude', args: ['--version'], shell: process.platform === 'win32' },
+      { name: 'codex', cmd: 'codex', args: ['--version'], shell: process.platform === 'win32' },
+    ]
+    const results = {}
+    await Promise.all(checks.map(({ name, cmd, args, shell: useShell }) => new Promise((resolve) => {
+      let stdout = ''
+      const proc = spawn(cmd, args, { windowsHide: true, shell: useShell })
+      proc.stdout?.on('data', (d) => { stdout += d })
+      proc.on('error', () => { results[name] = { present: false, version: null }; resolve() })
+      proc.on('close', (code) => {
+        results[name] = code === 0
+          ? { present: true, version: stdout.trim().replace(/^v/, '') }
+          : { present: false, version: null }
+        resolve()
+      })
+    })))
+    return results
+  })
+
+  ipcMain.handle('prereqs:install', async (_, name) => {
+    const pkg = PREREQ_PACKAGES[name]
+    if (!pkg) return { ok: false, error: `Unknown prerequisite "${name}"` }
+    const { spawn } = require('child_process')
+
+    return new Promise((resolve) => {
+      const proc = spawn('npm', ['install', '-g', pkg], { windowsHide: true, shell: true })
+      let stdout = ''
+      let stderr = ''
+      proc.stdout?.on('data', (d) => { stdout += d })
+      proc.stderr?.on('data', (d) => { stderr += d })
+      proc.on('error', (err) => resolve({ ok: false, error: err.message }))
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({ ok: true, message: `${pkg} installed` })
+          return
+        }
+        const raw = stderr || stdout || ''
+        const tail = raw.split('\n').filter(Boolean).slice(-5).join('\n')
+        const eaccesHint = /EACCES|permission denied/i.test(raw)
+          ? `\n\nThis looks like an npm permissions issue, common on macOS when npm's global folder needs sudo. Try running "sudo npm install -g ${pkg}" in a terminal, or see https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally`
+          : ''
+        resolve({ ok: false, error: (tail || `npm install exited with code ${code}`) + eaccesHint })
+      })
+    })
+  })
+
+  ipcMain.handle('prereqs:openNodeDownload', () => {
+    shell.openExternal('https://nodejs.org')
+    return { ok: true }
   })
 
   // ── Terminal (TICKET-0019) ──────────────────────────────────────────────────

@@ -10,6 +10,7 @@
 - App-wide right-click context menu (Copy / Paste / Select all) so any text in the ACE UI can be highlighted and copied. The agent terminal keeps its own copy/paste behaviour (TICKET-0051)
 - Chunked clipboard paste into the agent terminal for large text (>8KB, written in 4KB chunks with brief delays), with progress/success feedback, to prevent PTY buffer overflow on big pastes (TICKET-0052)
 - `scripts/build.bat`/`build.sh` now auto-bump the patch version (`src/package.json` + root `version.txt`) on every run, instead of versions only ever being bumped by hand at release time (TICKET-0054)
+- In-app prerequisite check + one-click installer for the Claude Code and Codex CLIs. A new setup screen appears on launch if either is missing (dismissible), with a matching "Prerequisites" section in Settings for re-running anytime; installs via `npm install -g @anthropic-ai/claude-code` / `@openai/codex`. Does not install Node.js itself (links to nodejs.org) or automate CLI sign-in (`claude login`/`codex login` remain manual, interactive steps) (TICKET-0055)
 
 ### Fixed
 - `git:commitAndPush` now verifies the push actually landed (checks for zero unpushed commits against the upstream) and reports stage-specific errors (Stage/Commit/Push/Verification failed), instead of silently leaving a commit unpushed with no indication (TICKET-0053)

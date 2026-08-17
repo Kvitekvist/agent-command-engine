@@ -3,6 +3,8 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { buildLaunchCommand } from '../utils/agentLaunch'
+import { runOperation } from '../utils/runOperation'
+import OperationFeedback from './OperationFeedback'
 
 // TICKET-0019 (correction): each agent card embeds its own live PTY session
 // running the real interactive `claude`/`codex` CLI, instead of the
@@ -30,41 +32,6 @@ const XTERM_THEME = {
 // fixed delay degrades gracefully (worst case: a brief flash) instead of
 // silently hanging forever if a future CLI version changes its output.
 const LAUNCH_BANNER_HIDE_MS = 1200
-
-// How long a successful operation's confirmation lingers before auto-clearing.
-// Errors are sticky (no timer) so the user can actually read what failed.
-const OP_SUCCESS_CLEAR_MS = 6000
-
-// TICKET-0050: shared progress/result strip for the direct (no-AI) git/build
-// actions. `status` is null (nothing shown), or { type, message } where type is
-// 'loading' | 'success' | 'error'. Loading renders an indeterminate animated
-// bar (see globals.css) since npm/git give no real percentage; success/error
-// render a single coloured line.
-function OperationFeedback({ label, status }) {
-  if (!status) return null
-  return (
-    <div className="px-1 pb-1 shrink-0">
-      {status.type === 'loading' ? (
-        // The animated label + bar carry no useful text to copy, and a click-
-        // drag over them shouldn't start a selection, so keep them select-none.
-        <div className="flex items-center gap-2 select-none">
-          <span className="text-xs text-muted shrink-0">{label}…</span>
-          <div className="progress-indeterminate h-1 flex-1 bg-border rounded-full" />
-        </div>
-      ) : (
-        // Selectable on purpose: an error/success line is exactly the text a
-        // user wants to highlight and copy (right-click Copy, TICKET-0051, or
-        // Ctrl+C). select-text is stated explicitly so it survives regardless
-        // of any surrounding select-none.
-        <div className={`text-xs whitespace-pre-wrap break-words select-text ${status.type === 'success' ? 'text-success' : 'text-danger'}`}>
-          <span className="font-medium">{label}: </span>
-          {status.type === 'success' ? '✓ ' : '✗ '}
-          {status.message}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // Mounted only while the agent is 'running' (see AgentView.jsx) -- unmount
 // (Stop, or Delete) disposes the PTY session in this effect's cleanup,
@@ -345,26 +312,6 @@ export default function AgentTerminal({ agent }) {
     const next = !autoAnswer
     setAutoAnswer(next)
     window.cpi.terminal.setAutoAnswer(sessionIdRef.current, next)
-  }
-
-  // TICKET-0050: run a direct (no-AI) git/build op, driving one of the status
-  // states through loading -> success/error so the matching OperationFeedback
-  // strip shows a progress bar then a result. Guards against a second click
-  // while the op is in flight (the caller also disables the button).
-  async function runOperation(status, setStatus, label, invoke) {
-    if (status?.type === 'loading') return
-    setStatus({ type: 'loading' })
-    try {
-      const result = await invoke()
-      if (result?.ok) {
-        setStatus({ type: 'success', message: result.message || 'Done' })
-        setTimeout(() => setStatus(null), OP_SUCCESS_CLEAR_MS)
-      } else {
-        setStatus({ type: 'error', message: result?.error || 'Failed' })
-      }
-    } catch (err) {
-      setStatus({ type: 'error', message: err?.message || String(err) })
-    }
   }
 
   return (

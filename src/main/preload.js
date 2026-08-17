@@ -64,6 +64,16 @@ contextBridge.exposeInMainWorld('cpi', {
     build: (projectPath) => ipcRenderer.invoke('project:build', { projectPath }),
   },
 
+  // Prerequisites (TICKET-0055): checks whether the claude/codex CLIs (and
+  // the Node/npm they're installed through) are on PATH, and can install the
+  // two CLIs via their official npm packages so ACE works without the user
+  // manually running npm install -g themselves.
+  prereqs: {
+    check: () => ipcRenderer.invoke('prereqs:check'),
+    install: (name) => ipcRenderer.invoke('prereqs:install', name),
+    openNodeDownload: () => ipcRenderer.invoke('prereqs:openNodeDownload'),
+  },
+
   // Terminal
   terminal: {
     spawn: (opts) => ipcRenderer.invoke('terminal:spawn', opts),

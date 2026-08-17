@@ -6,6 +6,7 @@ import AuditView from './views/AuditView'
 import TokenView from './views/TokenView'
 import SettingsView from './views/SettingsView'
 import EditorView from './views/EditorView'
+import SetupView from './views/SetupView'
 import ContextMenu from './components/ContextMenu'
 
 // TICKET-0022/0023: live subscription quota is whole-machine data (not
@@ -95,6 +96,34 @@ export default function App() {
       window.cpi.offAgentStatus()
     }
   }, [])
+
+  // TICKET-0055: gate the app behind a one-time (well, every-launch-until-
+  // dismissed) setup screen when claude/codex aren't on PATH -- every agent
+  // launch would otherwise just silently fail. Checked here rather than
+  // inside AgentView so it applies before a project is even selected.
+  const [setupChecked, setSetupChecked] = useState(false)
+  const [showSetup, setShowSetup] = useState(false)
+
+  useEffect(() => {
+    async function checkSetup() {
+      const dismissed = await window.cpi.getSetting('prereqs_setup_dismissed')
+      if (dismissed === 'true') { setSetupChecked(true); return }
+      try {
+        const result = await window.cpi.prereqs.check()
+        setShowSetup(!result.claude?.present || !result.codex?.present)
+      } finally {
+        setSetupChecked(true)
+      }
+    }
+    checkSetup()
+  }, [])
+
+  if (!setupChecked) {
+    return <div className="flex h-screen w-screen items-center justify-center bg-surface text-muted text-sm">Loading…</div>
+  }
+  if (showSetup) {
+    return <SetupView onContinue={() => setShowSetup(false)} />
+  }
 
   return (
     <div
