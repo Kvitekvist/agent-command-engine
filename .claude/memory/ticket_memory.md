@@ -918,3 +918,26 @@ select-none utilities in AgentTerminal/AgentView still win). Files: App.jsx,
 components/AgentTerminal.jsx, styles/globals.css. Build clean, tests 13/13. Live
 verification (right-click Copy in a view, Paste in an input, terminal paste
 still works) still open. Not yet committed -- left for the user to review.
+
+TICKET-0052
+2026-08-14
+Fixed double-paste in terminal when pasting via Ctrl+V or right-click. Root
+cause: the containerRef had explicit paste handlers (right-click contextmenu
+listener + attachCustomKeyEventHandler for Ctrl+V) that wrote clipboard text
+to the PTY session, but the browser's default paste event was ALSO firing and
+being handled by xterm.js's own internal paste logic, causing the text to be
+written twice. Fixed by adding a 'paste' event listener to containerRef that
+calls preventDefault() and stopPropagation(), blocking the browser's default
+paste handling and xterm.js's internal handler, while keeping our explicit
+paste logic intact. Build clean, tests 13/13 pass.
+
+TICKET-0053
+2026-08-17
+Improved git commit/push reliability by adding push verification and detailed
+error messages. User reported TICKET-0052 commit was created but never pushed
+to GitHub. Enhanced git:commitAndPush handler with post-push verification (git
+rev-list @{u}..HEAD --count) to confirm zero unpushed commits, plus
+stage-specific error messages (Stage/Commit/Push/Verification failed:) for
+immediate actionability. The original implementation was functionally correct
+(runGit rejects on non-zero exit), but lacked verification and detailed error
+reporting. Build clean, tests 13/13 pass.

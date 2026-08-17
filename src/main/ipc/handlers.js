@@ -387,16 +387,35 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
       }
 
       // Stage all changes
-      await runGit(['add', '-A'])
+      try {
+        await runGit(['add', '-A'])
+      } catch (error) {
+        return { ok: false, error: `Stage failed: ${error.message}` }
+      }
 
       // Commit
       const commitMsg = 'Quick commit from ACE\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>'
-      await runGit(['commit', '-m', commitMsg])
+      try {
+        await runGit(['commit', '-m', commitMsg])
+      } catch (error) {
+        return { ok: false, error: `Commit failed: ${error.message}` }
+      }
 
-      // Push
-      await runGit(['push'])
+      // Push - explicitly verify it succeeds
+      try {
+        await runGit(['push'])
+      } catch (error) {
+        return { ok: false, error: `Push failed: ${error.message}` }
+      }
 
-      return { ok: true, message: 'Committed and pushed successfully' }
+      // Verify push succeeded by checking remote tracking
+      const verifyResult = await runGit(['rev-list', '@{u}..HEAD', '--count'])
+      const unpushedCount = parseInt(verifyResult.trim(), 10)
+      if (unpushedCount > 0) {
+        return { ok: false, error: `Verification failed - ${unpushedCount} commit(s) still unpushed` }
+      }
+
+      return { ok: true, message: 'Committed and pushed successfully ✓' }
     } catch (error) {
       return { ok: false, error: error.message }
     }

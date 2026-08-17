@@ -34,6 +34,17 @@ let mainWindow = null
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
+// Icon path - works for both dev and packaged builds
+const getIconPath = () => {
+  if (process.platform === 'win32') {
+    return path.join(__dirname, '../../build/icon.ico')
+  } else if (process.platform === 'darwin') {
+    // macOS uses .icns, but Electron sets it automatically from the app bundle
+    return path.join(__dirname, '../../build/icon.icns')
+  }
+  return undefined
+}
+
 // Single-instance lock (TICKET-0043). Without this, nothing stops a second
 // ACE launch from opening a competing window. When more than one window is
 // open, Windows routes keyboard input to whichever window holds OS focus —
@@ -56,12 +67,15 @@ if (!gotTheLock) {
 }
 
 function createWindow() {
+  const iconPath = getIconPath()
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#0f1117',
+    icon: iconPath, // Set window icon
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

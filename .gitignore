@@ -10,6 +10,9 @@ Thumbs.db
 # Build & release output
 /build/*
 !/build/.gitkeep
+!/build/icon.ico
+!/build/icon.iconset/
+!/build/README.md
 /releases/*
 !/releases/.gitkeep
 /dist/

@@ -60,7 +60,6 @@
       "node_modules/node-pty/**/*"
     ],
     "win": {
-      "icon": "../build/icon.ico",
       "target": [
         {
           "target": "portable",
@@ -73,7 +72,6 @@
       ]
     },
     "mac": {
-      "icon": "../build/icon.icns",
       "target": [
         {
           "target": "dmg",
@@ -90,7 +88,6 @@
   "allowScripts": {
     "node-pty@1.1.0": true,
     "electron@31.7.7": true,
-    "esbuild@0.21.5": true,
-    "png2icons@*": true
+    "esbuild@0.21.5": true
   }
 }
