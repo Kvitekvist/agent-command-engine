@@ -367,10 +367,10 @@ export default function AgentTerminal({ agent }) {
           <button
             onClick={() => {
               if (sessionIdRef.current) {
-                window.cpi.terminal.write(sessionIdRef.current, '/calibrate\r')
+                window.cpi.terminal.write(sessionIdRef.current, '/calibrate-enhanced\r')
               }
             }}
-            title="Run /calibrate to review and improve session patterns"
+            title="Run /calibrate-enhanced to review and improve session patterns"
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
             🎯 Calibrate
           </button>

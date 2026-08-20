@@ -1126,3 +1126,9 @@ the pre-existing Existing-folder flow already used successfully, just now
 also given a defaultPath, so risk there is narrow. macOS unverified (no Mac
 available) -- the new path logic has no Windows-specific branches though,
 unlike the old hardcoded template path it replaced. Closed same day.
+
+TICKET-0058
+2026-08-20
+Fixed the Calibrate quick action button in AgentTerminal.jsx sending `/calibrate`
+instead of `/calibrate-enhanced`. Changed the command from `/calibrate\r` to
+`/calibrate-enhanced\r` in both the onClick handler and tooltip (lines 370, 373).
