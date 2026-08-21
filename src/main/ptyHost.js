@@ -207,7 +207,15 @@ function spawnSession({ id, shell, cwd, cols, rows }) {
     })
     return { success: true, pid: proc.pid }
   } catch (err) {
-    return { success: false, error: err.message }
+    // TICKET-0066: on POSIX, node-pty execs the shell through its native
+    // `spawn-helper` binary; if that helper has lost its executable bit the
+    // spawn fails with the opaque "posix_spawnp failed". Point at the real
+    // cause + fix instead of leaving the user with a bare errno string.
+    let error = err.message
+    if (process.platform !== 'win32' && /posix_spawnp/i.test(error)) {
+      error += ' — node-pty\'s spawn-helper is likely not executable; run `npm run postinstall` (or `node scripts/fix-pty-perms.js`) to restore it.'
+    }
+    return { success: false, error }
   }
 }
 

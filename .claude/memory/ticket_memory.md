@@ -1166,3 +1166,17 @@ init()'d, tested modules have no third-party load-time requires), so CI needs
 only Node. run_tests.sh is the single source of truth for how the suite runs
 (same command locally and in CI). Suite currently 37 tests after the 0059-0063
 reverts removed path-service.test.js + 2 extractJson cases.
+
+TICKET-0066
+2026-08-21
+Bug: new agent terminals failed on macOS/Linux with "Failed to start terminal:
+posix_spawnp failed." while Windows worked. Root cause: node-pty (v1.1.0) execs
+the shell through its native `spawn-helper` binary on POSIX; the checked-out
+node_modules/node-pty/prebuilds/darwin-{arm64,x64}/spawn-helper had lost their
+executable bit (-rw-r--r--), so node-pty's posix_spawnp on the helper failed.
+Windows uses ConPTY and has no spawn-helper -> unaffected. Fix: src/scripts/
+fix-pty-perms.js walks node_modules/node-pty for any file named `spawn-helper`
+and chmods 0755 (no-op on win32); wired as `postinstall` in src/package.json so
+every npm install restores it. Also ptyHost.spawnSession now appends a fix hint
+to the error when it sees a POSIX posix_spawnp failure. node-pty is already
+asarUnpack'd so the packaged mac app keeps the on-disk (now +x) helper.

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- New agent terminals failed on macOS/Linux with `Failed to start terminal: posix_spawnp failed.` (worked on Windows). node-pty execs the shell through its native `spawn-helper` binary on POSIX, and that file had lost its executable bit, so the spawn failed. Restored the `+x` bit and added `src/scripts/fix-pty-perms.js`, wired as a `postinstall` step, so a fresh `npm install` always leaves the helper executable. Windows is unaffected (it uses ConPTY, no spawn-helper). ptyHost now also appends a fix hint when it sees a POSIX `posix_spawnp` failure (TICKET-0066)
+
 ### Added
 - GitHub Actions CI (`.github/workflows/tests.yml`) that runs the test suite on every push and pull request to `main`, via `scripts/run_tests.sh`. No `npm install` step is needed since the suite is dependency-free (TICKET-0065)
 - Expanded the automated test suite to cover previously untested main-process logic: `OptimizationAdvisor.analyze` (token-optimization advice), `LoadBalancer.decide` (claude/codex provider selection incl. the last-hour burn-rate + threshold logic), and `FileService` (write/read round trips, binary + too-large refusal, the TICKET-0021 path-traversal guard, and the runnable-extension gate). A new `electron` require-stub test helper lets these service modules be unit-tested without a full `npm install` or launching Electron. Added `scripts/run_tests.sh` as a one-command runner. Suite is 43 tests, all passing (TICKET-0064)

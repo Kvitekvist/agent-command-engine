@@ -4,6 +4,7 @@
   "description": "A specialized Electron interface for managing Claude & OpenAI Codex agents across multiple projects",
   "main": "dist/main/index.js",
   "scripts": {
+    "postinstall": "node scripts/fix-pty-perms.js",
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
     "dev:renderer": "vite --config vite.renderer.config.mjs",
     "dev:main": "wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .",
