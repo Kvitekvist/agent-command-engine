@@ -16,14 +16,13 @@ process.on('unhandledRejection', (reason) => {
   } catch (_) {}
 })
 
-let DBService, AgentService, TerminalService, registerHandlers, applyLoginShellPath
+let DBService, AgentService, TerminalService, registerHandlers
 
 try {
   DBService = require('./services/DBService').DBService
   AgentService = require('./services/AgentService').AgentService
   TerminalService = require('./services/TerminalService').TerminalService
   registerHandlers = require('./ipc/handlers').registerHandlers
-  applyLoginShellPath = require('./services/PathService').applyLoginShellPath
 } catch (err) {
   console.error('MODULE LOAD ERROR:', err)
   app.whenReady().then(() => {
@@ -102,11 +101,6 @@ app.whenReady().then(async () => {
   // this process never creates a window or opens cpi.db before app.quit().
   if (!gotTheLock) return
   try {
-    // TICKET-0060: fix up PATH before anything spawns (the ptyHost fork in
-    // TerminalService.init inherits process.env, and prereqs:check spawns
-    // directly) so a packaged, Finder-launched ACE can find the claude/codex
-    // CLIs. No-op on Windows and fails open -- see PathService.
-    if (applyLoginShellPath) applyLoginShellPath()
     console.log('Initializing DBService...')
     await DBService.init()
     console.log('DBService ready. Creating window...')
