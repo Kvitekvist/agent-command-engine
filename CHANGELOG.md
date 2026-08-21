@@ -12,7 +12,6 @@
 
 ### Build
 - Restored the macOS self-signed code-signing setup (lost with a deleted second clone): `build.mac.identity` is pinned to the `"Agent Command Engine Dev"` cert and a new `scripts/setup-mac-signing.sh` (run automatically by `setup.sh` on macOS) provisions that self-signed identity on a clean machine. A stable code identity keeps ACE's Screen Recording (TCC) permission across rebuilds instead of re-prompting after every ad-hoc build (TICKET-0062)
-- `setup.sh` now also regenerates the macOS app icon (`build/icon.icns`) from the committed iconset on a clean clone. The `.icns` is a gitignored build artifact, so without this a fresh checkout packaged with the default Electron icon (TICKET-0062)
 
 ## [0.1.9] - 2026-08-17
 

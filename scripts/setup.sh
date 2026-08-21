@@ -36,16 +36,6 @@ if [ "$(uname)" = "Darwin" ]; then
     echo "[macOS] Provisioning code-signing identity..."
     bash "$SCRIPT_DIR/setup-mac-signing.sh" || \
         echo "WARNING: signing setup did not complete; builds will fall back to ad-hoc signing."
-
-    # Generate build/icon.icns from the committed iconset. The .icns is a
-    # gitignored build artifact, so a fresh clone has none and electron-builder
-    # would fall back to the default Electron icon unless we regenerate it here
-    # (TICKET-0062).
-    if [ ! -f "$SCRIPT_DIR/../build/icon.icns" ]; then
-        echo "[macOS] Generating app icon (build/icon.icns)..."
-        bash "$SCRIPT_DIR/create-icns-on-mac.sh" || \
-            echo "WARNING: icon generation failed; the packaged app will use the default icon."
-    fi
 fi
 
 echo ""
