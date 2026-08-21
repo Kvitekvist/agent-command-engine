@@ -44,7 +44,6 @@
     "productName": "Agent Command Engine",
     "npmRebuild": false,
     "publish": null,
-    "afterPack": "build/afterPack.js",
     "afterAllArtifactBuild": "build/afterAllArtifactBuild.js",
     "directories": {
       "output": "../releases"

@@ -566,13 +566,6 @@ platform-specific code paths are:
   Works with `build/entitlements.mac.plist`'s `cs.disable-library-validation`,
   which is what lets the self-signed hardened app load native modules
   (node-pty, sql.js, tokscale)
-- **`build/afterPack.js`** (TICKET-0063) — electron-builder `afterPack` hook
-  (runs after packing, before signing). node-pty's bundled `spawn-helper`
-  prebuilt binary ships mode 0644 (no exec bit) and asar packing preserves it,
-  so the packaged app hits "posix_spawnp failed" when it tries to exec the
-  helper to create a PTY. The hook `chmod 0o755`s every `spawn-helper` under the
-  packed app. (chmod doesn't invalidate the Mach-O signature — signatures cover
-  contents, not mode bits.) No-op on Windows
 
 ---
 
