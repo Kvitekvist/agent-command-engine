@@ -1244,3 +1244,26 @@ markers present in the installed app.asar). Verified: package.json valid JSON,
 setup-mac-signing.sh correctly no-ops against the existing identity, npm test
 19/19. Full self-signed repackage deferred (long build; ad-hoc build already
 installed and running).
+
+TICKET-0063
+2026-08-21
+Fixed packaged macOS app failing to open any agent with "Failed to start
+terminal: posix_spawnp failed." Root cause: node-pty execs its bundled
+`spawn-helper` prebuilt (prebuilds/darwin-{arm64,x64}/spawn-helper) via
+posix_spawn to create the PTY, but that binary ships mode 0644 (NO exec bit) and
+electron-builder's asar packing preserves the mode -> posix_spawn EACCES. The
+afterPack hook that used to restore +x lived only in the deleted second clone
+(same fallout as TICKET-0062) and was never committed. Fix: new src/build/
+afterPack.js recursively finds every spawn-helper under context.appOutDir and
+chmod 0o755; registered via build.afterPack in src/package.json. afterPack runs
+after packing but BEFORE signing, so the shipped signed helper is both executable
+and signed. KEY FACT: a Mach-O code signature covers file CONTENTS, not
+filesystem mode bits -- chmod +x on an already-signed spawn-helper leaves
+codesign --verify passing (confirmed both on the manual hotfix and the rebuild).
+Immediate hotfix: chmod +x the installed /Applications app's two spawn-helpers
+(sandbox allows chmod on /Applications even though it denies rm). Permanent:
+rebuilt with the hook -> releases/ DMGs + mac-arm64 app now have spawn-helper
+0755, sig OK, app-level codesign --verify --deep --strict passes, WITHOUT any
+manual chmod. Also relevant: build packages BOTH arches; only darwin-arm64
+matters for this Apple Silicon machine but the hook fixes both. See
+[[ace-build-and-repo-layout]].
