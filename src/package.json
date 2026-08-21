@@ -89,7 +89,6 @@
         }
       ],
       "category": "public.app-category.developer-tools",
-      "identity": "Agent Command Engine Dev",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
