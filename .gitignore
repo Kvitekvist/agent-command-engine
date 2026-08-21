@@ -11,6 +11,7 @@ Thumbs.db
 /build/*
 !/build/.gitkeep
 !/build/icon.ico
+!/build/icon.icns
 !/build/icon.iconset/
 !/build/README.md
 /releases/*

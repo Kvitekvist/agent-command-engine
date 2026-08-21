@@ -158,6 +158,19 @@ function setAutoAnswer(id, enabled) {
   }
 }
 
+// TICKET-0066: on POSIX, node-pty execs the shell through its native
+// `spawn-helper` binary; if that helper has lost its executable bit the spawn
+// fails with the opaque "posix_spawnp failed". Turn that into a message that
+// points at the real cause + fix instead of a bare errno string. Kept as a
+// pure function (platform passed in) so it's unit-testable without spawning a
+// real PTY -- see TICKET-0068.
+function describeSpawnError(message, platform = process.platform) {
+  if (platform !== 'win32' && /posix_spawnp/i.test(message)) {
+    return message + ' — node-pty\'s spawn-helper is likely not executable; run `npm run postinstall` (or `node scripts/fix-pty-perms.js`) to restore it.'
+  }
+  return message
+}
+
 // TICKET-0039: auto-answer is never set at spawn time -- every session
 // starts with it off (see AgentTerminal.jsx) and it's only ever turned on
 // afterward via setAutoAnswer(), through the per-agent 🛡️ Auto-approve
@@ -207,15 +220,9 @@ function spawnSession({ id, shell, cwd, cols, rows }) {
     })
     return { success: true, pid: proc.pid }
   } catch (err) {
-    // TICKET-0066: on POSIX, node-pty execs the shell through its native
-    // `spawn-helper` binary; if that helper has lost its executable bit the
-    // spawn fails with the opaque "posix_spawnp failed". Point at the real
-    // cause + fix instead of leaving the user with a bare errno string.
-    let error = err.message
-    if (process.platform !== 'win32' && /posix_spawnp/i.test(error)) {
-      error += ' — node-pty\'s spawn-helper is likely not executable; run `npm run postinstall` (or `node scripts/fix-pty-perms.js`) to restore it.'
-    }
-    return { success: false, error }
+    // TICKET-0066/0068: turn an opaque POSIX "posix_spawnp failed" into an
+    // actionable hint (see describeSpawnError above).
+    return { success: false, error: describeSpawnError(err.message) }
   }
 }
 
@@ -318,4 +325,4 @@ if (typeof process.send === 'function') {
   process.send({ ready: true })
 }
 
-module.exports = { stripAnsi, PERMISSION_PROMPT_PATTERN }
+module.exports = { stripAnsi, PERMISSION_PROMPT_PATTERN, describeSpawnError }

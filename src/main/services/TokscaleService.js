@@ -216,9 +216,17 @@ const TokscaleService = {
     const perClient = await Promise.all(
       clients.map(async (client) => {
         try {
+          // TICKET-0067 (re-applies reverted TICKET-0059): pass the workspace
+          // as `--workspace=<key>`, one argv token. Every macOS/Linux workspace
+          // key starts with "-" (pathToWorkspaceKey flattens the path's leading
+          // "/" to "-"); as a separate token tokscale's CLI parser misreads it
+          // as an unknown flag ("unexpected argument '-U' found", exit 2) and
+          // the per-client error below is swallowed, blanking History. The
+          // `=`-form is unambiguous. Windows keys start with a drive letter, so
+          // they were never affected. Verified live against the real binary.
           const rows = await runTokscale([
             'report', '--json', '--no-summarize',
-            '--workspace', workspaceKey,
+            `--workspace=${workspaceKey}`,
             '--client', client,
           ], 30000)
           return Array.isArray(rows) ? rows.map((r) => ({ ...r, client })) : []

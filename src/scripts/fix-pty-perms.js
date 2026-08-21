@@ -62,4 +62,12 @@ function main() {
   }
 }
 
-main()
+// Only auto-run when invoked as a script (postinstall / `node fix-pty-perms.js`).
+// When `require()`'d from a test, just expose the pieces so the discovery and
+// chmod logic can be exercised against a temp fake node-pty tree without
+// touching the real install. See TICKET-0068.
+if (require.main === module) {
+  main()
+}
+
+module.exports = { chmodExec, findSpawnHelpers, main }

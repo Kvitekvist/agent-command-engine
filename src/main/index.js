@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron')
 const path = require('path')
+const fs = require('fs')
 
 // Catch any uncaught exceptions in main process
 process.on('uncaughtException', (err) => {
@@ -43,6 +44,26 @@ const getIconPath = () => {
     return path.join(__dirname, '../../build/icon.icns')
   }
   return undefined
+}
+
+// macOS ignores BrowserWindow's `icon` option, and an unpackaged dev run has
+// no .app bundle for the OS to read an icon from, so `npm run dev` always
+// shows the default Electron dock icon. A packaged build is fine (its bundle
+// carries build/icon.icns via electron-builder's mac.icon). Set the dock icon
+// explicitly in dev so it matches the packaged app. No-op when packaged (the
+// bundle icon is correct) or off macOS (no app.dock). (TICKET-0069)
+const setDevDockIcon = () => {
+  if (process.platform !== 'darwin' || app.isPackaged || !app.dock) return
+  // app.getAppPath() is the dir holding package.json (src/) in dev; the icon
+  // assets live in the repo-root build/ folder one level up.
+  const pngPath = path.join(app.getAppPath(), '..', 'build', 'icon.iconset', 'icon_512x512.png')
+  try {
+    if (!fs.existsSync(pngPath)) return
+    const image = nativeImage.createFromPath(pngPath)
+    if (!image.isEmpty()) app.dock.setIcon(image)
+  } catch (err) {
+    console.error('Failed to set dev dock icon:', err)
+  }
 }
 
 // Single-instance lock (TICKET-0043). Without this, nothing stops a second
@@ -100,6 +121,7 @@ app.whenReady().then(async () => {
   // (and has been focused via 'second-instance' above). Do nothing here so
   // this process never creates a window or opens cpi.db before app.quit().
   if (!gotTheLock) return
+  setDevDockIcon()
   try {
     console.log('Initializing DBService...')
     await DBService.init()
@@ -115,12 +137,39 @@ app.whenReady().then(async () => {
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    // macOS: relaunching from the dock (or Cmd-Tab after closing the window)
+    // fires 'activate'. Recreate the window AND re-point the services at it,
+    // otherwise agent/terminal IPC events would still target the destroyed
+    // window and silently go nowhere (TICKET-0070).
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+      if (AgentService) AgentService.setWindow(mainWindow)
+      if (TerminalService) TerminalService.setWindow(mainWindow)
+    }
   })
 })
 
-app.on('window-all-closed', async () => {
+// TICKET-0070: tear the services (and the forked PTY host) down only when the
+// app is genuinely quitting -- NOT on 'window-all-closed'. On macOS closing the
+// window does not quit the app, but the old handler still ran
+// TerminalService.shutdown() there, which kills the PTY host and latches
+// isShuttingDown=true with no path to revive it. Reopening the window via
+// 'activate' then had a permanently dead host -> every new terminal failed
+// ("posix_spawnp"/"host not available") until a full app restart. Windows/Linux
+// were unaffected because there the app quits outright on window-all-closed.
+let cleanupDone = false
+app.on('before-quit', async (e) => {
+  if (cleanupDone) return
+  e.preventDefault()
   if (AgentService) AgentService.killAll()
   if (TerminalService) await TerminalService.shutdown()
+  cleanupDone = true
+  app.quit()
+})
+
+app.on('window-all-closed', () => {
+  // On macOS the app (and its live PTY host) intentionally stays running so the
+  // window can be reopened with working terminals. Actual cleanup happens in
+  // 'before-quit' above.
   if (process.platform !== 'darwin') app.quit()
 })

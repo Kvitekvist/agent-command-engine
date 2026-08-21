@@ -1180,3 +1180,69 @@ and chmods 0755 (no-op on win32); wired as `postinstall` in src/package.json so
 every npm install restores it. Also ptyHost.spawnSession now appends a fix hint
 to the error when it sees a POSIX posix_spawnp failure. node-pty is already
 asarUnpack'd so the packaged mac app keeps the on-disk (now +x) helper.
+
+TICKET-0067
+2026-08-21
+Re-applied the reverted TICKET-0059 fix. Token Usage "History (this project)"
+was empty (and priceless) on macOS/Linux while Live Usage showed ~60M tokens.
+Root cause: TokscaleService.getWorkspaceReport passed `--workspace <key>` as two
+argv tokens; pathToWorkspaceKey flattens the path's leading "/" to "-" so every
+macOS/Linux workspace key starts with "-", which tokscale's CLI parser reads as
+an unknown flag ("unexpected argument '-U' found", exit 2). getWorkspaceReport
+swallows the per-client error -> [] -> History renders empty. Windows keys start
+with a drive letter (C--...), never affected. Fix: pass `--workspace=<key>` (one
+token). Verified LIVE on this Mac against the real tokscale binary: two-token
+form -> exit 2; `=`-form -> exit 0 returning real session rows. Note 0059 was
+reverted in f003760 (batch revert of 0059/0060/0061) with no stated reason; this
+re-verifies the fix independently. tokscale-service tests 6/6 pass.
+
+TICKET-0069
+2026-08-21
+Fixed the macOS app showing the default Electron icon instead of the ACE icon.
+Two stacked causes: (1) build/icon.icns was never generated or committed -
+both src/package.json build.mac.icon (../build/icon.icns) and src/main/index.js
+getIconPath() for darwin reference it, but only the Windows icon.ico and the
+source icon.iconset/ PNGs existed, so electron-builder and the BrowserWindow
+fell back to Electron's default on mac. (2) .gitignore's /build/* rule
+un-ignored icon.ico/icon.iconset/README.md/.gitkeep but NOT icon.icns, so even
+once generated it could never be committed - which is why it stayed missing on
+every mac build (project was developed mainly on Windows, where .ico was fine).
+Fix: generated build/icon.icns from the existing iconset via
+scripts/create-icns-on-mac.sh (iconutil -c icns; valid 1.2MB Mac OS X icon),
+and added `!/build/icon.icns` to .gitignore so it's tracked. No code changed.
+npm test 37/37. Full packaged dock-icon verification needs a mac `npm run
+package` build (GUI launch, deferred like prior release tickets); asset+config
+now in place. Regenerate via scripts/create-icns-on-mac.sh (mac/iconutil) or
+scripts/create-icns.js (cross-platform png2icons) if the artwork changes.
+
+TICKET-0068
+2026-08-21
+Added regression test coverage for the PTY / agent-terminal spawn fix
+(TICKET-0066), which previously had none. Refactored the two fix pieces to be
+unit-testable: fix-pty-perms.js now exports findSpawnHelpers/chmodExec/main and
+only runs main() when invoked directly (require.main === module); ptyHost.js
+extracts the POSIX posix_spawnp hint into a pure describeSpawnError(message,
+platform) and exports it (spawnSession's catch now calls it). New
+tests/pty-perms.test.js (7 cases, dependency-free): builds a temp fake node-pty
+tree with spawn-helper binaries under prebuilds/ and build/Release plus decoys,
+asserts findSpawnHelpers finds both and ignores decoys, that chmodExec restores
+the +x bit that posix_spawnp failed on (the actual bug), and that
+describeSpawnError adds the fix hint only on POSIX posix_spawnp errors, never on
+Windows (ConPTY, no spawn-helper) and never on unrelated errors. Full suite
+44/44. No behavior change to the fix itself - pure test + refactor.
+
+TICKET-0069 (follow-up, same day)
+2026-08-21
+The icns fix above fixed the PACKAGED dmg (user confirmed), but `npm run dev`
+still showed the default Electron icon. Expected: an unpackaged dev run has no
+.app bundle for macOS to read an icon from, and macOS ignores BrowserWindow's
+`icon` option entirely (it only works on Windows/Linux). The packaged app gets
+its dock icon from the bundle's icon.icns via electron-builder mac.icon, not
+from getIconPath(). Fixed dev with setDevDockIcon() in src/main/index.js:
+on darwin && !app.isPackaged, app.dock.setIcon(nativeImage from
+build/icon.iconset/icon_512x512.png), resolved via app.getAppPath() (=src/ in
+dev) + '../build/...'. No-op when packaged or off mac. build:main + node
+--check clean; npm test 37/37. Also worth noting: macOS aggressively caches app
+icons - after rebuilding a bundle at the same path the old icon can persist
+until the icon cache is cleared (sudo rm -rf /Library/Caches/
+com.apple.iconservices.store; killall Dock Finder).
