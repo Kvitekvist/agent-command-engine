@@ -5,6 +5,10 @@
 ### Fixed
 - Calibrate quick action button sent `/calibrate` instead of `/calibrate-enhanced` (TICKET-0058)
 - Token Usage "History (this project)" always showed no data on macOS/Linux. `TokscaleService.getWorkspaceReport` passed `--workspace <key>` as two argv tokens; every macOS/Linux workspace key starts with `-` (paths start with `/`, flattened to `-`), which tokscale's CLI parser misreads as an unrecognized flag instead of the value, failing silently. Fixed by passing `--workspace=<key>` as one token (TICKET-0059)
+- Agents failed to launch on macOS/Linux when ACE was started from Finder/Dock/Spotlight: a GUI-launched app inherits only a minimal PATH (`/usr/bin:/bin:…`), so the `claude`/`codex` CLIs — typically on `~/.local/bin`, Homebrew, nvm, etc. — weren't found. The user's real login-shell PATH is now resolved once at startup (new `PathService.applyLoginShellPath`) and merged into the process PATH before anything spawns, so the ptyHost and the in-app prerequisite check agree with the terminal. No-op on Windows; fails open (TICKET-0060)
+- Agent launch failures were invisible: when a CLI was missing, the shell's `command not found` line was wiped by the splash-hiding `term.clear()`, leaving a blank prompt. `AgentTerminal` now verifies the chosen CLI is present before launching and prints a clear, actionable error instead of a blank terminal (TICKET-0060)
+- `ptyHost` now strips `CLAUDE*` environment variables from each agent's shell, so a `claude` CLI launched from an ACE that was itself started inside a Claude Code session no longer treats itself as a restricted nested session (TICKET-0060)
+- Token Usage data could silently blank out if tokscale prefixed its JSON with a status line (e.g. `"<N> new sessions added to wiki"` on first run). `runTokscale` now tolerates non-JSON preamble/trailing text (new `extractJson`), and `getWorkspaceReport` logs swallowed per-client errors instead of returning empty with no trace (TICKET-0061)
 
 ## [0.1.9] - 2026-08-17
 

@@ -70,12 +70,32 @@ function runTokscale(args, timeoutMs = 15000) {
         return
       }
       try {
-        resolve(JSON.parse(stdout))
+        resolve(extractJson(stdout))
       } catch (error) {
         reject(new Error(`Could not parse tokscale JSON output: ${stdout.slice(0, 300)}`))
       }
     })
   })
+}
+
+// tokscale writes its data as JSON to stdout, but the `report` subcommand also
+// emits a plain-text status line ("<N> new sessions added to wiki") the first
+// time it catalogs previously-unseen sessions -- and that line can land on
+// stdout, prepended to the JSON. A bare JSON.parse(stdout) then throws on that
+// otherwise-successful run, which getWorkspaceReport swallows into an empty
+// History (working only on a later refresh once the sessions are catalogued).
+// Slice from the first JSON opener so any human-readable preamble is dropped
+// before parsing. Exported for unit testing (TICKET-0061).
+function extractJson(stdout) {
+  const text = String(stdout == null ? '' : stdout)
+  const opens = [text.indexOf('{'), text.indexOf('[')].filter((i) => i >= 0)
+  const closes = [text.lastIndexOf('}'), text.lastIndexOf(']')]
+  const start = opens.length ? Math.min(...opens) : -1
+  const end = Math.max(...closes)
+  // No JSON delimiters at all -> let JSON.parse throw on the raw text, so a
+  // genuinely broken/empty output still surfaces as a parse error.
+  if (start === -1 || end < start) return JSON.parse(text)
+  return JSON.parse(text.slice(start, end + 1))
 }
 
 function sessionKey(client, sessionId) {
@@ -229,7 +249,10 @@ const TokscaleService = {
           return Array.isArray(rows) ? rows.map((r) => ({ ...r, client })) : []
         } catch (error) {
           // One provider being unavailable (logged out, not installed) must
-          // not blank out the other's history.
+          // not blank out the other's history. Log it, though -- silently
+          // returning [] here made a broken tokscale call indistinguishable
+          // from a genuinely empty project (TICKET-0061).
+          console.warn(`[tokscale] report failed for client "${client}", workspace "${workspaceKey}": ${error.message}`)
           return []
         }
       })
@@ -241,4 +264,4 @@ const TokscaleService = {
   pathToWorkspaceKey,
 }
 
-module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey }
+module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey, extractJson }

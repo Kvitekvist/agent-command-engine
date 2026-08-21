@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { toUsageMap, sessionKey, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey } = require('../main/services/TokscaleService')
+const { toUsageMap, sessionKey, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey, extractJson } = require('../main/services/TokscaleService')
 
 // Sample shape verified against a real `tokscale --json --client claude
 // --group-by client,session,model` invocation.
@@ -62,6 +62,23 @@ test('shortenWorkspace reduces a dashed project key to its leaf folder (TICKET-0
   assert.equal(shortenWorkspace(undefined), 'unknown')
   // Trailing separator must not yield an empty label.
   assert.equal(shortenWorkspace('foo-bar-'), 'bar')
+})
+
+test('extractJson tolerates a non-JSON preamble before the payload (TICKET-0061)', () => {
+  // tokscale's `report` prepends "<N> new sessions added to wiki" the first
+  // time it catalogs sessions -- a bare JSON.parse would throw on that.
+  assert.deepEqual(extractJson('3 new sessions added to wiki\n[{"a":1}]'), [{ a: 1 }])
+  assert.deepEqual(extractJson('noise {"ok":true} trailing'), { ok: true })
+  // Clean output (no preamble) still parses, for both objects and arrays.
+  assert.deepEqual(extractJson('{"entries":[]}'), { entries: [] })
+  assert.deepEqual(extractJson('[]'), [])
+  // Picks whichever opener comes first so an array isn't mis-sliced at a later {.
+  assert.deepEqual(extractJson('x [1, {"y":2}]'), [1, { y: 2 }])
+})
+
+test('extractJson still throws on genuinely unparseable output (TICKET-0061)', () => {
+  assert.throws(() => extractJson('totally not json'))
+  assert.throws(() => extractJson(''))
 })
 
 test('pathToWorkspaceKey flattens a filesystem path to tokscale\'s workspace key (TICKET-0044)', () => {

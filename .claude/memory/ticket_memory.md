@@ -1162,3 +1162,55 @@ to trace to the same stale local build rather than current main. Verified:
 `node --test tests/tokscale-service.test.js` 6/6 pass. Live in-app verification
 still open -- needs a fresh `npm run package` + reinstall since this is a
 main-process change in an already-packaged app.
+
+TICKET-0060
+2026-08-21
+Fixed agents not launching on macOS/Linux + made launch failures visible. Three
+causes behind a "launch does nothing, blank terminal" report. (1) GUI PATH: a
+Finder/Dock/Spotlight-launched app inherits only /usr/bin:/bin:/usr/sbin:/sbin,
+so the claude/codex CLIs (usually on ~/.local/bin, Homebrew, nvm) aren't found;
+the main-process prereqs:check under-reported them as missing while the agent PTY
+found them only because node-pty spawns an interactive shell that re-sources the
+rc file -- main and PTY disagreed on PATH. Fixed with new
+src/main/services/PathService.js: applyLoginShellPath() runs `$SHELL -ilc 'printf
+%s "<marker>$PATH<marker>"'` (5s timeout, marker-wrapped so rc banners don't
+corrupt the value), unions it into process.env.PATH at the top of
+app.whenReady() BEFORE TerminalService forks ptyHost and before any spawn, so the
+whole app agrees on one PATH. No-op on win32 (GUI inherits full PATH there);
+fails open on any error (missing/slow/interactive-blocking shell) -> keeps the
+inherited PATH, i.e. prior behavior. parseShellPath/mergePaths are pure + unit-
+tested. (2) Silent error: the launch command is TYPED into the PTY shell
+(AgentTerminal.jsx); a missing binary printed "command not found" which the
+splash-hiding term.clear() (TICKET-0025, 1200ms) then wiped -> blank prompt.
+AgentTerminal now calls prereqs.check() before typing the command and, if the
+chosen CLI reports present:false, writes a clear actionable error and skips the
+clear; fails open if the check itself errors (interactive shell may still resolve
+the CLI). (3) CLAUDE* env leak: ptyHost.spawnSession passed raw process.env, so
+an ACE launched from inside a Claude Code session leaked CLAUDECODE=1 etc. into
+the nested claude, making it act as a restricted child. Added buildSessionEnv()
+stripping /^CLAUDE/i, mirroring AgentService.buildChildEnv. Also noted: codex was
+simply not installed on the machine -- the new visible error now surfaces that.
+Verified node --check on all changed main files, npm test 19/19 (4 new
+PathService cases), npm run build clean. Live in-app verification (packaged,
+Finder-launched) still open -- startup + main-process change can't hot-reload,
+needs a repackage.
+
+TICKET-0061
+2026-08-21
+Hardened TokscaleService against silent failures, found while investigating the
+same "dashboard shows no data" report (whose primary cause was the same stale
+pre-0059 build). (1) runTokscale did a bare JSON.parse(stdout); tokscale's
+`report` prints "<N> new sessions added to wiki" on first cataloging, which can
+prepend to stdout and make an otherwise-successful call throw -> swallowed into
+empty History, recovering only on a later refresh. Added extractJson() (exported):
+slices from the first {/[ to the last }/] so preamble AND trailing noise are
+tolerated, still throwing on genuinely unparseable output; runTokscale uses it.
+Verified against real `tokscale --today` output (parses, 4 entries). (2)
+getWorkspaceReport swallowed per-client errors into [] with no trace -- added
+console.warn (still returns [] so one logged-out provider doesn't blank the
+other). (3) Documented-not-fixed: `tokscale usage --json` returns [] on macOS
+because tokscale can't read Claude's OAuth creds (Claude Code stores them in the
+Keychain; tokscale wants a credentials file), so the quota bars show a benign
+"No quota data" while the transcript-sourced today/model/project breakdowns work
+-- a tokscale/environment limitation outside ACE's control. npm test 19/19 (2 new
+extractJson cases), build clean.
