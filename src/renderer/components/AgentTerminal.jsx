@@ -265,6 +265,23 @@ export default function AgentTerminal({ agent }) {
         })
       }
 
+      // TICKET-0060: verify the chosen CLI is actually installed before booting
+      // into it. Without this, a missing binary just prints "command not found"
+      // to the shell -- which the splash-hide term.clear() below then wipes,
+      // leaving a blank prompt that looks like the agent simply never launched.
+      // Fail open: if the check itself errors, fall through and launch anyway
+      // (the interactive shell may resolve the CLI even when the check can't).
+      const cli = agent.provider === 'codex' ? 'codex' : 'claude'
+      const prereqs = await window.cpi.prereqs.check().catch(() => null)
+      if (disposed) return
+      if (prereqs && prereqs[cli] && prereqs[cli].present === false) {
+        term.write(`\r\n\x1b[31mThe '${cli}' CLI was not found on your PATH.\x1b[0m\r\n`)
+        term.write(`\x1b[90mInstall it from Settings → Prerequisites (or run it once in a terminal to sign in), then stop and relaunch this agent.\x1b[0m\r\n`)
+        setStatus('error')
+        revealImmediately()
+        return
+      }
+
       // Boot straight into the real CLI instead of leaving an empty shell.
       window.cpi.terminal.write(sessionIdRef.current, buildLaunchCommand(agent, cliSessionId) + '\r')
 

@@ -24,6 +24,20 @@ function defaultShell() {
   return process.env.SHELL || '/bin/bash'
 }
 
+// TICKET-0060: if ACE is itself launched from a terminal with an active Claude
+// Code session (CLAUDECODE=1 etc. -- the dev setup here), those vars leak into
+// the shell we spawn and the `claude` CLI typed into it treats itself as a
+// sandboxed child session, hard-blocking file writes even inside the project.
+// Strip them so each agent's CLI behaves as an ordinary top-level session.
+// Mirrors AgentService.buildChildEnv (which guards the now-dead headless path).
+function buildSessionEnv() {
+  const env = { ...process.env }
+  for (const key of Object.keys(env)) {
+    if (/^CLAUDE/i.test(key)) delete env[key]
+  }
+  return env
+}
+
 // TICKET-0038 follow-up: the real Claude/Codex CLI permission prompt is not
 // plain text like "Allow? (y/n)" (what the previous patterns below matched
 // against) -- it's an Ink-rendered TUI menu, positioned with cursor-movement
@@ -176,7 +190,7 @@ function spawnSession({ id, shell, cwd, cols, rows }) {
       cols: cols > 0 ? cols : 80,
       rows: rows > 0 ? rows : 24,
       cwd: cwd || os.homedir(),
-      env: process.env,
+      env: buildSessionEnv(),
     })
     sessions.set(id, proc)
     getAutoAnswerState(id)
