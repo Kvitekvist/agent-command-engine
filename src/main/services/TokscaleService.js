@@ -216,14 +216,9 @@ const TokscaleService = {
     const perClient = await Promise.all(
       clients.map(async (client) => {
         try {
-          // `--workspace <value>` (as two args) breaks when the value starts with
-          // "-", which every macOS/Linux workspace key does (pathToWorkspaceKey
-          // flattens the leading "/" to "-") -- tokscale's CLI parser treats it as
-          // an unrecognized flag ("unexpected argument '-U' found") instead of a
-          // value. The `--workspace=value` form isn't ambiguous, so use that.
           const rows = await runTokscale([
             'report', '--json', '--no-summarize',
-            `--workspace=${workspaceKey}`,
+            '--workspace', workspaceKey,
             '--client', client,
           ], 30000)
           return Array.isArray(rows) ? rows.map((r) => ({ ...r, client })) : []
