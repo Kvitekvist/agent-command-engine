@@ -1155,3 +1155,14 @@ Runner: scripts/run_tests.sh (cd src && node --test tests/*.test.js, prints
 pass/fail, propagates exit code). Note src/package.json's "test" script is
 `node --test tests/*.test.js` and resolves relative to src/, so `npm test` from
 src/ also works.
+
+TICKET-0065
+2026-08-21
+Added GitHub Actions CI: .github/workflows/tests.yml runs on push + PR to main,
+single ubuntu-latest job (checkout + setup-node@v4 Node 22) that runs
+`bash scripts/run_tests.sh`. NO npm install step -- the suite is dependency-free
+by design (TICKET-0064: electron is stubbed via require patch, DBService never
+init()'d, tested modules have no third-party load-time requires), so CI needs
+only Node. run_tests.sh is the single source of truth for how the suite runs
+(same command locally and in CI). Suite currently 37 tests after the 0059-0063
+reverts removed path-service.test.js + 2 extractJson cases.

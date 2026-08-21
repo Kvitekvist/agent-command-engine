@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- GitHub Actions CI (`.github/workflows/tests.yml`) that runs the test suite on every push and pull request to `main`, via `scripts/run_tests.sh`. No `npm install` step is needed since the suite is dependency-free (TICKET-0065)
 - Expanded the automated test suite to cover previously untested main-process logic: `OptimizationAdvisor.analyze` (token-optimization advice), `LoadBalancer.decide` (claude/codex provider selection incl. the last-hour burn-rate + threshold logic), and `FileService` (write/read round trips, binary + too-large refusal, the TICKET-0021 path-traversal guard, and the runnable-extension gate). A new `electron` require-stub test helper lets these service modules be unit-tested without a full `npm install` or launching Electron. Added `scripts/run_tests.sh` as a one-command runner. Suite is 43 tests, all passing (TICKET-0064)
 
 ## [0.1.9] - 2026-08-17
