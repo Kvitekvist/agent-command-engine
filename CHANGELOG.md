@@ -10,6 +10,9 @@
 - `ptyHost` now strips `CLAUDE*` environment variables from each agent's shell, so a `claude` CLI launched from an ACE that was itself started inside a Claude Code session no longer treats itself as a restricted nested session (TICKET-0060)
 - Token Usage data could silently blank out if tokscale prefixed its JSON with a status line (e.g. `"<N> new sessions added to wiki"` on first run). `runTokscale` now tolerates non-JSON preamble/trailing text (new `extractJson`), and `getWorkspaceReport` logs swallowed per-client errors instead of returning empty with no trace (TICKET-0061)
 
+### Build
+- Restored the macOS self-signed code-signing setup (lost with a deleted second clone): `build.mac.identity` is pinned to the `"Agent Command Engine Dev"` cert and a new `scripts/setup-mac-signing.sh` (run automatically by `setup.sh` on macOS) provisions that self-signed identity on a clean machine. A stable code identity keeps ACE's Screen Recording (TCC) permission across rebuilds instead of re-prompting after every ad-hoc build (TICKET-0062)
+
 ## [0.1.9] - 2026-08-17
 
 ### Changed

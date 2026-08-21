@@ -1214,3 +1214,33 @@ Keychain; tokscale wants a credentials file), so the quota bars show a benign
 "No quota data" while the transcript-sourced today/model/project breakdowns work
 -- a tokscale/environment limitation outside ACE's control. npm test 19/19 (2 new
 extractJson cases), build clean.
+
+TICKET-0062
+2026-08-21
+Restored the macOS self-signed code-signing setup, and consolidated the repo to
+a single clone. Root discovery: the user's reported bugs (calibrate command,
+token dashboard) "still existed" because the app they actually ran was packaged
+from a SECOND, stale clone at ~/Downloads/agent-command-engine -- 6 commits
+behind origin/main (stuck at ee14274 "Release v0.1.9"), missing TICKET-0058/0059/
+0060/0061 entirely (calibrate-enhanced count 0, no PathService). All fixes had
+been committed+pushed from the canonical clone at ~/Documents/VS Code Project/
+agent-command-engine. The Downloads clone was deleted (consolidation) BEFORE its
+only unique content -- an uncommitted macOS signing setup -- was preserved; it
+was not in Trash, so it's unrecoverable. Reconstructed the functional equivalent
+in the canonical repo: (1) added build.mac.identity="Agent Command Engine Dev"
+in src/package.json (that self-signed cert already exists in the login keychain;
+electron-builder was otherwise ad-hoc signing, giving a new code identity every
+build); (2) new scripts/setup-mac-signing.sh -- idempotent, no-ops if the
+identity exists, else generates a self-signed RSA-2048 codeSigning-EKU cert via
+openssl, imports to login keychain authorized for /usr/bin/codesign, best-effort
+trust; no-op on non-macOS; (3) setup.sh calls it on Darwin. WHY signing matters
+here: ACE requests Screen Recording (screenshot feature) and macOS ties the TCC
+grant to code identity -- a stable self-signed identity makes the grant persist
+across rebuilds instead of re-prompting. The existing entitlements.mac.plist
+(cs.disable-library-validation) + hardenedRuntime already support a self-signed
+hardened app loading native modules. Also: quit the stale running app and
+installed the fixed ad-hoc 0.1.9 build to /Applications (verified all four fix
+markers present in the installed app.asar). Verified: package.json valid JSON,
+setup-mac-signing.sh correctly no-ops against the existing identity, npm test
+19/19. Full self-signed repackage deferred (long build; ad-hoc build already
+installed and running).

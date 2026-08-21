@@ -557,6 +557,15 @@ platform-specific code paths are:
 - **`package.json`** — `build.mac` targets dmg for x64 + arm64 with
   hardened runtime entitlements; `build.win` targets portable + NSIS
   for x64
+- **macOS signing** (TICKET-0062) — `build.mac.identity` pins the
+  *local self-signed* cert `"Agent Command Engine Dev"` (NOT an Apple
+  Developer ID / notarization). Purpose: a stable code identity so the
+  Screen Recording (TCC) grant survives rebuilds instead of re-prompting
+  after every ad-hoc build. `scripts/setup-mac-signing.sh` (idempotent,
+  called by `setup.sh` on Darwin) provisions that cert on a clean machine.
+  Works with `build/entitlements.mac.plist`'s `cs.disable-library-validation`,
+  which is what lets the self-signed hardened app load native modules
+  (node-pty, sql.js, tokscale)
 
 ---
 

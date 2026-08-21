@@ -28,6 +28,16 @@ fi
 echo "Installing packages..."
 npm install
 
+# macOS: provision the stable self-signed code-signing identity the packaged
+# build expects, so Screen Recording (TCC) grants survive rebuilds (TICKET-0062).
+# Idempotent and a no-op on non-macOS.
+if [ "$(uname)" = "Darwin" ]; then
+    echo ""
+    echo "[macOS] Provisioning code-signing identity..."
+    bash "$SCRIPT_DIR/setup-mac-signing.sh" || \
+        echo "WARNING: signing setup did not complete; builds will fall back to ad-hoc signing."
+fi
+
 echo ""
 echo "[3/3] Setup complete!"
 echo ""
