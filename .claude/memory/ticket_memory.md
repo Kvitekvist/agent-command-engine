@@ -1132,3 +1132,33 @@ TICKET-0058
 Fixed the Calibrate quick action button in AgentTerminal.jsx sending `/calibrate`
 instead of `/calibrate-enhanced`. Changed the command from `/calibrate\r` to
 `/calibrate-enhanced\r` in both the onClick handler and tooltip (lines 370, 373).
+
+TICKET-0059
+2026-08-21
+Fixed Token Usage "History (this project)" always showing "No recorded usage for
+this project yet" on macOS (and Linux), reported live from the user's packaged
+v0.1.9 app. Root cause: TokscaleService.getWorkspaceReport called tokscale as
+`report --workspace <key> --client <client>` (two separate argv tokens).
+pathToWorkspaceKey (TICKET-0044) flattens every non-alphanumeric character in the
+project's filesystem path to a dash, and macOS/Linux paths start with `/`, so
+every workspace key starts with `-` (e.g. `-Users-jane-Documents-...`). tokscale's
+CLI parser reads a `-`-leading value passed as its own token as an unrecognized
+flag ("unexpected argument '-U' found", exit code 2), not the --workspace value --
+getWorkspaceReport swallows the per-client error and returns [], so the section
+silently rendered empty with no visible error. Windows was never affected, since
+its keys start with a drive letter (`C--Users-...`), never a dash. Confirmed by
+invoking the user's actual packaged tokscale binary directly with both arg forms:
+`--workspace <value>` reproduces the exit-2 failure, `--workspace=<value>`
+(single token) succeeds and returns real session rows. Fixed by switching to the
+`=` form. Also investigated a second symptom from the same screenshot -- "Quota
+unavailable — tokscale exited with code 1" (empty stderr/stdout) on the Live
+Usage cards -- but could not reproduce it under repeated manual invocation
+(`tokscale usage --json` returned exit 0 every time tried, including with a
+minimal GUI-launch-style PATH); left unfixed and flagged for the user to
+re-check after upgrading past this stale build, since the packaged app the user
+was running (`~/Downloads/agent-command-engine/releases`, built 2026-08-17) also
+predates TICKET-0058's Calibrate fix -- both button-visible-bug reports turned out
+to trace to the same stale local build rather than current main. Verified:
+`node --test tests/tokscale-service.test.js` 6/6 pass. Live in-app verification
+still open -- needs a fresh `npm run package` + reinstall since this is a
+main-process change in an already-packaged app.

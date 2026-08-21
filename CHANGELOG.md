@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- Calibrate quick action button sent `/calibrate` instead of `/calibrate-enhanced` (TICKET-0058)
+- Token Usage "History (this project)" always showed no data on macOS/Linux. `TokscaleService.getWorkspaceReport` passed `--workspace <key>` as two argv tokens; every macOS/Linux workspace key starts with `-` (paths start with `/`, flattened to `-`), which tokscale's CLI parser misreads as an unrecognized flag instead of the value, failing silently. Fixed by passing `--workspace=<key>` as one token (TICKET-0059)
+
 ## [0.1.9] - 2026-08-17
 
 ### Changed
