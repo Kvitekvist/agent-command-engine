@@ -1132,3 +1132,26 @@ TICKET-0058
 Fixed the Calibrate quick action button in AgentTerminal.jsx sending `/calibrate`
 instead of `/calibrate-enhanced`. Changed the command from `/calibrate\r` to
 `/calibrate-enhanced\r` in both the onClick handler and tooltip (lines 370, 373).
+
+TICKET-0064
+2026-08-21
+Expanded the test suite from 19 -> 43 tests (node:test / `node --test`). KEY
+CONSTRAINT that shapes the whole suite: the repo has NO src/node_modules and the
+suite must run without `npm install`. The 3 original test files
+(agent/path/tokscale services) only work because those modules have no
+third-party requires at load time. The services worth testing next
+(OptimizationAdvisor, LoadBalancer, FileService) all `require('electron')`
+(directly or via DBService), which is unresolvable without install. Solution:
+src/tests/helpers/electron-stub.js patches `require('module')._load` to return a
+tiny electron stub (app.getPath, shell.showItemInFolder) for `require('electron')`;
+every new test file requires it FIRST. DBService is never init()'d (no sql.js /
+WASM load); its getPrompts/getSetting are monkey-patched per test and restored in
+a finally. Covered: OptimizationAdvisor's 6 advice rules + all-clear + stats;
+LoadBalancer manual-override/fallback-disabled/threshold/last-hour-window/
+default-threshold/db-failure paths; FileService round trip + binary(null-byte) +
+too-large(>2MiB) + readDir sort + the TICKET-0021 resolveWithinRoot traversal
+guard (incl. the "project-evil" sibling-prefix case) + runnable-extension gate.
+Runner: scripts/run_tests.sh (cd src && node --test tests/*.test.js, prints
+pass/fail, propagates exit code). Note src/package.json's "test" script is
+`node --test tests/*.test.js` and resolves relative to src/, so `npm test` from
+src/ also works.
