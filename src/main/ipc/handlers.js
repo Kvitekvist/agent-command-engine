@@ -1,5 +1,5 @@
 const { app, dialog, shell } = require('electron')
-const { LoadBalancer } = require('../services/LoadBalancer')
+const { resolveLaunchPolicy } = require('../services/LaunchPolicy')
 const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 const { FileService } = require('../services/FileService')
 const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
@@ -88,15 +88,20 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
 
   ipcMain.handle('agents:start', (_, { projectId, projectPath, label, provider, model, permissionMode }) => {
-    const resolvedProvider = LoadBalancer.decide({ manualProvider: provider, projectId })
+    const launch = resolveLaunchPolicy({ provider, model, projectId })
     const resolvedMode = permissionMode || 'safe'
-    const result = AgentSvc.start({ projectId, projectPath, label, provider: resolvedProvider, model, permissionMode: resolvedMode })
+    const result = AgentSvc.start({
+      projectId, projectPath, label,
+      provider: launch.provider,
+      model: launch.model,
+      permissionMode: resolvedMode,
+    })
     DB.upsertAgent({
       id: result.agentId,
       project_id: projectId,
       label,
-      provider: resolvedProvider,
-      model,
+      provider: launch.provider,
+      model: launch.model,
       status: 'running',
       permission_mode: resolvedMode,
     })

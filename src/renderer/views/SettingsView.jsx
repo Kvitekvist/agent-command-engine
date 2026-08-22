@@ -73,7 +73,7 @@ export default function SettingsView() {
       <section className="card space-y-4">
         <h2 className="text-sm font-semibold">General Settings</h2>
 
-        <div>
+        {provider !== 'auto' && <div>
           <label className="text-xs text-muted block mb-1">Default Model</label>
           <ModelSelector
             groups={MODEL_GROUPS_BY_PROVIDER[provider]}
@@ -81,21 +81,29 @@ export default function SettingsView() {
             onChange={setDefaultModel}
             className="w-full"
           />
-        </div>
+        </div>}
 
         <div>
           <label className="text-xs text-muted block mb-1">Default Provider</label>
           <div className="flex gap-2">
-            {['claude', 'codex'].map((p) => (
+            {['auto', 'claude', 'codex'].map((p) => (
               <button
                 key={p}
-                onClick={() => { setProvider(p); setDefaultModel(DEFAULT_MODEL_BY_PROVIDER[p]) }}
+                onClick={() => {
+                  setProvider(p)
+                  if (p !== 'auto') setDefaultModel(DEFAULT_MODEL_BY_PROVIDER[p])
+                }}
                 className={`btn text-xs ${provider === p ? 'bg-accent text-white' : 'btn-ghost'}`}
               >
-                {p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
+                {p === 'auto' ? '⚖ Auto' : p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
               </button>
             ))}
           </div>
+          {provider === 'auto' && (
+            <p className="text-xs text-muted mt-2">
+              ACE selects Claude or Codex from the fallback policy, then uses a compatible model for that provider.
+            </p>
+          )}
         </div>
 
         <button onClick={saveSettings} className="btn-primary text-xs">
@@ -107,8 +115,8 @@ export default function SettingsView() {
       <section className="card space-y-4">
         <h2 className="text-sm font-semibold">Load Balancing</h2>
         <p className="text-xs text-muted">
-          When Claude token usage in the past hour exceeds the threshold, new agents automatically
-          route to OpenAI Codex instead.
+          When Auto is the launch provider and Claude token usage in the past hour exceeds the
+          threshold, new agents route to OpenAI Codex instead.
         </p>
 
         <label className="flex items-center gap-3 cursor-pointer">

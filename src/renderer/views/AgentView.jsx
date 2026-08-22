@@ -21,6 +21,31 @@ export default function AgentView() {
   const [provider, setProvider]   = useState('claude')
   const [model, setModel]         = useState(DEFAULT_MODEL_BY_PROVIDER.claude)
   const [launching, setLaunching] = useState(false)
+  const [launchError, setLaunchError] = useState(null)
+
+  // TICKET-0084: Settings are real launch defaults, not Settings-page-only
+  // state. Auto has no selected model; main resolves a compatible one after
+  // LoadBalancer chooses the provider.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [savedProvider, savedModel] = await Promise.all([
+        window.ace.getSetting('default_provider'),
+        window.ace.getSetting('default_model'),
+      ])
+      if (cancelled) return
+      const nextProvider = ['auto', 'claude', 'codex'].includes(savedProvider)
+        ? savedProvider
+        : 'claude'
+      setProvider(nextProvider)
+      if (nextProvider !== 'auto') {
+        setModel(savedModel || DEFAULT_MODEL_BY_PROVIDER[nextProvider])
+      }
+    })().catch((error) => {
+      if (!cancelled) setLaunchError(`Couldn't load launch defaults: ${error.message}`)
+    })
+    return () => { cancelled = true }
+  }, [])
 
   // `agents` (the store) holds every agent across every project visited
   // this session, not just the active one -- see the render below and
@@ -32,12 +57,22 @@ export default function AgentView() {
   async function launchAgent() {
     if (!activeProject) return
     setLaunching(true)
+    setLaunchError(null)
     try {
-      await window.ace.startAgent({ projectId: activeProject.id, projectPath: activeProject.path, label, provider, model, permissionMode: PERMISSION_MODE })
+      await window.ace.startAgent({
+        projectId: activeProject.id,
+        projectPath: activeProject.path,
+        label,
+        provider,
+        model: provider === 'auto' ? null : model,
+        permissionMode: PERMISSION_MODE,
+      })
       const existingLabels = useStore.getState().agents
         .filter((a) => a.projectId === activeProject.id)
         .map((a) => a.label)
       setLabel(generateAgentName(existingLabels))
+    } catch (error) {
+      setLaunchError(error.message || 'Agent launch failed')
     } finally { setLaunching(false) }
   }
 
@@ -120,7 +155,7 @@ export default function AgentView() {
     )
   }
 
-  const modelGroups = MODEL_GROUPS_BY_PROVIDER[provider]
+  const modelGroups = provider === 'auto' ? null : MODEL_GROUPS_BY_PROVIDER[provider]
 
   return (
     <div className="flex flex-col h-full">
@@ -129,18 +164,31 @@ export default function AgentView() {
         <div className="text-sm font-semibold text-gray-100 mr-2 truncate max-w-xs">{activeProject.name}</div>
         <input className="input w-32 text-xs" placeholder="Agent label" value={label} onChange={(e) => setLabel(e.target.value)} />
         <div className="flex rounded overflow-hidden border border-border text-xs">
-          {['claude','codex'].map((p) => (
-            <button key={p} onClick={() => { setProvider(p); setModel(DEFAULT_MODEL_BY_PROVIDER[p]) }}
+          {['auto','claude','codex'].map((p) => (
+            <button key={p} onClick={() => {
+              setProvider(p)
+              if (p !== 'auto') setModel(DEFAULT_MODEL_BY_PROVIDER[p])
+            }}
               className={'px-3 py-1.5 transition-colors ' + (provider === p ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
-              {p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
+              {p === 'auto' ? '⚖ Auto' : p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
             </button>
           ))}
         </div>
-        <ModelSelector groups={modelGroups} value={model} onChange={setModel} className="w-72" />
+        {modelGroups ? (
+          <ModelSelector groups={modelGroups} value={model} onChange={setModel} className="w-72" />
+        ) : (
+          <span className="text-xs text-muted">Provider and compatible model selected at launch</span>
+        )}
         <button onClick={launchAgent} disabled={launching} className="btn-primary ml-auto text-xs">
           {launching ? 'Launching…' : '+ New Agent'}
         </button>
       </div>
+
+      {launchError && (
+        <div className="px-5 py-2 text-xs text-danger border-b border-border bg-red-500/10">
+          {launchError}
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto p-4">
         {projectAgents.length === 0 && (

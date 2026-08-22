@@ -145,7 +145,7 @@ const DBService = {
         ('default_model', 'claude-sonnet-5'),
         ('default_provider', 'claude'),
         ('codex_fallback_enabled', 'true'),
-        ('claude_credit_threshold', '10');
+        ('claude_credit_threshold', '100000');
     `)
   },
 
@@ -184,6 +184,12 @@ const DBService = {
     db.run(`
       UPDATE agents SET model = 'gpt-5.6-terra'
       WHERE provider = 'codex' AND model IN ('codex-mini-latest', 'o3', 'o4-mini')
+    `)
+    // TICKET-0084: repair only the exact legacy seed. Other custom values
+    // are preserved.
+    db.run(`
+      UPDATE settings SET value = '100000'
+      WHERE key = 'claude_credit_threshold' AND value = '10'
     `)
   },
 
