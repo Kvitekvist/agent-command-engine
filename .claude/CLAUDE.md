@@ -23,7 +23,8 @@ Read the top-ranked result before searching further. See `AGENTS.md`'s
 
 | Path | Purpose |
 | --- | --- |
-| `skills/node-map/` | The second-brain skill: `brain.js` retrieval and the dashboard engine. Invoke `/node-map` to regenerate `docs/node-map.html`. |
+| `skills/build-node-map/` | Rebuilds `docs/node-map.html` from this repository. Use `/build-node-map` here — **not** `/node-map`. |
+| `skills/node-map/` | The shared second-brain engine: `brain.js` retrieval and the dashboard template. Its `/node-map` skill does a live rescan, which drops ACE's curated keywords and ticket labels. |
 | `memory/` | Append-only historical context. Search it by ticket number or feature term; never read it end to end. `MEMORY.md` indexes it. |
 | `prompts/`, `templates/` | Bootstrap-framework scaffolding for new work items. |
 | `project_config.md` | Project metadata for the bootstrap framework. |
@@ -32,16 +33,12 @@ Read the top-ranked result before searching further. See `AGENTS.md`'s
 
 ## Regenerating the node map
 
-Run `node scripts/build-node-map.js` after structural changes (new services, a
-wave of new tickets, a directory reorganisation). It rewrites
-`docs/node-map.html` in place; `brain.js` reads that file directly, so there
-is no separate index to keep in sync.
+Invoke `/build-node-map`, or run `node scripts/build-node-map.js` directly,
+after structural changes (new services, a wave of new tickets, a directory
+reorganisation). It rewrites `docs/node-map.html` in place; `brain.js` reads
+that file directly, so there is no separate index to keep in sync.
 
-Use the script, **not** a live `/node-map` rescan. The script holds two things
-a rescan would silently drop: the curated `KEYWORDS` map (search terms for
-files whose names don't say what they answer, like the commit format living in
-`AGENTS.md`) and the ticket-label logic that folds each ticket's description
-into its node label so `brain.js` can match tickets by topic.
-
-Add a `KEYWORDS` entry when you add a document whose filename won't match how
-someone would ask for it.
+Use that skill, **not** a live `/node-map` rescan. See
+`.claude/skills/build-node-map/SKILL.md` for why, and for how to add a
+`KEYWORDS` entry when a document's filename won't match how someone would ask
+for it.

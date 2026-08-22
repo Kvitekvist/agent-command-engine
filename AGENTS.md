@@ -35,9 +35,11 @@ top two if the scores are close) instead of searching further.
 
 Ticket nodes are labelled with their description, so
 `brain.js "terminal lifecycle"` finds TICKET-0077 without you knowing its
-number. Regenerate the map with `node scripts/build-node-map.js` after large
+number. Regenerate the map with `node scripts/build-node-map.js` (or
+`scripts/build_node_map.bat` / `scripts/build_node_map.sh`) after large
 structural changes — check the `generated` timestamp inside
-`docs/node-map.html` if results look stale.
+`docs/node-map.html` if results look stale. Commit the regenerated map with
+the change that made it stale.
 
 Open `docs/node-map.html` in a browser to explore the same data visually.
 

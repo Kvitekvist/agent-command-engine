@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- `/build-node-map` skill and `scripts/build_node_map.bat` /
+  `scripts/build_node_map.sh` helpers for rebuilding the second brain. The
+  generic `/node-map` skill does a live rescan that drops ACE's curated
+  keywords and ticket labels, so this skill routes to the committed generator
+  instead and documents why. The helpers check that Node is on PATH and that
+  the map was actually written (TICKET-0095)
+
 ### Changed
 - Agent routing is now a single provider-neutral entry point. `AGENTS.md`
   carries the retrieval protocol, task routing, ticket workflow,

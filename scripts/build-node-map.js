@@ -61,7 +61,10 @@ const KEYWORDS = {
   ".claude/memory/ticket_memory.md": "history historical ticket log past work search only",
   ".claude/memory/architecture.md": "historical implementation notes troubleshooting feature history",
   ".claude/memory/MEMORY.md": "memory index historical superseded",
-  "docs/ICONS.md": "icons app icon assets branding keyboard visual"
+  "docs/ICONS.md": "icons app icon assets branding keyboard visual",
+  ".claude/skills/build-node-map/SKILL.md": "rebuild refresh regenerate second brain node map dashboard staleness keywords generator",
+  ".claude/skills/node-map/SKILL.md": "second brain retrieval protocol dashboard engine template scoring brain",
+  "scripts/build-node-map.js": "generator node map data categories keywords ticket labels"
 };
 function node(rel, label){
   const st = fs.statSync(path.join(ROOT, rel));
