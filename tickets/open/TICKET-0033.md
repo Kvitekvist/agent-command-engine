@@ -1,4 +1,4 @@
-# TICKET-0033
+# TICKET-0033 — Add a right-click context menu to files in the Sidebar's file explorer
 
 **Status**
 

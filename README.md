@@ -90,4 +90,5 @@ Token usage tracking is built on [token-monitor](https://github.com/Javis603/tok
 
 ## Version
 
-0.1.1 — Reliability alpha
+See `version.txt` and `src/package.json` for the current version, and
+`CHANGELOG.md` for release history. Current milestone: Reliability Alpha.

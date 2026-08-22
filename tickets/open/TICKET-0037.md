@@ -1,4 +1,4 @@
-# TICKET-0037
+# TICKET-0037 — Make the application compilable and runnable on macOS in addition
 
 **Status**
 

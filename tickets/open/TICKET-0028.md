@@ -1,4 +1,4 @@
-# TICKET-0028
+# TICKET-0028 — `ptyHost.js` (the forked process hosting every agent's live PTY
 
 **Status**
 

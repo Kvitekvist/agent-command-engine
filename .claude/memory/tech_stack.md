@@ -2,11 +2,11 @@
 
 ## Project
 
-Canonical current version: **0.1.17** (`src/package.json` and root
-`version.txt`).
+The version is **not** recorded here. `src/package.json` and root
+`version.txt` are the only authoritative sources; see
+[current state](../../docs/agents/current-state.md) for a summary.
 
 - Name: Agent Command Engine
-- Version: 0.1.1
 - Created: 2026-07-19
 - Target: Windows desktop; Electron also supports macOS packaging
 

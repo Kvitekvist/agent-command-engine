@@ -4,9 +4,10 @@
 > priorities, and routing, use [docs/agents/current-state.md](../../docs/agents/current-state.md)
 > and the repository-root [AGENTS.md](../../AGENTS.md).
 
-## Current Version
+## Version at time of this snapshot
 
-0.1.1 (unreleased changes accumulated since — see CHANGELOG.md's `[Unreleased]` section)
+0.1.1 — long superseded. The current version lives in `src/package.json` and
+`version.txt`; the ticket counts below are equally out of date.
 
 ---
 

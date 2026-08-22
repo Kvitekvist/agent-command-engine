@@ -1,4 +1,4 @@
-# TICKET-0026
+# TICKET-0026 — Every Codex agent fails immediately after the first prompt
 
 **Status**
 

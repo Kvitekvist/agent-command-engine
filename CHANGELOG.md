@@ -3,6 +3,52 @@
 ## [Unreleased]
 
 ### Changed
+- Agent routing is now a single provider-neutral entry point. `AGENTS.md`
+  carries the retrieval protocol, task routing, ticket workflow,
+  `[TICKET-####]` commit format, definition of done, and validation commands
+  that previously lived only in `.claude/CLAUDE.md`, where non-Claude agents
+  never saw them. `docs/agents/START.md` is merged into it, so routing costs
+  one read instead of two, and `.claude/CLAUDE.md` is now a thin
+  Claude-specific pointer (TICKET-0093)
+- The project version is stated only in `src/package.json` and `version.txt`.
+  `README.md`, `docs/agents/current-state.md`, `.claude/memory/tech_stack.md`,
+  and `.claude/memory/project_status.md` had drifted to three different
+  numbers between them and now point at the canonical pair instead of
+  restating one (TICKET-0093)
+- Open tickets carry a titled H1, making
+  `grep -h '^# TICKET' tickets/open/*.md` a queue index that needs no
+  maintenance. `tickets/TEMPLATE.md` documents the requirement and the
+  `Open` / `Awaiting verification` / `Blocked` / `Closed` status vocabulary
+  (TICKET-0093)
+
+### Added
+- Second-brain retrieval for agents. The `node-map` skill is installed at
+  `.claude/skills/node-map/`, and `docs/node-map.html` indexes all 180 memory
+  files, tickets, source modules, scripts, and docs.
+  `node .claude/skills/node-map/assets/brain.js "<question>"` returns a ranked
+  shortlist by filename, path, category, and curated keywords — no file
+  content read, no model call — replacing an open-ended Grep/Glob sweep for
+  "where is X" questions. Regenerate with `node scripts/build-node-map.js`
+  (TICKET-0093)
+- `brain.js` gained an optional per-node `keywords` field, scored between a
+  filename and a path match, so documents are findable by the terms people
+  actually type rather than only by what they are named. Backward compatible:
+  nodes without it score exactly as before (TICKET-0093)
+
+### Fixed
+- Terminal Ctrl/Cmd+V paste no longer travels through both ACE's manual
+  clipboard path and xterm's native textarea path. ACE now captures the native
+  paste event before xterm, stops duplicate dispatch, and sends the payload
+  once through the existing chunked writer; right-click paste remains a single
+  explicit clipboard read (TICKET-0052)
+- Saved default provider/model settings now initialize the interactive agent
+  launch bar. An explicit Auto choice lets the fallback policy run, and
+  provider plus model are resolved together so routing cannot launch a model
+  belonging to the other provider. Also corrected the legacy token-threshold
+  seed from 10 to the documented 100,000 default while preserving other custom
+  values (TICKET-0084)
+
+### Changed
 - Renamed the app's internal `cpi` naming (leftover from before the project was renamed to ACE/Agent Command Engine) to `ace`: the `window.cpi` preload bridge is now `window.ace`, the SQLite database file is now `ace.db` (was `cpi.db`), and each project's own data folder is now `.ace/` (was `.cpi/`). Purely internal/cosmetic — an existing install's `cpi.db` and a project's `.cpi/` folder are migrated forward automatically on first launch after upgrading, so no data or existing `.gitignore` setup is lost (TICKET-0071)
 
 ### Added

@@ -1,12 +1,15 @@
-# TICKET-XXXX
+# TICKET-XXXX — Short title
+
+Keep the title on the H1 line. `grep -h '^# TICKET' tickets/open/*.md` is the
+queue index, so a ticket without one is invisible to it.
 
 **Status**
 
-Open
+Open / Awaiting verification / Blocked / Closed
 
 **Type**
 
-Feature / Bug / Enhancement
+Feature / Bug / Enhancement / Refactor / Documentation
 
 **Priority**
 

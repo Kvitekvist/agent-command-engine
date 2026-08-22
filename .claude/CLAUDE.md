@@ -1,193 +1,47 @@
-# AI Project Bootstrap
+# Claude instructions for ACE
 
-You are the lead software engineer for this repository.
+**Read [`AGENTS.md`](../AGENTS.md) at the repository root first.** It is the
+provider-neutral entry point and holds the operating rules for this project:
+retrieval protocol, task routing, ticket workflow, commit format, definition
+of done, and validation commands. Everything below is Claude-specific only.
 
-Your goal is to build software that remains maintainable over months of AI-assisted development.
+Do not duplicate rules here. If a rule applies to any agent, it belongs in
+`AGENTS.md`.
 
-You are expected to think like a senior developer, not an autocomplete tool.
+## Retrieval
 
----
+Before an open-ended Grep/Glob sweep for a specific file or document:
 
-# First Startup Checklist
+```bash
+node .claude/skills/node-map/assets/brain.js "<question>"
+```
 
-If this is a new project:
+Read the top-ranked result before searching further. See `AGENTS.md`'s
+"Finding things" section for exit codes and when to fall back.
 
-- Create the standard project skeleton.
-- Initialize Git if needed.
-- Connect to the GitHub repository if one is provided.
-- Create all required documentation.
-- Create helper batch files.
-- Create ticket system.
-- Create memory system.
-- Create build scripts if applicable.
-- Create README.
+## What lives under `.claude/`
 
-Never start implementing features before the project structure exists.
+| Path | Purpose |
+| --- | --- |
+| `skills/node-map/` | The second-brain skill: `brain.js` retrieval and the dashboard engine. Invoke `/node-map` to regenerate `docs/node-map.html`. |
+| `memory/` | Append-only historical context. Search it by ticket number or feature term; never read it end to end. `MEMORY.md` indexes it. |
+| `prompts/`, `templates/` | Bootstrap-framework scaffolding for new work items. |
+| `project_config.md` | Project metadata for the bootstrap framework. |
+| `PROJECT_RULES.md`, `PROJECT_SKELETON.md`, `framework_version.md` | Bootstrap-framework provenance. Superseded by `AGENTS.md` where they disagree. |
+| `tickets/` | Legacy copies. Not a work queue — use `tickets/` at the repository root. |
 
----
+## Regenerating the node map
 
-# Every Session
+Run `node scripts/build-node-map.js` after structural changes (new services, a
+wave of new tickets, a directory reorganisation). It rewrites
+`docs/node-map.html` in place; `brain.js` reads that file directly, so there
+is no separate index to keep in sync.
 
-Before writing code, read the repository-root
-[AGENTS.md](../AGENTS.md). It routes the task to the smallest current set of
-project documents and the canonical `tickets/open/` work queue.
+Use the script, **not** a live `/node-map` rescan. The script holds two things
+a rescan would silently drop: the curated `KEYWORDS` map (search terms for
+files whose names don't say what they answer, like the commit format living in
+`AGENTS.md`) and the ticket-label logic that folds each ticket's description
+into its node label so `brain.js` can match tickets by topic.
 
-Search the historical memory files for a named ticket or feature; do not read
-their full history unless the task genuinely requires it.
-
----
-
-# Features
-
-Whenever the user requests a feature:
-
-DO NOT immediately write code.
-
-Instead:
-
-1. Search existing tickets.
-2. If one exists:
-   Continue that ticket.
-3. Otherwise:
-   Create a new Feature ticket.
-4. Update ticket during implementation.
-5. Mark completed.
-6. Update ticket memory.
-7. Commit.
-8. Push.
-
-Every feature MUST have a ticket.
-
----
-
-# Bug Fixes
-
-Exactly the same workflow.
-
-Never fix bugs without creating or updating a bug ticket.
-
----
-
-# Before Every Commit
-
-Verify:
-
-✓ Code builds
-✓ Tests pass (if available)
-✓ Documentation updated
-✓ Ticket updated
-✓ Ticket memory updated
-✓ Changelog updated
-✓ Version updated if needed
-
-If verification fails:
-
-DO NOT COMMIT.
-
----
-
-# Coding Rules
-
-Prefer readability.
-
-Avoid duplicated logic.
-
-Keep functions small.
-
-Keep files reasonably sized.
-
-Refactor instead of copy/paste.
-
-Never leave dead code.
-
-Remove unused imports.
-
-Follow project style.
-
----
-
-# Documentation Rules
-
-Whenever code changes:
-
-Update:
-
-README
-
-Architecture
-
-Project Memory
-
-Changelog
-
-Ticket
-
----
-
-# Long-Term Memory
-
-Use `AGENTS.md`'s Canonical Sources table. `ticket_memory.md` remains
-append-only historical context; current status and active work are maintained
-through `docs/agents/current-state.md` and `tickets/open/`.
-
----
-
-# Git Workflow
-
-Never commit unrelated changes.
-
-Commit message format:
-
-[TICKET-####] Short description
-
-Example:
-
-[TICKET-0012] Added Login Window
-
-Push after successful commit.
-
----
-
-# Branches
-
-Use:
-
-main
-
-develop
-
-feature/<ticket>
-
-bugfix/<ticket>
-
-unless instructed otherwise.
-
----
-
-# Build
-
-If the project can be compiled into an executable:
-
-Create scripts/build.bat
-
-If not applicable, document why.
-
----
-
-# Cache Cleaning
-
-Maintain scripts/clear_cache.bat.
-
----
-
-# Setup
-
-Maintain scripts/setup.bat.
-
-A clean computer should require one command to start development.
-
----
-
-# Project Goal
-
-Optimize for long-term maintainability rather than rapid feature delivery.
+Add a `KEYWORDS` entry when you add a document whose filename won't match how
+someone would ask for it.

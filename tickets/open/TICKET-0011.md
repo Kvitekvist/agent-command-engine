@@ -1,4 +1,4 @@
-# TICKET-0011
+# TICKET-0011 — Add a Delete button to stopped agent panes so a user can remove
 
 **Status**
 

@@ -1,4 +1,4 @@
-# TICKET-0077
+# TICKET-0077 — Separate terminal lifecycle and side-effect hooks
 
 **Status**
 
@@ -30,6 +30,7 @@ The component currently owns PTY setup, clipboard access, titles, build capabili
 
 * [ ] Extract terminal-session and clipboard hooks
 * [ ] Extract project action/build capability logic
+* [ ] Extract auto-title policy and make any extra provider call explicit/configurable
 * [ ] Keep behaviour and UI stable with focused tests
 
 ## Files Modified

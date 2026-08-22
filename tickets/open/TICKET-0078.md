@@ -1,4 +1,4 @@
-# TICKET-0078
+# TICKET-0078 — Extract permission-prompt detection and response retry policy
 
 **Status**
 

@@ -1,4 +1,4 @@
-# TICKET-0076
+# TICKET-0076 — Decompose AgentService into focused command-building, stream-parsing
 
 **Status**
 

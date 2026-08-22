@@ -4,23 +4,27 @@
 
 - Product: Agent Command Engine (ACE), an Electron application for managing
   Claude and Codex CLI agents.
-- Current application version: **0.1.17** (from `src/package.json` and
-  `version.txt`).
+- Current application version: **0.1.18**. `src/package.json` and
+  `version.txt` are the only authoritative sources — this line is a
+  convenience copy, so trust them if it drifts.
 - Runtime: Electron main process, React renderer, preload IPC bridge, and a
   forked PTY host.
-- Test/build commands: from `src/`, `cmd /c npm test` and
-  `cmd /c npm run build`.
+- Test/build: from `src/`, `npm test` and `npm run build`. CI runs
+  `bash scripts/run_tests.sh`. Last full run: 66 passed, 1 skipped
+  (POSIX-only), 0 failed.
 
 ## Active priorities
 
 1. Complete the modularity and agent-guidance work tracked by TICKET-0072
-   through TICKET-0081.
-2. Preserve the existing manual-verification backlog while making changes;
+   through TICKET-0081, and the routing work in TICKET-0093.
+2. Preserve the existing manual-verification backlog while making changes.
+   Several tickets are implemented and committed but await a live check;
    consult the relevant open ticket before changing terminal, screenshot,
-   project-history, or cross-platform behavior.
+   project-history, or cross-platform behavior, and do not re-implement work
+   that is only awaiting verification.
 3. Treat the Electron app under `src/` as canonical. The .NET migration claim
-   in historical project notes has no corresponding `.sln` or `.csproj` in
-   this repository.
+   in historical project notes (TICKET-0015) has no corresponding `.sln` or
+   `.csproj` in this repository and needs a user decision.
 
 ## Known operational constraints
 
@@ -33,6 +37,8 @@
 
 ## Where to look next
 
-Use [task routing](START.md) to select the smallest relevant context set.
-For a detailed legacy implementation narrative, search rather than read the
-full `.claude/memory/architecture.md` and `ticket_memory.md` files.
+Use the task-routing table in the repository-root [AGENTS.md](../../AGENTS.md)
+to select the smallest relevant context set, and
+`node .claude/skills/node-map/assets/brain.js "<question>"` to locate a
+specific file. For a detailed legacy implementation narrative, search rather
+than read `.claude/memory/architecture.md` and `.claude/memory/ticket_memory.md`.

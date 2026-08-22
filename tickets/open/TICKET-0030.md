@@ -1,4 +1,4 @@
-# TICKET-0030
+# TICKET-0030 — An agent's interactive terminal session does not survive switching away
 
 **Status**
 

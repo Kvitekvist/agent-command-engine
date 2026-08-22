@@ -1,4 +1,4 @@
-# TICKET-0071
+# TICKET-0071 — The project folder was renamed from "Claude Creator" to "ACE"/"Agent
 
 **Status**
 

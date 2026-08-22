@@ -1,4 +1,4 @@
-# TICKET-0024
+# TICKET-0024 — Leaving the Agents tab and returning to it (without switching projects)
 
 **Status**
 

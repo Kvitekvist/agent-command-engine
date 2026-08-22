@@ -1,4 +1,4 @@
-# TICKET-0031
+# TICKET-0031 — Add a dropdown inside each agent's chat view (card) that lets the user
 
 **Status**
 

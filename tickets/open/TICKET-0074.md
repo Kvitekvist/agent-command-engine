@@ -1,4 +1,4 @@
-# TICKET-0074
+# TICKET-0074 — Split the monolithic Electron IPC registration module
 
 **Status**
 

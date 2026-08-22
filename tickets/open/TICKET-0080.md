@@ -1,4 +1,4 @@
-# TICKET-0080
+# TICKET-0080 — Separate database migrations from domain persistence repositories
 
 **Status**
 
@@ -30,6 +30,9 @@ DBService combines schema lifecycle, migrations, and all repository operations, 
 
 * [ ] Extract migration definitions
 * [ ] Extract repository boundaries incrementally
+* [ ] Enable and test foreign-key enforcement and project-removal policy
+* [ ] Add integrity checks, recoverable backups, and failed-write recovery
+* [ ] Avoid unnecessary synchronous whole-database exports where practical
 * [ ] Preserve schema compatibility and tests
 
 ## Files Modified

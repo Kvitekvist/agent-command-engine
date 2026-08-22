@@ -1,4 +1,4 @@
-# TICKET-0075
+# TICKET-0075 — Create a shared IPC contract for channel names and payload boundaries
 
 **Status**
 
@@ -31,6 +31,8 @@ IPC strings and request shapes are duplicated across main-process handlers, prel
 * [ ] Define shared channel constants and payload conventions
 * [ ] Adopt the contract in handlers and preload
 * [ ] Add contract-level regression tests
+* [ ] Validate IPC senders and reject malformed payloads
+* [ ] Resolve project-scoped authority in main instead of trusting renderer-supplied roots
 
 ## Files Modified
 

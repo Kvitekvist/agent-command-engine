@@ -1,8 +1,8 @@
-# TICKET-0072
+# TICKET-0072 — Create a provider-neutral, concise entry point that reliably routes
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -41,15 +41,23 @@ The repository has no root `AGENTS.md`; `.claude/CLAUDE.md` is not automatically
 - docs/agents/conventions.md
 - .claude/CLAUDE.md
 
+Completed under TICKET-0093:
+- AGENTS.md (rewritten as the single entry point)
+- docs/agents/START.md (merged into AGENTS.md and removed)
+
 ## Testing
 
 * [x] Verify all local Markdown links resolve
 
 ## Result
 
-Implemented. All agents now have a root-discoverable entry point and
-task-specific context routing. The legacy detailed memory files remain
-available for targeted historical searches.
+Implemented, but only partly by this ticket. The layered documents landed
+here; the entry point was not yet genuinely provider-neutral, because the
+commit format, definition of done, branch strategy, and ticket workflow still
+lived only in `.claude/CLAUDE.md`, which non-Claude agents never read.
+TICKET-0093 moved those rules into `AGENTS.md`, merged `START.md` into it to
+remove the second hop, and added the node-map retrieval protocol. Closing
+here as superseded by that work.
 
 ## Notes
 
@@ -57,4 +65,4 @@ available for targeted historical searches.
 
 ## Closed
 
----
+2026-08-22

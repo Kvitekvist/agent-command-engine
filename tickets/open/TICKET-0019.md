@@ -1,4 +1,4 @@
-# TICKET-0019
+# TICKET-0019 — Add real interactive terminals to ACE, ported from Flowgrid's terminal
 
 **Status**
 

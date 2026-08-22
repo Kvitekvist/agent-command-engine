@@ -1,4 +1,4 @@
-# TICKET-0025
+# TICKET-0025 — Hide the CLI's own startup splash (account/session banner, "What's
 
 **Status**
 

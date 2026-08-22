@@ -1,4 +1,4 @@
-# TICKET-0027
+# TICKET-0027 — Switching tabs away from Agents and back pops up visible console/cmd
 
 **Status**
 

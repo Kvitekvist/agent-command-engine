@@ -1,4 +1,4 @@
-# TICKET-0021
+# TICKET-0021 — Add a VS Code-style file explorer to ACE: a collapsible file tree
 
 **Status**
 

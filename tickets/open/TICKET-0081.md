@@ -1,4 +1,4 @@
-# TICKET-0081
+# TICKET-0081 — Remove unsupported npm configuration and make temporary-directory tests
 
 **Status**
 

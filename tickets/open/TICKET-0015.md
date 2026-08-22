@@ -1,4 +1,4 @@
-# TICKET-0015
+# TICKET-0015 — Replace the Electron/Node/React stack with a native .NET 8 (WPF)
 
 **Status**
 

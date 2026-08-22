@@ -1,4 +1,4 @@
-# TICKET-0029
+# TICKET-0029 — Two external `cmd.exe` console windows briefly popped up and closed
 
 **Status**
 

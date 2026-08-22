@@ -1,4 +1,4 @@
-# TICKET-0034
+# TICKET-0034 — Rework the screenshot feature (TICKET-0032) from a clipboard-paste
 
 **Status**
 
@@ -33,6 +33,10 @@ an interactive drag-to-select screen capture:
 - The project's `.gitignore` is auto-updated (created if missing) so
   `.cpi/` never gets committed to the user's repo.
 - v1 captures the **primary display only** (no multi-monitor drag-select).
+
+Follow-up scope: support selecting from every attached display, including
+negative-coordinate monitor layouts and mixed DPI scaling, while retaining the
+primary-display path as a fallback.
 
 ---
 

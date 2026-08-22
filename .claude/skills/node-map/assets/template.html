@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Node Map</title>
+<style>
+  :root {
+    --bg-0: #05060a;
+    --bg-1: #0a0d16;
+    --ink-0: #f4f6fb;
+    --ink-1: #b9c0d4;
+    --ink-2: #6b7390;
+    --line: rgba(255,255,255,0.08);
+    --panel: rgba(12,15,24,0.78);
+    --panel-border: rgba(255,255,255,0.09);
+    --accent: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-0);
+    color: var(--ink-0);
+    font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+    overflow: hidden;
+  }
+  #graph {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+  }
+  #graph.dragging { cursor: grabbing; }
+  #graph.node-drag { cursor: pointer; }
+
+  .hud {
+    position: absolute;
+    top: 22px;
+    left: 26px;
+    z-index: 10;
+    pointer-events: none;
+    user-select: none;
+  }
+  .hud h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--ink-0);
+    text-shadow: 0 0 18px rgba(251,191,36,0.25);
+  }
+  .hud .sub {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--ink-2);
+    letter-spacing: 0.03em;
+  }
+  .hud .stats {
+    margin-top: 10px;
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--ink-1);
+  }
+  .hud .stats b { color: var(--ink-0); font-weight: 700; }
+
+  .top-right-stack {
+    position: absolute;
+    top: 22px;
+    right: 26px;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+    max-height: calc(100vh - 44px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 2px;
+  }
+
+  .menu-btn {
+    border: 1px solid rgba(251,191,36,0.45);
+    background: var(--panel);
+    color: var(--ink-0);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    font-weight: 700;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    flex: 0 0 auto;
+  }
+  .menu-btn:hover { background: rgba(255,255,255,0.08); }
+
+  .panel {
+    width: 232px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    max-height: 54vh;
+    flex: 0 0 auto;
+  }
+  .panel.hidden { display: none; }
+
+  .search-box {
+    width: 100%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    color: var(--ink-0);
+    font-size: 12px;
+    outline: none;
+  }
+  .search-box::placeholder { color: var(--ink-2); }
+  .search-box:focus { border-color: rgba(251,191,36,0.5); }
+
+  .panel-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink-2);
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn-row button {
+    flex: 1 1 auto;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border);
+    color: var(--ink-1);
+    font-size: 11px;
+    padding: 6px 8px;
+    border-radius: 7px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-row button:hover:not(.active) { background: rgba(255,255,255,0.1); }
+  .btn-row button.active {
+    background: var(--ink-0);
+    color: #0a0d16;
+    border-color: var(--ink-0);
+    font-weight: 700;
+  }
+
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    color: var(--ink-1);
+    margin-bottom: 4px;
+  }
+  .slider-label span { color: var(--accent); font-variant-numeric: tabular-nums; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+  .checkbox-row label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--ink-1);
+    cursor: pointer;
+  }
+
+  .bake-btn {
+    width: 100%;
+    background: rgba(251,191,36,0.12);
+    border: 1px solid rgba(251,191,36,0.4);
+    color: var(--accent);
+    font-weight: 700;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+  }
+  .bake-btn:hover { background: rgba(251,191,36,0.2); }
+
+  .panel-divider { height: 1px; background: var(--panel-border); }
+
+  .legend {
+    width: 232px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    backdrop-filter: blur(10px);
+    max-height: 40vh;
+    overflow-y: auto;
+    flex: 0 1 auto;
+  }
+  .legend h2 {
+    margin: 0 0 8px;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--ink-2);
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 2px;
+    font-size: 12.5px;
+    color: var(--ink-1);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.15s ease, opacity 0.15s ease;
+  }
+  .legend-row:hover { background: rgba(255,255,255,0.06); }
+  .legend-row.collapsed { opacity: 0.4; }
+  .legend-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .legend-count {
+    margin-left: auto;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+  }
+
+  .tooltip {
+    position: absolute;
+    z-index: 20;
+    pointer-events: none;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 12px;
+    color: var(--ink-0);
+    max-width: 280px;
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+  }
+  .tooltip.show { opacity: 1; transform: translateY(0); }
+  .tooltip .t-label { font-weight: 700; margin-bottom: 2px; word-break: break-word; }
+  .tooltip .t-meta { color: var(--ink-2); font-size: 11px; }
+  .tooltip .t-path {
+    color: var(--ink-2);
+    font-size: 10.5px;
+    margin-top: 4px;
+    font-family: Consolas, "SF Mono", monospace;
+    word-break: break-all;
+  }
+
+  .hint {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    font-size: 11px;
+    color: var(--ink-2);
+    letter-spacing: 0.03em;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    padding: 7px 16px;
+    backdrop-filter: blur(10px);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .zoom-ctl {
+    position: absolute;
+    bottom: 22px;
+    right: 26px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .zoom-ctl button {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    color: var(--ink-0);
+    font-size: 15px;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+  }
+  .zoom-ctl button:hover { background: rgba(255,255,255,0.1); }
+</style>
+</head>
+<body>
+
+<canvas id="graph"></canvas>
+
+<div class="hud">
+  <h1 id="hud-title">Node Map</h1>
+  <div class="sub" id="hud-sub">generated -</div>
+  <div class="stats" id="hud-stats"></div>
+</div>
+
+<div class="top-right-stack">
+  <button class="menu-btn" id="menu-toggle">&#9776; MENU</button>
+
+  <div class="panel" id="control-panel">
+    <input type="text" class="search-box" id="search-input" placeholder="Search files... ( / )">
+
+    <div>
+      <div class="panel-label">Layout</div>
+      <div class="btn-row" id="layout-row">
+        <button data-layout="force">Force</button>
+        <button data-layout="circle">Circle</button>
+        <button data-layout="hex">Hex</button>
+        <button data-layout="rings">Rings</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-label">View</div>
+      <div class="btn-row" id="view-row">
+        <button data-view="departments">Departments</button>
+        <button data-view="folders">Folders</button>
+      </div>
+    </div>
+
+    <div class="panel-divider"></div>
+
+    <div>
+      <div class="slider-label"><span>Ring spin</span><span id="spin-val">0.00</span></div>
+      <input type="range" id="spin-slider" min="0" max="1" step="0.01" value="0">
+    </div>
+
+    <div class="checkbox-row">
+      <label><input type="checkbox" id="filenames-toggle"> File names</label>
+    </div>
+
+    <div>
+      <div class="slider-label"><span>Link springs</span><span id="spring-val">1.00</span></div>
+      <input type="range" id="spring-slider" min="0.2" max="2" step="0.01" value="1">
+    </div>
+
+    <div>
+      <div class="slider-label"><span>Circle / Hex size</span><span id="size-val">1.00</span></div>
+      <input type="range" id="size-slider" min="0.5" max="2" step="0.01" value="1">
+    </div>
+
+    <div class="panel-divider"></div>
+
+    <div class="btn-row">
+      <button id="expand-all">Expand all</button>
+      <button id="collapse-all">Collapse all</button>
+    </div>
+
+    <button class="bake-btn" id="bake-settings">Bake settings</button>
+  </div>
+
+  <div class="legend">
+    <h2>Categories</h2>
+    <div id="legend-list"></div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip">
+  <div class="t-label" id="t-label"></div>
+  <div class="t-meta" id="t-meta"></div>
+  <div class="t-path" id="t-path"></div>
+</div>
+
+<div class="hint">scroll to zoom &middot; drag to pan &middot; drag a node to move it &middot; click to inspect &middot; double-click to focus &middot; click empty space to reset</div>
+
+<div class="zoom-ctl">
+  <button id="zoom-in" title="Zoom in">+</button>
+  <button id="zoom-out" title="Zoom out">&minus;</button>
+  <button id="zoom-reset" title="Reset view">&#8635;</button>
+</div>
+
+<script id="node-map-data" type="application/json">
+{
+  "project": "Example Project",
+  "generated": "2026-01-01T00:00:00Z",
+  "center": { "label": "CLAUDE.md", "sublabel": "project brain" },
+  "categories": [
+    {
+      "id": "memory",
+      "label": "Memory",
+      "nodes": [
+        { "label": "project_memory.md", "meta": "2.1 KB", "path": ".claude/memory/project_memory.md" },
+        { "label": "architecture.md", "meta": "1.4 KB", "path": ".claude/memory/architecture.md" },
+        { "label": "ticket_memory.md", "meta": "0.8 KB", "path": ".claude/memory/ticket_memory.md" }
+      ]
+    },
+    {
+      "id": "skills",
+      "label": "Skills",
+      "nodes": [
+        { "label": "node-map", "meta": "skill", "path": ".claude/skills/node-map" }
+      ]
+    },
+    {
+      "id": "tickets",
+      "label": "Tickets",
+      "nodes": [
+        { "label": "TICKET-0001", "meta": "open", "path": "tickets/open/TICKET-0001.md" }
+      ]
+    },
+    {
+      "id": "docs",
+      "label": "Docs",
+      "nodes": [
+        { "label": "README.md", "meta": "root", "path": "README.md" },
+        { "label": "CHANGELOG.md", "meta": "root", "path": "CHANGELOG.md" }
+      ]
+    }
+  ]
+}
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  var DATA = JSON.parse(document.getElementById("node-map-data").textContent);
+
+  var PALETTE = [
+    "#a78bfa", "#22d3ee", "#f472b6", "#34d399", "#60a5fa",
+    "#fb923c", "#c084fc", "#4ade80", "#f87171", "#38bdf8",
+    "#facc15", "#e879f9"
+  ];
+  var CENTER_COLOR = "#fbbf24";
+
+  // ---------------------------------------------------------------
+  // Graph building. Two views are precomputed up front:
+  //  - "departments": center -> category -> file (the curated categories
+  //    from the data block)
+  //  - "folders": center -> category -> folder -> file, where "folder" is
+  //    derived client-side from each file's immediate parent directory
+  //    name in its `path` (no extra scan data required)
+  // ---------------------------------------------------------------
+  function buildGraph(viewMode) {
+    var nodes = [];
+    var edges = [];
+
+    var center = {
+      id: 0, kind: "center", label: DATA.center.label || "root",
+      meta: DATA.center.sublabel || "", path: "", color: CENTER_COLOR, r: 26,
+      x: 0, y: 0, vx: 0, vy: 0, fx: null, fy: null,
+      order: 0, collapseKey: null, hideKeys: [], ancestorIds: [], children: []
+    };
+    nodes.push(center);
+
+    var catCount = DATA.categories.length;
+
+    function pushChild(node, parent) {
+      node.id = nodes.length;
+      nodes.push(node);
+      parent.children.push(node.id);
+      return node.id;
+    }
+
+    // Nodes need a scattered starting position, not (0,0) for everyone -
+    // the force layout's repulsion is a no-op between coincident points
+    // (zero distance has no direction), so identical starting positions
+    // would never separate under physics alone.
+    function scatterNear(px, py, radius) {
+      var a = Math.random() * Math.PI * 2;
+      var d = radius * (0.4 + Math.random() * 0.6);
+      return { x: px + Math.cos(a) * d, y: py + Math.sin(a) * d };
+    }
+
+    DATA.categories.forEach(function (cat, ci) {
+      var color = cat.color || PALETTE[ci % PALETTE.length];
+      var catKey = "cat:" + cat.id;
+      var catAngle = (ci / Math.max(catCount, 1)) * Math.PI * 2 - Math.PI / 2;
+      var catRadius = 230 + ci * 12;
+      var catNode = {
+        kind: "category", label: cat.label,
+        meta: cat.nodes.length + (cat.nodes.length === 1 ? " item" : " items"),
+        path: cat.id, color: color, r: 15,
+        x: Math.cos(catAngle) * catRadius, y: Math.sin(catAngle) * catRadius,
+        vx: 0, vy: 0, fx: null, fy: null,
+        order: ci, categoryCount: catCount, collapseKey: catKey,
+        hideKeys: [], ancestorIds: [0], children: []
+      };
+      pushChild(catNode, center);
+
+      if (viewMode === "departments") {
+        cat.nodes.forEach(function (f, fi) {
+          var p = scatterNear(catNode.x, catNode.y, 70);
+          var fileNode = {
+            kind: "file", label: f.label, meta: f.meta || "", path: f.path || "",
+            color: color, r: 4.5, x: p.x, y: p.y, vx: 0, vy: 0, fx: null, fy: null,
+            order: fi, collapseKey: null, hideKeys: [catKey],
+            ancestorIds: [0, catNode.id], children: []
+          };
+          pushChild(fileNode, catNode);
+        });
+      } else {
+        // Group by the first directory segment *after* whatever prefix all
+        // of this category's files share - e.g. files under "src/main/…"
+        // and "src/renderer/…" share root "src", so they group into
+        // "main" / "renderer" folders. A category whose files all sit
+        // directly in one folder (the common case, e.g. ".claude/memory/*.md")
+        // has that whole path as the shared prefix, so every file lands
+        // with key=null (attached straight to the category) instead of a
+        // redundant folder node that just repeats the category's own name.
+        var pathedSegs = cat.nodes
+          .map(function (f) { var s = (f.path || "").split("/"); s.pop(); return s; })
+          .filter(function (s) { return s.length > 0; });
+        var rootPrefix = pathedSegs.length ? pathedSegs.reduce(function (prefix, segs) {
+          var j = 0;
+          while (j < prefix.length && j < segs.length && prefix[j] === segs[j]) j++;
+          return prefix.slice(0, j);
+        }) : [];
+
+        var groups = new Map();
+        cat.nodes.forEach(function (f) {
+          var segs = (f.path || "").split("/");
+          segs.pop();
+          var key = segs.length > rootPrefix.length ? segs[rootPrefix.length] : null;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(f);
+        });
+        var order = 0;
+        groups.forEach(function (files, key) {
+          if (key === null) {
+            files.forEach(function (f, fi) {
+              var p = scatterNear(catNode.x, catNode.y, 70);
+              var fileNode = {
+                kind: "file", label: f.label, meta: f.meta || "", path: f.path || "",
+                color: color, r: 4.5, x: p.x, y: p.y, vx: 0, vy: 0, fx: null, fy: null,
+                order: fi, collapseKey: null, hideKeys: [catKey],
+                ancestorIds: [0, catNode.id], children: []
+              };
+              pushChild(fileNode, catNode);
+            });
+          } else {
+            var fp = scatterNear(catNode.x, catNode.y, 50);
+            var fldKey = "fld:" + cat.id + ":" + key;
+            var fldNode = {
+              kind: "folder", label: key,
+              meta: files.length + (files.length === 1 ? " file" : " files"),
+              path: "", color: color, r: 9,
+              x: fp.x, y: fp.y, vx: 0, vy: 0, fx: null, fy: null,
+              order: order++, collapseKey: fldKey, hideKeys: [catKey],
+              ancestorIds: [0, catNode.id], children: []
+            };
+            pushChild(fldNode, catNode);
+            files.forEach(function (f, fi) {
+              var p = scatterNear(fldNode.x, fldNode.y, 40);
+              var fileNode = {
+                kind: "file", label: f.label, meta: f.meta || "", path: f.path || "",
+                color: color, r: 4.5, x: p.x, y: p.y, vx: 0, vy: 0, fx: null, fy: null,
+                order: fi, collapseKey: null, hideKeys: [catKey, fldKey],
+                ancestorIds: [0, catNode.id, fldNode.id], children: []
+              };
+              pushChild(fileNode, fldNode);
+            });
+          }
+        });
+      }
+    });
+
+    nodes.forEach(function (n) {
+      if (n.kind === "category") edges.push({ a: 0, b: n.id, k: 0.02 });
+      else if (n.kind === "folder" || n.kind === "file") {
+        var parentId = n.ancestorIds[n.ancestorIds.length - 1];
+        edges.push({ a: parentId, b: n.id, k: n.kind === "folder" ? 0.03 : 0.05 });
+      }
+    });
+
+    return { nodes: nodes, edges: edges, catCount: catCount };
+  }
+
+  var graphs = { departments: buildGraph("departments"), folders: buildGraph("folders") };
+
+  // ---------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------
+  var storageKey = "nodemap:" + (DATA.project || "default");
+  var state = {
+    viewMode: "departments",
+    layoutMode: "force",
+    collapsed: new Set(),
+    search: "",
+    ringSpin: 0,
+    linkSpring: 1,
+    sizeScale: 1,
+    showFileNames: false
+  };
+
+  (function loadPersisted() {
+    try {
+      var raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      ["viewMode", "layoutMode", "ringSpin", "linkSpring", "sizeScale", "showFileNames"].forEach(function (k) {
+        if (saved[k] !== undefined) state[k] = saved[k];
+      });
+      if (Array.isArray(saved.collapsed)) state.collapsed = new Set(saved.collapsed);
+    } catch (e) { /* ignore - fresh defaults */ }
+  })();
+
+  function bakeSettings() {
+    var payload = {
+      viewMode: state.viewMode, layoutMode: state.layoutMode, ringSpin: state.ringSpin,
+      linkSpring: state.linkSpring, sizeScale: state.sizeScale, showFileNames: state.showFileNames,
+      collapsed: Array.from(state.collapsed)
+    };
+    try { localStorage.setItem(storageKey, JSON.stringify(payload)); } catch (e) { /* storage unavailable */ }
+  }
+
+  var activeGraph, visibleNodes, visibleEdges, visibleAdjacency;
+
+  function isVisible(n) {
+    for (var i = 0; i < n.hideKeys.length; i++) {
+      if (state.collapsed.has(n.hideKeys[i])) return false;
+    }
+    return true;
+  }
+
+  function recomputeVisibility() {
+    activeGraph = graphs[state.viewMode];
+    visibleNodes = activeGraph.nodes.filter(isVisible);
+    var visibleIds = {};
+    visibleNodes.forEach(function (n) { visibleIds[n.id] = true; });
+    visibleEdges = activeGraph.edges.filter(function (e) { return visibleIds[e.a] && visibleIds[e.b]; });
+    visibleAdjacency = {};
+    visibleNodes.forEach(function (n) { visibleAdjacency[n.id] = []; });
+    visibleEdges.forEach(function (e) {
+      visibleAdjacency[e.a].push(e.b);
+      visibleAdjacency[e.b].push(e.a);
+    });
+  }
+  recomputeVisibility();
+
+  // ---------------------------------------------------------------
+  // HUD text
+  // ---------------------------------------------------------------
+  document.getElementById("hud-title").textContent = DATA.project || "Node Map";
+  var genDate = DATA.generated ? new Date(DATA.generated) : null;
+  document.getElementById("hud-sub").textContent = "generated " +
+    (genDate && !isNaN(genDate) ? genDate.toLocaleString() : (DATA.generated || ""));
+
+  var totalCatCount = DATA.categories.length;
+  var totalFileCount = DATA.categories.reduce(function (a, c) { return a + c.nodes.length; }, 0);
+  document.getElementById("hud-stats").innerHTML =
+    "<span><b>" + totalCatCount + "</b> categories</span><span><b>" + totalFileCount + "</b> nodes</span>";
+  document.getElementById("search-input").placeholder = "Search " + totalFileCount + " files… ( / )";
+
+  // ---------------------------------------------------------------
+  // Legend (also doubles as the per-category expand/collapse control)
+  // ---------------------------------------------------------------
+  var legendList = document.getElementById("legend-list");
+  var legendRows = {};
+  DATA.categories.forEach(function (cat, ci) {
+    var color = cat.color || PALETTE[ci % PALETTE.length];
+    var key = "cat:" + cat.id;
+    var row = document.createElement("div");
+    row.className = "legend-row";
+    row.innerHTML = '<span class="legend-dot" style="background:' + color + ';color:' + color + '"></span>' +
+      '<span>' + cat.label + '</span><span class="legend-count">' + cat.nodes.length + '</span>';
+    row.addEventListener("click", function () {
+      if (state.collapsed.has(key)) state.collapsed.delete(key); else state.collapsed.add(key);
+      recomputeVisibility();
+      syncLegendUI();
+      fitCameraToLayout();
+    });
+    legendList.appendChild(row);
+    legendRows[key] = row;
+  });
+  function syncLegendUI() {
+    Object.keys(legendRows).forEach(function (key) {
+      legendRows[key].classList.toggle("collapsed", state.collapsed.has(key));
+    });
+  }
+  syncLegendUI();
+
+  // ---------------------------------------------------------------
+  // Canvas / camera setup
+  // ---------------------------------------------------------------
+  var canvas = document.getElementById("graph");
+  var ctx = canvas.getContext("2d");
+  var dpr = Math.max(1, window.devicePixelRatio || 1);
+  var camera = { x: 0, y: 0, scale: 1 };
+  var W = 0, H = 0;
+
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  function worldToScreen(x, y) {
+    return { x: W / 2 + (x - camera.x) * camera.scale, y: H / 2 + (y - camera.y) * camera.scale };
+  }
+  function screenToWorld(x, y) {
+    return { x: (x - W / 2) / camera.scale + camera.x, y: (y - H / 2) / camera.scale + camera.y };
+  }
+
+  // ---------------------------------------------------------------
+  // Force layout (organic, physics-driven)
+  // ---------------------------------------------------------------
+  var alpha = 1;
+  var alphaMin = 0.035;
+  var alphaDecay = 0.018;
+  var velocityDecay = 0.62;
+
+  function forceTick() {
+    if (alpha > alphaMin) alpha += (alphaMin - alpha) * alphaDecay; else alpha = alphaMin;
+
+    for (var i = 0; i < visibleNodes.length; i++) {
+      var ni = visibleNodes[i];
+      if (ni.fx !== null) continue;
+      for (var j = i + 1; j < visibleNodes.length; j++) {
+        var nj = visibleNodes[j];
+        var dx = ni.x - nj.x;
+        var dy = ni.y - nj.y;
+        if (dx > 500 || dx < -500 || dy > 500 || dy < -500) continue;
+        var distSq = dx * dx + dy * dy || 0.01;
+        var dist = Math.sqrt(distSq);
+        var minDist = ni.r + nj.r + 14;
+        var strength = (ni.kind === "file" && nj.kind === "file") ? 900 : 2200;
+        var force = (strength / distSq) * alpha;
+        if (dist < minDist) force += (minDist - dist) * 0.6 * alpha;
+        var fx = (dx / dist) * force;
+        var fy = (dy / dist) * force;
+        ni.vx += fx; ni.vy += fy;
+        if (nj.fx === null) { nj.vx -= fx; nj.vy -= fy; }
+      }
+    }
+
+    var baseCatRadius = 230;
+    visibleEdges.forEach(function (e) {
+      var a = activeGraph.nodes[e.a], b = activeGraph.nodes[e.b];
+      var restLen = b.kind === "category" ? baseCatRadius + b.order * 12 :
+        (b.kind === "folder" ? 60 : 45);
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      var diff = (dist - restLen) * e.k * state.linkSpring * alpha;
+      var fx = (dx / dist) * diff, fy = (dy / dist) * diff;
+      if (a.fx === null) { a.vx += fx; a.vy += fy; }
+      if (b.fx === null) { b.vx -= fx; b.vy -= fy; }
+    });
+
+    visibleNodes.forEach(function (n) {
+      if (n.kind === "category" && n.fx === null) {
+        var ring = baseCatRadius + n.order * 12;
+        var angle = (n.order / Math.max(n.categoryCount, 1)) * Math.PI * 2 - Math.PI / 2;
+        var hx = Math.cos(angle) * ring, hy = Math.sin(angle) * ring;
+        n.vx += (hx - n.x) * 0.006 * alpha;
+        n.vy += (hy - n.y) * 0.006 * alpha;
+      }
+      if (n.kind === "center") {
+        n.vx += (0 - n.x) * 0.02 * alpha;
+        n.vy += (0 - n.y) * 0.02 * alpha;
+      }
+    });
+
+    visibleNodes.forEach(function (n) {
+      if (n.fx !== null) { n.x = n.fx; n.y = n.fy; n.vx = 0; n.vy = 0; return; }
+      n.vx *= velocityDecay; n.vy *= velocityDecay;
+      n.x += n.vx; n.y += n.vy;
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // Structured layouts: Rings, Circle, Hex. These compute a target
+  // {x,y} per visible node each frame; nodes lerp toward it, which
+  // gives the "sort into place" animated transition when switching.
+  // ---------------------------------------------------------------
+  var spinTime = 0;
+
+  function childIndex(idsList, id) { return idsList.indexOf(id); }
+
+  function computeRingsTargets() {
+    var targets = { 0: { x: 0, y: 0 } };
+    var catCount = activeGraph.catCount;
+    var baseR = 90, ringStep = 58;
+    visibleNodes.forEach(function (n) {
+      if (n.kind !== "category") return;
+      var ring = baseR + n.order * ringStep;
+      var dir = (n.order % 2 === 0) ? 1 : -1;
+      var angle = (n.order / Math.max(catCount, 1)) * Math.PI * 2 - Math.PI / 2 +
+        spinTime * state.ringSpin * dir * 0.15;
+      targets[n.id] = { x: Math.cos(angle) * ring, y: Math.sin(angle) * ring };
+
+      var kids = n.children.filter(function (id) { return visibleAdjacency.hasOwnProperty(id); });
+      kids.forEach(function (cid, ki) {
+        var kidAngle = (ki / Math.max(kids.length, 1)) * Math.PI * 2 + spinTime * state.ringSpin * 0.08;
+        var jitter = ((cid * 97) % 17 - 8) * 0.6;
+        targets[cid] = { x: Math.cos(kidAngle) * (ring + jitter), y: Math.sin(kidAngle) * (ring + jitter) };
+
+        var kidNode = activeGraph.nodes[cid];
+        if (kidNode.kind === "folder") {
+          var grand = kidNode.children.filter(function (id) { return visibleAdjacency.hasOwnProperty(id); });
+          grand.forEach(function (gid, gi) {
+            var spread = 0.09;
+            var gAngle = kidAngle + (gi - (grand.length - 1) / 2) * spread;
+            var gRing = ring + 34;
+            targets[gid] = { x: Math.cos(gAngle) * gRing, y: Math.sin(gAngle) * gRing };
+          });
+        }
+      });
+    });
+    return targets;
+  }
+
+  function computeCircleTargets() {
+    var targets = { 0: { x: 0, y: 0 } };
+    var catCount = activeGraph.catCount;
+    var R = 260 * state.sizeScale;
+    visibleNodes.forEach(function (n) {
+      if (n.kind !== "category") return;
+      var angle = (n.order / Math.max(catCount, 1)) * Math.PI * 2 - Math.PI / 2;
+      targets[n.id] = { x: Math.cos(angle) * R, y: Math.sin(angle) * R };
+
+      var kids = n.children.filter(function (id) { return visibleAdjacency.hasOwnProperty(id); });
+      var spreadTotal = Math.min(0.9, 0.05 * kids.length);
+      kids.forEach(function (cid, ki) {
+        var a2 = angle + (kids.length > 1 ? (ki / (kids.length - 1) - 0.5) * spreadTotal : 0);
+        targets[cid] = { x: Math.cos(a2) * R, y: Math.sin(a2) * R };
+
+        var kidNode = activeGraph.nodes[cid];
+        if (kidNode.kind === "folder") {
+          var grand = kidNode.children.filter(function (id) { return visibleAdjacency.hasOwnProperty(id); });
+          grand.forEach(function (gid, gi) {
+            var a3 = a2 + (grand.length > 1 ? (gi / (grand.length - 1) - 0.5) * 0.05 : 0);
+            targets[gid] = { x: Math.cos(a3) * (R + 22), y: Math.sin(a3) * (R + 22) };
+          });
+        }
+      });
+    });
+    return targets;
+  }
+
+  function hexSpiral(n) {
+    var coords = [[0, 0]];
+    var dirs = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+    var ring = 1;
+    while (coords.length < n) {
+      var q = dirs[4][0] * ring, r = dirs[4][1] * ring;
+      for (var side = 0; side < 6; side++) {
+        for (var step = 0; step < ring; step++) {
+          if (coords.length >= n) break;
+          coords.push([q, r]);
+          q += dirs[side][0]; r += dirs[side][1];
+        }
+      }
+      ring++;
+    }
+    return coords.slice(0, n);
+  }
+
+  function computeHexTargets() {
+    var targets = { 0: { x: 0, y: 0 } };
+    var order = [];
+    function dfs(id) {
+      order.push(id);
+      var n = activeGraph.nodes[id];
+      n.children.forEach(function (c) { if (visibleAdjacency.hasOwnProperty(c)) dfs(c); });
+    }
+    visibleNodes.filter(function (n) { return n.kind === "category"; })
+      .sort(function (a, b) { return a.order - b.order; })
+      .forEach(function (cat) { dfs(cat.id); });
+
+    var coords = hexSpiral(order.length + 1);
+    var size = 30 * state.sizeScale;
+    for (var i = 0; i < order.length; i++) {
+      var c = coords[i + 1];
+      var q = c[0], r = c[1];
+      targets[order[i]] = {
+        x: size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r),
+        y: size * (1.5 * r)
+      };
+    }
+    return targets;
+  }
+
+  function structuredTick() {
+    var targets;
+    if (state.layoutMode === "rings") targets = computeRingsTargets();
+    else if (state.layoutMode === "circle") targets = computeCircleTargets();
+    else targets = computeHexTargets();
+
+    visibleNodes.forEach(function (n) {
+      if (n.fx !== null) { n.x = n.fx; n.y = n.fy; return; }
+      var t = targets[n.id];
+      if (!t) return;
+      n.x += (t.x - n.x) * 0.09;
+      n.y += (t.y - n.y) * 0.09;
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------
+  var hexPattern = buildHexPattern();
+  function buildHexPattern() {
+    var size = 46;
+    var off = document.createElement("canvas");
+    var w = size * 3, h = size * Math.sqrt(3);
+    off.width = w; off.height = h;
+    var octx = off.getContext("2d");
+    octx.strokeStyle = "rgba(255,255,255,0.035)";
+    octx.lineWidth = 1;
+    function hex(cx, cy, r) {
+      octx.beginPath();
+      for (var k = 0; k < 6; k++) {
+        var a = Math.PI / 3 * k;
+        var px = cx + r * Math.cos(a);
+        var py = cy + r * Math.sin(a);
+        if (k === 0) octx.moveTo(px, py); else octx.lineTo(px, py);
+      }
+      octx.closePath();
+      octx.stroke();
+    }
+    var r = size / 2;
+    hex(0, 0, r); hex(w, 0, r); hex(0, h, r); hex(w, h, r);
+    hex(w / 2, h / 2, r);
+    hex(w / 2, -h / 2, r); hex(w / 2, h + h / 2, r);
+    hex(-w / 2, h / 2, r); hex(w + w / 2, h / 2, r);
+    return { canvas: off, w: w, h: h };
+  }
+
+  function drawBackground() {
+    var grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.75);
+    grad.addColorStop(0, "#0c1020");
+    grad.addColorStop(1, "#05060a");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.save();
+    var pat = ctx.createPattern(hexPattern.canvas, "repeat");
+    ctx.fillStyle = pat;
+    ctx.translate((-camera.x * camera.scale + W / 2) % hexPattern.w, (-camera.y * camera.scale + H / 2) % hexPattern.h);
+    ctx.fillRect(-hexPattern.w * 2, -hexPattern.h * 2, W + hexPattern.w * 4, H + hexPattern.h * 4);
+    ctx.restore();
+  }
+
+  var hoverNode = null;
+  var pinnedNode = null;
+  var searchMatchIds = null;
+
+  function activeFocus() { return pinnedNode || hoverNode; }
+
+  function isDimmed(n) {
+    if (searchMatchIds) return !searchMatchIds.has(n.id);
+    var f = activeFocus();
+    if (!f) return false;
+    if (n === f) return false;
+    return visibleAdjacency[f.id].indexOf(n.id) === -1;
+  }
+
+  var t0 = performance.now();
+
+  function draw() {
+    drawBackground();
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(camera.scale, camera.scale);
+    ctx.translate(-camera.x, -camera.y);
+
+    visibleEdges.forEach(function (e) {
+      var a = activeGraph.nodes[e.a], b = activeGraph.nodes[e.b];
+      var dim = (isDimmed(a) || isDimmed(b));
+      ctx.strokeStyle = dim ? "rgba(255,255,255,0.03)" : hexToRgba(a.kind === "center" ? CENTER_COLOR : a.color, dim ? 0.03 : 0.22);
+      ctx.lineWidth = (a.kind === "center") ? 1.4 : 0.9;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    });
+
+    var pulse = 0.5 + 0.5 * Math.sin((performance.now() - t0) / 900);
+    visibleNodes.forEach(function (n) {
+      var dim = isDimmed(n);
+      var alpha2 = dim ? 0.18 : 1;
+      var glowR = n.kind === "center" ? n.r * (1.8 + pulse * 0.4) : n.r * 2.4;
+
+      ctx.save();
+      ctx.globalAlpha = alpha2;
+      var glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glowR);
+      glow.addColorStop(0, hexToRgba(n.color, 0.55));
+      glow.addColorStop(1, hexToRgba(n.color, 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = n.kind === "center" ? "#fff8e6" : n.color;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (n.kind !== "file" || n === hoverNode || n === pinnedNode || state.showFileNames) {
+        ctx.font = (n.kind === "center" ? "700 13px" : (n.kind === "category" || n.kind === "folder") ? "700 12px" : "11px") +
+          " -apple-system, Segoe UI, sans-serif";
+        ctx.fillStyle = "rgba(244,246,251," + (dim ? 0.25 : 0.92) + ")";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(n.label, n.x, n.y + n.r + 6);
+      }
+      ctx.restore();
+    });
+
+    ctx.restore();
+  }
+
+  function hexToRgba(hex, a) {
+    var h = hex.replace("#", "");
+    if (h.length === 3) h = h.split("").map(function (c) { return c + c; }).join("");
+    var r = parseInt(h.substr(0, 2), 16);
+    var g = parseInt(h.substr(2, 2), 16);
+    var b = parseInt(h.substr(4, 2), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+  }
+
+  function loop() {
+    spinTime += 1 / 60;
+    if (state.layoutMode === "force") forceTick(); else structuredTick();
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ---------------------------------------------------------------
+  // Interaction: pan, zoom, drag, hover, click, double-click, focus
+  // ---------------------------------------------------------------
+  var isPanning = false;
+  var panStart = { x: 0, y: 0 };
+  var camStart = { x: 0, y: 0 };
+  var draggedNode = null;
+
+  function nodeAt(sx, sy) {
+    var w = screenToWorld(sx, sy);
+    var best = null, bestDist = Infinity;
+    for (var i = 0; i < visibleNodes.length; i++) {
+      var n = visibleNodes[i];
+      var dx = n.x - w.x, dy = n.y - w.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      var hitR = Math.max(n.r + 6, n.r * 1.6);
+      if (d < hitR && d < bestDist) { best = n; bestDist = d; }
+    }
+    return best;
+  }
+
+  canvas.addEventListener("mousedown", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+    var n = nodeAt(sx, sy);
+    if (n) {
+      draggedNode = n;
+      canvas.classList.add("node-drag");
+      alpha = 0.9;
+    } else {
+      isPanning = true;
+      panStart = { x: e.clientX, y: e.clientY };
+      camStart = { x: camera.x, y: camera.y };
+      canvas.classList.add("dragging");
+    }
+  });
+
+  window.addEventListener("mousemove", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+
+    if (draggedNode) {
+      var w = screenToWorld(sx, sy);
+      draggedNode.fx = w.x;
+      draggedNode.fy = w.y;
+      alpha = Math.max(alpha, 0.4);
+      return;
+    }
+    if (isPanning) {
+      camera.x = camStart.x - (e.clientX - panStart.x) / camera.scale;
+      camera.y = camStart.y - (e.clientY - panStart.y) / camera.scale;
+      return;
+    }
+    var hit = nodeAt(sx, sy);
+    hoverNode = hit;
+    var tip = document.getElementById("tooltip");
+    if (hit) {
+      document.getElementById("t-label").textContent = hit.label;
+      document.getElementById("t-meta").textContent = hit.meta || "";
+      document.getElementById("t-path").textContent = hit.path || "";
+      tip.style.left = (sx + 16) + "px";
+      tip.style.top = (sy + 12) + "px";
+      tip.classList.add("show");
+      canvas.style.cursor = "pointer";
+    } else {
+      tip.classList.remove("show");
+      canvas.style.cursor = isPanning ? "grabbing" : "grab";
+    }
+  });
+
+  window.addEventListener("mouseup", function () {
+    if (draggedNode) {
+      draggedNode.fx = null;
+      draggedNode.fy = null;
+      draggedNode = null;
+      canvas.classList.remove("node-drag");
+    }
+    isPanning = false;
+    canvas.classList.remove("dragging");
+  });
+
+  canvas.addEventListener("click", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
+    pinnedNode = n || null;
+  });
+
+  canvas.addEventListener("dblclick", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (n) flyTo(n.x, n.y, Math.max(camera.scale, 2.2));
+  });
+
+  canvas.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+    var before = screenToWorld(sx, sy);
+    var factor = Math.exp(-e.deltaY * 0.0012);
+    camera.scale = clamp(camera.scale * factor, 0.15, 5);
+    var after = screenToWorld(sx, sy);
+    camera.x += before.x - after.x;
+    camera.y += before.y - after.y;
+  }, { passive: false });
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  var flyAnim = null;
+  function flyTo(x, y, scale) {
+    if (flyAnim) cancelAnimationFrame(flyAnim);
+    var sx0 = camera.x, sy0 = camera.y, ss0 = camera.scale;
+    var start = performance.now();
+    var dur = 550;
+    (function step() {
+      var t = Math.min(1, (performance.now() - start) / dur);
+      var ease = 1 - Math.pow(1 - t, 3);
+      camera.x = sx0 + (x - sx0) * ease;
+      camera.y = sy0 + (y - sy0) * ease;
+      camera.scale = ss0 + (scale - ss0) * ease;
+      if (t < 1) flyAnim = requestAnimationFrame(step);
+    })();
+  }
+
+  document.getElementById("zoom-in").addEventListener("click", function () {
+    camera.scale = clamp(camera.scale * 1.25, 0.15, 5);
+  });
+  document.getElementById("zoom-out").addEventListener("click", function () {
+    camera.scale = clamp(camera.scale / 1.25, 0.15, 5);
+  });
+  document.getElementById("zoom-reset").addEventListener("click", function () {
+    flyTo(0, 0, 1);
+  });
+
+  // Structured layouts can span a very different radius than the organic
+  // force layout - zoom/pan to fit whenever we (re)compute one, so
+  // switching layout or view always ends with the whole thing in frame.
+  function fitCameraToLayout() {
+    if (state.layoutMode === "force") return;
+    var targets = state.layoutMode === "rings" ? computeRingsTargets() :
+      state.layoutMode === "circle" ? computeCircleTargets() : computeHexTargets();
+    var maxDist = 50;
+    Object.keys(targets).forEach(function (id) {
+      var t = targets[id];
+      var d = Math.sqrt(t.x * t.x + t.y * t.y);
+      if (d > maxDist) maxDist = d;
+    });
+    var fitScale = clamp(Math.min(W, H) * 0.42 / maxDist, 0.1, 3);
+    flyTo(0, 0, fitScale);
+  }
+
+  // ---------------------------------------------------------------
+  // Control panel wiring
+  // ---------------------------------------------------------------
+  var panel = document.getElementById("control-panel");
+  document.getElementById("menu-toggle").addEventListener("click", function () {
+    panel.classList.toggle("hidden");
+  });
+
+  function setActiveButton(row, attr, value) {
+    Array.prototype.forEach.call(row.querySelectorAll("button"), function (btn) {
+      btn.classList.toggle("active", btn.getAttribute(attr) === value);
+    });
+  }
+
+  var layoutRow = document.getElementById("layout-row");
+  layoutRow.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-layout]");
+    if (!btn) return;
+    state.layoutMode = btn.getAttribute("data-layout");
+    setActiveButton(layoutRow, "data-layout", state.layoutMode);
+    if (state.layoutMode === "force") alpha = 0.9; else fitCameraToLayout();
+  });
+  setActiveButton(layoutRow, "data-layout", state.layoutMode);
+
+  var viewRow = document.getElementById("view-row");
+  viewRow.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-view]");
+    if (!btn) return;
+    state.viewMode = btn.getAttribute("data-view");
+    setActiveButton(viewRow, "data-view", state.viewMode);
+    recomputeVisibility();
+    if (state.layoutMode === "force") alpha = 1; else fitCameraToLayout();
+  });
+  setActiveButton(viewRow, "data-view", state.viewMode);
+
+  var spinSlider = document.getElementById("spin-slider");
+  var spinVal = document.getElementById("spin-val");
+  spinSlider.value = state.ringSpin;
+  spinVal.textContent = state.ringSpin.toFixed(2);
+  spinSlider.addEventListener("input", function () {
+    state.ringSpin = parseFloat(spinSlider.value);
+    spinVal.textContent = state.ringSpin.toFixed(2);
+  });
+
+  var springSlider = document.getElementById("spring-slider");
+  var springVal = document.getElementById("spring-val");
+  springSlider.value = state.linkSpring;
+  springVal.textContent = state.linkSpring.toFixed(2);
+  springSlider.addEventListener("input", function () {
+    state.linkSpring = parseFloat(springSlider.value);
+    springVal.textContent = state.linkSpring.toFixed(2);
+  });
+
+  var sizeSlider = document.getElementById("size-slider");
+  var sizeVal = document.getElementById("size-val");
+  sizeSlider.value = state.sizeScale;
+  sizeVal.textContent = state.sizeScale.toFixed(2);
+  sizeSlider.addEventListener("input", function () {
+    state.sizeScale = parseFloat(sizeSlider.value);
+    sizeVal.textContent = state.sizeScale.toFixed(2);
+  });
+
+  var filenamesToggle = document.getElementById("filenames-toggle");
+  filenamesToggle.checked = state.showFileNames;
+  filenamesToggle.addEventListener("change", function () {
+    state.showFileNames = filenamesToggle.checked;
+  });
+
+  document.getElementById("expand-all").addEventListener("click", function () {
+    state.collapsed.clear();
+    recomputeVisibility();
+    syncLegendUI();
+    fitCameraToLayout();
+  });
+  document.getElementById("collapse-all").addEventListener("click", function () {
+    state.collapsed.clear();
+    activeGraph.nodes.forEach(function (n) { if (n.collapseKey) state.collapsed.add(n.collapseKey); });
+    recomputeVisibility();
+    syncLegendUI();
+    fitCameraToLayout();
+  });
+
+  var bakeBtn = document.getElementById("bake-settings");
+  bakeBtn.addEventListener("click", function () {
+    bakeSettings();
+    var original = bakeBtn.textContent;
+    bakeBtn.textContent = "Saved ✓";
+    setTimeout(function () { bakeBtn.textContent = original; }, 1200);
+  });
+
+  var searchInput = document.getElementById("search-input");
+  searchInput.addEventListener("input", function () {
+    var q = searchInput.value.trim().toLowerCase();
+    if (!q) { searchMatchIds = null; return; }
+    var matches = new Set();
+    visibleNodes.forEach(function (n) {
+      if (n.kind !== "center" && n.label.toLowerCase().indexOf(q) !== -1) {
+        matches.add(n.id);
+        n.ancestorIds.forEach(function (a) { matches.add(a); });
+      }
+    });
+    searchMatchIds = matches;
+  });
+  window.addEventListener("keydown", function (e) {
+    if (e.key === "/" && document.activeElement !== searchInput) {
+      e.preventDefault();
+      searchInput.focus();
+    } else if (e.key === "Escape" && document.activeElement === searchInput) {
+      searchInput.value = "";
+      searchMatchIds = null;
+      searchInput.blur();
+    }
+  });
+})();
+</script>
+</body>
+</html>

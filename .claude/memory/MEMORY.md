@@ -1,15 +1,22 @@
-# Memory Index
+# Memory Index — historical context
 
-This file serves as the master index to all memory files in the project.
+Index to this project's **historical** memory files. None of these is
+authoritative for current state. Start at the repository-root
+[AGENTS.md](../../AGENTS.md); for current facts use
+[current state](../../docs/agents/current-state.md).
 
-## Core Project Memory
+Search these files — by ticket number or feature term — rather than reading
+them end to end. `node .claude/skills/node-map/assets/brain.js "<question>"`
+will point you at the right one.
 
-- [Project Memory](project_memory.md) — Current state, priorities, technical debt
-- [Architecture](architecture.md) — System architecture and design decisions
-- [Ticket Memory](ticket_memory.md) — Historical ticket log (grep, don't read in full)
-- [Project Status](project_status.md) — Current milestone, version, and progress
-- [Tech Stack](tech_stack.md) — Technologies and frameworks used
-- [Coding Conventions](coding_conventions.md) — Code style and standards
+## Historical memory
+
+- [Project Memory](project_memory.md) — narrative history, priorities, technical debt (superseded by current-state.md)
+- [Architecture](architecture.md) — feature-level implementation notes and troubleshooting history (navigation lives in docs/agents/architecture-guide.md)
+- [Ticket Memory](ticket_memory.md) — append-only ticket log; grep, never read in full
+- [Project Status](project_status.md) — **stale snapshot, superseded** by docs/agents/current-state.md; retained for history only
+- [Tech Stack](tech_stack.md) — technologies and frameworks (not the version — see current-state.md)
+- [Coding Conventions](coding_conventions.md) — generic style notes (project rules live in docs/agents/conventions.md)
 
 ## Feedback Memory
 
