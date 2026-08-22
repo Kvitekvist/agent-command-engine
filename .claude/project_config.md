@@ -1,21 +1,21 @@
-project_name:
+project_name: Agent Command Engine (ACE)
 
-language:
+language: JavaScript / JSX
 
-framework:
+framework: Electron + React
 
-build_tool:
+build_tool: Vite + electron-builder
 
-git_provider:
+git_provider: GitHub
 
-build_executable:
+build_executable: true
 
-auto_push:
+auto_push: false
 
 ticket_system: markdown
 
 branch_strategy: feature
 
-tests_required:
+tests_required: true
 
-release_method:
+release_method: electron-builder (portable + NSIS on Windows; DMG on macOS)

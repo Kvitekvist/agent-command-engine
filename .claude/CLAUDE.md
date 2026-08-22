@@ -28,15 +28,12 @@ Never start implementing features before the project structure exists.
 
 # Every Session
 
-Before writing code always:
+Before writing code, read the repository-root
+[AGENTS.md](../AGENTS.md). It routes the task to the smallest current set of
+project documents and the canonical `tickets/open/` work queue.
 
-1. Read .claude/memory/project_memory.md
-2. Read .claude/memory/architecture.md
-3. Read .claude/memory/ticket_memory.md
-4. Scan open tickets
-5. Understand current milestone
-
-Never assume architecture.
+Search the historical memory files for a named ticket or feature; do not read
+their full history unless the task genuinely requires it.
 
 ---
 
@@ -129,15 +126,9 @@ Ticket
 
 # Long-Term Memory
 
-Always maintain:
-
-.claude/memory/project_memory.md
-
-.claude/memory/architecture.md
-
-.claude/memory/ticket_memory.md
-
-These files are the source of truth.
+Use `AGENTS.md`'s Canonical Sources table. `ticket_memory.md` remains
+append-only historical context; current status and active work are maintained
+through `docs/agents/current-state.md` and `tickets/open/`.
 
 ---
 

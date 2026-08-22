@@ -5,8 +5,8 @@ import ContextMenu from './ContextMenu'
 // TICKET-0033/0037: kept in sync by hand with FileService's
 // RUNNABLE_EXTENSIONS (main process) -- this copy only gates which files
 // show a "Run" item; the main process is the real authority and
-// re-checks it independently. Platform-aware via cpi.platform.
-const RUNNABLE_EXTENSIONS = window.cpi?.platform === 'win32'
+// re-checks it independently. Platform-aware via ace.platform.
+const RUNNABLE_EXTENSIONS = window.ace?.platform === 'win32'
   ? new Set(['.exe', '.bat', '.cmd', '.ps1', '.vbs', '.com', '.msi'])
   : new Set(['.sh', '.command', '.app'])
 
@@ -17,7 +17,7 @@ function isRunnable(name) {
 
 // TICKET-0021: one node is one directory entry. Directories lazy-load their
 // children only on first expand (not an eager whole-project walk, which
-// would choke on a real node_modules tree) via window.cpi.fs.readDir.
+// would choke on a real node_modules tree) via window.ace.fs.readDir.
 function FileTreeNode({ root, entry, depth, onOpenFile, onContextMenu }) {
   const [expanded, setExpanded] = useState(false)
   const [children, setChildren] = useState(null)
@@ -30,7 +30,7 @@ function FileTreeNode({ root, entry, depth, onOpenFile, onContextMenu }) {
     }
     if (!expanded && children === null) {
       setLoading(true)
-      const result = await window.cpi.fs.readDir(root, entry.path)
+      const result = await window.ace.fs.readDir(root, entry.path)
       setLoading(false)
       setChildren(result.ok ? result.entries : [])
     }
@@ -75,7 +75,7 @@ export default function FileTree({ project }) {
     let cancelled = false
     setRootEntries(null)
     setError(null)
-    window.cpi.fs.readDir(project.path, project.path).then((result) => {
+    window.ace.fs.readDir(project.path, project.path).then((result) => {
       if (cancelled) return
       if (result.ok) setRootEntries(result.entries)
       else setError(result.error)
@@ -84,7 +84,7 @@ export default function FileTree({ project }) {
   }, [project.path])
 
   async function handleOpenFile(entry) {
-    const result = await window.cpi.fs.readFile(project.path, entry.path)
+    const result = await window.ace.fs.readFile(project.path, entry.path)
     if (!result.ok) {
       const reason = result.reason === 'too-large' ? 'is too large to edit here'
         : result.reason === 'binary' ? 'looks like a binary file'
@@ -97,12 +97,12 @@ export default function FileTree({ project }) {
   }
 
   async function handleOpenInExplorer(entry) {
-    const result = await window.cpi.fs.openInExplorer(project.path, entry.path)
+    const result = await window.ace.fs.openInExplorer(project.path, entry.path)
     if (!result.ok) window.alert(`Couldn't reveal "${entry.name}": ${result.error}`)
   }
 
   async function handleRun(entry) {
-    const result = await window.cpi.fs.runFile(project.path, entry.path)
+    const result = await window.ace.fs.runFile(project.path, entry.path)
     if (!result.ok) window.alert(`Couldn't run "${entry.name}": ${result.error}`)
   }
 

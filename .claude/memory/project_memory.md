@@ -15,6 +15,13 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
+* Verify the TICKET-0071 `cpi` → `ace` internal rename live: launch against
+  a userData profile with an old `cpi.db` present and confirm it's renamed
+  to `ace.db` on startup with all data intact; capture a screenshot in a
+  project still holding a `.cpi/screenshots/` folder and confirm it's
+  renamed to `.ace/` with the new screenshot landing there and `.gitignore`
+  updated to `.ace/` — deferred for a real app restart, same reason as
+  TICKET-0024/0025/etc.
 * Verify the TICKET-0070 auto-title feature live: launch an agent, type a
   first prompt, confirm the card's label updates from its random default to
   a short derived title; switch tabs/projects away and back and confirm the
@@ -77,8 +84,8 @@ Make process execution, persistence, packaging, and provider behavior dependable
   deferred for the same reason as TICKET-0024/0025/etc.
 * Verify the TICKET-0034 screenshot rework live: click 📸 on a running
   agent, drag-select a region (including one covering ACE's own window),
-  confirm the PNG lands under `<project>/.cpi/screenshots/`, `.gitignore`
-  gained a `.cpi/` entry, Esc/right-click cancels cleanly, and the copied
+  confirm the PNG lands under `<project>/.ace/screenshots/`, `.gitignore`
+  gained a `.ace/` entry, Esc/right-click cancels cleanly, and the copied
   path pastes correctly into that agent's terminal
 * Finish manually verifying the file explorer/editor (TICKET-0021): an
   actual Save through Monaco's own keyboard input (write path itself was

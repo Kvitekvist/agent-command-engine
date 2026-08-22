@@ -33,7 +33,10 @@ function buildCodexArgs(permissionMode) {
   if (permissionMode === 'ask') {
     return ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request']
   }
-  return ['--sandbox', 'read-only', '--ask-for-approval', 'untrusted']
+  // Current Codex releases accept only `on-request` and `never` here.
+  // Safe mode is already constrained by the read-only sandbox, so it must
+  // never request an escalation outside that sandbox.
+  return ['--sandbox', 'read-only', '--ask-for-approval', 'never']
 }
 
 function quoteArg(arg) {

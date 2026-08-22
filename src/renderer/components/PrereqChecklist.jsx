@@ -17,7 +17,7 @@ export default function PrereqChecklist() {
 
   async function check() {
     setChecking(true)
-    const result = await window.cpi.prereqs.check()
+    const result = await window.ace.prereqs.check()
     setStatus(result)
     setChecking(false)
   }
@@ -26,7 +26,7 @@ export default function PrereqChecklist() {
 
   async function install(name) {
     const setNameStatus = (val) => setInstallStatus((s) => ({ ...s, [name]: val }))
-    await runOperation(installStatus[name], setNameStatus, CLI_INFO[name].label, () => window.cpi.prereqs.install(name))
+    await runOperation(installStatus[name], setNameStatus, CLI_INFO[name].label, () => window.ace.prereqs.install(name))
     check()
   }
 
@@ -51,7 +51,7 @@ export default function PrereqChecklist() {
           {nodeReady ? (
             <span className="badge-green">✓ Installed</span>
           ) : (
-            <button className="btn-ghost text-xs" onClick={() => window.cpi.prereqs.openNodeDownload()}>
+            <button className="btn-ghost text-xs" onClick={() => window.ace.prereqs.openNodeDownload()}>
               Download Node.js ↗
             </button>
           )}

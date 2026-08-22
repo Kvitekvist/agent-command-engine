@@ -2,19 +2,12 @@ import React, { useEffect, useState } from 'react'
 import useStore from '../store/useStore'
 import ModelSelector from '../components/ModelSelector'
 import PrereqChecklist from '../components/PrereqChecklist'
-
-const CLAUDE_MODELS = [
-  'claude-haiku-4-5-20251001',
-  'claude-sonnet-4-5',
-  'claude-sonnet-5',
-  'claude-opus-4-8',
-  'claude-fable-5',
-]
+import { DEFAULT_MODEL_BY_PROVIDER, MODEL_GROUPS_BY_PROVIDER } from '../utils/modelCatalog'
 
 export default function SettingsView() {
   const { activeProject, optimizationResult, setOptimizationResult } = useStore()
 
-  const [defaultModel, setDefaultModel]           = useState('claude-sonnet-5')
+  const [defaultModel, setDefaultModel]           = useState(DEFAULT_MODEL_BY_PROVIDER.claude)
   const [provider, setProvider]                   = useState('claude')
   const [fallbackEnabled, setFallbackEnabled]     = useState(true)
   const [threshold, setThreshold]                 = useState('100000')
@@ -24,10 +17,10 @@ export default function SettingsView() {
   useEffect(() => {
     async function load() {
       const [m, p, f, t] = await Promise.all([
-        window.cpi.getSetting('default_model'),
-        window.cpi.getSetting('default_provider'),
-        window.cpi.getSetting('codex_fallback_enabled'),
-        window.cpi.getSetting('claude_credit_threshold'),
+        window.ace.getSetting('default_model'),
+        window.ace.getSetting('default_provider'),
+        window.ace.getSetting('codex_fallback_enabled'),
+        window.ace.getSetting('claude_credit_threshold'),
       ])
       if (m) setDefaultModel(m)
       if (p) setProvider(p)
@@ -39,10 +32,10 @@ export default function SettingsView() {
 
   async function saveSettings() {
     await Promise.all([
-      window.cpi.setSetting('default_model', defaultModel),
-      window.cpi.setSetting('default_provider', provider),
-      window.cpi.setSetting('codex_fallback_enabled', String(fallbackEnabled)),
-      window.cpi.setSetting('claude_credit_threshold', threshold),
+      window.ace.setSetting('default_model', defaultModel),
+      window.ace.setSetting('default_provider', provider),
+      window.ace.setSetting('codex_fallback_enabled', String(fallbackEnabled)),
+      window.ace.setSetting('claude_credit_threshold', threshold),
     ])
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -52,7 +45,7 @@ export default function SettingsView() {
     setAnalyzing(true)
     setOptimizationResult(null)
     try {
-      const result = await window.cpi.getOptimizationAdvice(activeProject?.id || null)
+      const result = await window.ace.getOptimizationAdvice(activeProject?.id || null)
       setOptimizationResult(result)
     } finally {
       setAnalyzing(false)
@@ -82,7 +75,12 @@ export default function SettingsView() {
 
         <div>
           <label className="text-xs text-muted block mb-1">Default Model</label>
-          <ModelSelector models={CLAUDE_MODELS} value={defaultModel} onChange={setDefaultModel} />
+          <ModelSelector
+            groups={MODEL_GROUPS_BY_PROVIDER[provider]}
+            value={defaultModel}
+            onChange={setDefaultModel}
+            className="w-full"
+          />
         </div>
 
         <div>
@@ -91,7 +89,7 @@ export default function SettingsView() {
             {['claude', 'codex'].map((p) => (
               <button
                 key={p}
-                onClick={() => setProvider(p)}
+                onClick={() => { setProvider(p); setDefaultModel(DEFAULT_MODEL_BY_PROVIDER[p]) }}
                 className={`btn text-xs ${provider === p ? 'bg-accent text-white' : 'btn-ghost'}`}
               >
                 {p === 'claude' ? '🟣 Claude' : '🟢 Codex'}

@@ -14,7 +14,7 @@ function timestampedFilename() {
   return `screenshot-${iso}.png`
 }
 
-// Appends `.cpi/` to the project's .gitignore (creating the file if it
+// Appends `.ace/` to the project's .gitignore (creating the file if it
 // doesn't exist yet) so screenshots -- and anything else ACE ever stores
 // under the project root -- never get committed to the user's own repo.
 function ensureGitignored(projectRoot) {
@@ -25,16 +25,28 @@ function ensureGitignored(projectRoot) {
   } catch (_) {
     // no .gitignore yet -- created below
   }
-  if (content.split(/\r?\n/).some((line) => line.trim() === '.cpi/')) return
+  if (content.split(/\r?\n/).some((line) => line.trim() === '.ace/')) return
   const separator = content.length && !content.endsWith('\n') ? '\n' : ''
-  fs.writeFileSync(gitignorePath, `${content}${separator}\n# Agent Command Engine data (screenshots, etc.)\n.cpi/\n`)
+  fs.writeFileSync(gitignorePath, `${content}${separator}\n# Agent Command Engine data (screenshots, etc.)\n.ace/\n`)
+}
+
+// TICKET-0071: this folder was originally named .cpi/ (the app's old
+// internal name). Migrate an already-initialized project's folder forward
+// the first time it's touched after the rename, rather than silently
+// starting a new, empty .ace/ next to an orphaned .cpi/.
+function migrateLegacyFolder(projectRoot) {
+  const legacyDir = path.join(projectRoot, '.cpi')
+  const newDir = path.join(projectRoot, '.ace')
+  if (!fs.existsSync(newDir) && fs.existsSync(legacyDir)) {
+    fs.renameSync(legacyDir, newDir)
+  }
 }
 
 class ScreenshotService {
   // Captures the primary display exactly as it currently appears --
   // including ACE's own window, if it's on screen -- lets the user
   // drag-select a region over it, crops to that region, and saves the
-  // result under <projectRoot>/.cpi/screenshots/. Resolves { ok:false,
+  // result under <projectRoot>/.ace/screenshots/. Resolves { ok:false,
   // reason:'cancelled' } if the user backs out (Esc/right-click/too-small
   // a selection) rather than throwing, since backing out isn't an error.
   //
@@ -82,7 +94,8 @@ class ScreenshotService {
     }
 
     const cropped = fullImage.crop(cropRect)
-    const folder = path.join(projectRoot, '.cpi', 'screenshots')
+    migrateLegacyFolder(projectRoot)
+    const folder = path.join(projectRoot, '.ace', 'screenshots')
     fs.mkdirSync(folder, { recursive: true })
     const filename = timestampedFilename()
     const filePath = path.join(folder, filename)

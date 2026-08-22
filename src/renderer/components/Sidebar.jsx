@@ -22,19 +22,19 @@ export default function Sidebar() {
   const [nameError, setNameError] = useState('')
 
   useEffect(() => {
-    window.cpi.getProjects().then(setProjects)
+    window.ace.getProjects().then(setProjects)
   }, [])
 
   async function refreshProjects() {
-    const updated = await window.cpi.getProjects()
+    const updated = await window.ace.getProjects()
     setProjects(updated)
   }
 
   async function handlePickFolder() {
-    const folderPath = await window.cpi.pickFolder()
+    const folderPath = await window.ace.pickFolder()
     if (!folderPath) return
     const name = folderPath.split(/[\\/]/).pop()
-    await window.cpi.addProject(name, folderPath)
+    await window.ace.addProject(name, folderPath)
     await refreshProjects()
     setAdding(false)
   }
@@ -56,24 +56,24 @@ export default function Sidebar() {
     }
     setNameModalOpen(false)
 
-    const defaultParent = await window.cpi.getDefaultParentDir()
-    const parentDir = await window.cpi.pickFolder(defaultParent)
+    const defaultParent = await window.ace.getDefaultParentDir()
+    const parentDir = await window.ace.pickFolder(defaultParent)
     if (!parentDir) return // user canceled the location picker
 
-    const result = await window.cpi.createNewProject(name, parentDir)
+    const result = await window.ace.createNewProject(name, parentDir)
     if (result?.error) {
       alert(`Error: ${result.error}`)
       return
     }
-    await window.cpi.addProject(name, result.path)
+    await window.ace.addProject(name, result.path)
     await refreshProjects()
     setAdding(false)
   }
 
   async function handleRemove(e, id) {
     e.stopPropagation()
-    await window.cpi.removeProject(id)
-    const updated = await window.cpi.getProjects()
+    await window.ace.removeProject(id)
+    const updated = await window.ace.getProjects()
     setProjects(updated)
     if (activeProject?.id === id) setActiveProject(null)
   }

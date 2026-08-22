@@ -35,7 +35,13 @@ Agent Command Engine (ACE) is an Electron desktop application with a React rende
 - Handles file system dialogs (project folder picker)
 - Exposes IPC handlers to renderer
 
-### Database (SQLite — cpi.db in Electron userData)
+### Database (SQLite — ace.db in Electron userData)
+**TICKET-0071**: the project's internal naming (`window.cpi` preload bridge,
+`cpi.db`, per-project `.cpi/` folder) predated the "ACE"/"Agent Command
+Engine" rename and was never updated — renamed to `window.ace`/`ace.db`/
+`.ace/` for consistency. `DBService.init()` and `ScreenshotService`'s
+`migrateLegacyFolder()` each rename an existing `cpi.db`/`.cpi/` forward on
+first touch after upgrading, so no existing install or project loses data.
 - `projects` — id, name, path, created_at
 - `agents` — id, project_id, label, provider, model, status
 - `prompts` — id, agent_id, project_id, task_label, prompt_text, response_text, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, duration_ms, created_at
@@ -194,7 +200,7 @@ interactively — replacing what AgentPane used to render as a headless
   built — already generically multi-session, so giving every agent its own
   terminal needed no other backend changes.
 - **`AgentTerminal.jsx`** (renderer, one instance per running agent card):
-  xterm.js + FitAddon, spawned via `window.cpi.terminal.spawn({cwd: agent.
+  xterm.js + FitAddon, spawned via `window.ace.terminal.spawn({cwd: agent.
   projectPath})` when the card mounts, then immediately writes the agent's
   launch command (built by `utils/agentLaunch.js` from its
   provider/model/permissionMode — the same CLI flags `AgentService.
@@ -314,7 +320,7 @@ interactively — replacing what AgentPane used to render as a headless
   node-pty's own `WindowsPtyAgent` default logic, not just assumed.
 - **Auto-answer permission prompts (TICKET-0038/0039), a purely per-agent
   live toggle** — the 🛡️ Auto-approve pill on each running agent's terminal
-  card (`AgentTerminal.jsx`), flipped via `window.cpi.terminal.setAutoAnswer
+  card (`AgentTerminal.jsx`), flipped via `window.ace.terminal.setAutoAnswer
   (id, enabled)` → `TerminalService.setAutoAnswer` → `ptyHost.js`'s
   `setAutoAnswer`. No spawn-time parameter, no global Settings toggle
   (removed in TICKET-0039's follow-up) — every session starts off, and
@@ -378,8 +384,8 @@ read it straight from disk by a relative path:
   (`display.bounds` × `display.scaleFactor`), hands the frame to a
   selection overlay (`_runOverlay`), crops the user's drag-selected rect
   into that frame's own pixel space, and saves it as a timestamped PNG
-  under `<projectRoot>/.cpi/screenshots/`. `ensureGitignored` appends
-  `.cpi/` to the project's `.gitignore` (creating the file if missing,
+  under `<projectRoot>/.ace/screenshots/`. `ensureGitignored` appends
+  `.ace/` to the project's `.gitignore` (creating the file if missing,
   idempotent) so this data never gets committed to the user's own repo.
   The saved file's path *relative to the project root* (not absolute,
   since that's the same root the agent's terminal already runs from as its
@@ -406,7 +412,7 @@ read it straight from disk by a relative path:
   (`screenshot-overlay-preload.js`) is scoped to that window's
   `webContents.ipc`, not global `ipcMain`, so a second capture started
   before the first settles can never cross-wire.
-- **`screenshots:captureRegion`** IPC handler / `window.cpi.
+- **`screenshots:captureRegion`** IPC handler / `window.ace.
   screenshots.captureRegion(projectPath)` (preload) wire it to a 📸 button
   on each running agent's card (`AgentView.jsx`), which shows a status
   message (saved / cancelled / error) for 4s and disables the button
@@ -455,7 +461,7 @@ a conversation does, without an extra AI call:
   only ever fires once per mounted session. On the first finalized non-empty
   line, calls `deriveTitle` and updates the label both in the Zustand store
   (`useStore.getState().updateAgentLabel`, immediate UI update) and via
-  `window.cpi.updateAgentLabel` → `agents:updateLabel` IPC →
+  `window.ace.updateAgentLabel` → `agents:updateLabel` IPC →
   `DBService.updateAgentLabel` (persists `label` and sets the new
   `agents.title_set` column so the title survives a restart/restore).
 - **Why `label` itself, not a second field**: `label` is already the one
@@ -595,7 +601,7 @@ platform-specific code paths are:
   `ELECTRON_RUN_AS_NODE=1`
 - **`FileService.js`** — `RUNNABLE_EXTENSIONS` and `runFile()` use
   platform-specific extension sets and spawn logic
-- **`FileTree.jsx`** — reads `window.cpi.platform` (exposed via
+- **`FileTree.jsx`** — reads `window.ace.platform` (exposed via
   `preload.js`) to show the right runnable extensions in the context menu
 - **`TerminalService.js`** — `windowsHide: true` is harmless on
   non-Windows (ignored)
@@ -617,7 +623,7 @@ platform-specific code paths are:
 - Single-instance (TICKET-0043): `index.js` acquires
   `app.requestSingleInstanceLock()`; a second launch quits and focuses the
   existing window via the `second-instance` handler, so exactly one process
-  ever owns the on-disk `cpi.db` and one window ever owns OS keyboard focus
+  ever owns the on-disk `ace.db` and one window ever owns OS keyboard focus
 
 ---
 
@@ -656,8 +662,8 @@ platform-specific code paths are:
   `npm run dev` gives a clean instance (discovered verifying TICKET-0023).
   **A second, genuinely isolated instance is still possible** without
   touching the first: `electron.exe . --user-data-dir=<separate path>`
-  gives it its own `cpi.db` (Electron's userData path, which is what
-  `DBService`'s `path.join(app.getPath('userData'), 'cpi.db')` resolves
+  gives it its own `ace.db` (Electron's userData path, which is what
+  `DBService`'s `path.join(app.getPath('userData'), 'ace.db')` resolves
   from, is normally derived from the app name — `--user-data-dir` is a
   native Electron/Chromium switch that overrides it directly). Since
   TICKET-0043 `index.js` holds an `app.requestSingleInstanceLock()`, so a

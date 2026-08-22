@@ -2,6 +2,9 @@
 
 ## Project
 
+Canonical current version: **0.1.17** (`src/package.json` and root
+`version.txt`).
+
 - Name: Agent Command Engine
 - Version: 0.1.1
 - Created: 2026-07-19

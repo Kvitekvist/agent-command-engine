@@ -72,7 +72,7 @@ const setDevDockIcon = () => {
 // not necessarily the one the user is clicking in — so keystrokes aimed at
 // the front window (e.g. the transient "new project" name field) silently
 // land in a different ACE window. It also means two instances write the
-// same on-disk cpi.db (DBService rewrites the whole file on every write),
+// same on-disk ace.db (DBService rewrites the whole file on every write),
 // a corruption risk. A second launch now just surfaces the existing window.
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
@@ -119,7 +119,7 @@ function createWindow() {
 app.whenReady().then(async () => {
   // Lost the single-instance lock — the first instance is already running
   // (and has been focused via 'second-instance' above). Do nothing here so
-  // this process never creates a window or opens cpi.db before app.quit().
+  // this process never creates a window or opens ace.db before app.quit().
   if (!gotTheLock) return
   setDevDockIcon()
   try {

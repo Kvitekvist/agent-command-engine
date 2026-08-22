@@ -110,7 +110,7 @@ const useStore = create((set, get) => ({
   },
   liveUsageLoading: true,
   loadLiveUsage: async () => {
-    const usage = await window.cpi.getLiveTokenUsage()
+    const usage = await window.ace.getLiveTokenUsage()
     set({ liveUsage: usage, liveUsageLoading: false })
   },
 

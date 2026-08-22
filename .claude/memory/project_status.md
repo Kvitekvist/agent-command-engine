@@ -1,4 +1,8 @@
-# Project Status
+# Project Status (Historical Snapshot)
+
+> This file is retained for historical context. For current version, active
+> priorities, and routing, use [docs/agents/current-state.md](../../docs/agents/current-state.md)
+> and the repository-root [AGENTS.md](../../AGENTS.md).
 
 ## Current Version
 

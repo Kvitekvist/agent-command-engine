@@ -10,6 +10,7 @@ const test = require('node:test')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { makeTempDir } = require('./helpers/temp-dir')
 
 const { chmodExec, findSpawnHelpers } = require('../scripts/fix-pty-perms')
 const { describeSpawnError } = require('../main/ptyHost')
@@ -18,7 +19,7 @@ const { describeSpawnError } = require('../main/ptyHost')
 // `spawn-helper` binaries under both prebuilds/<platform> and build/Release
 // (the two locations findSpawnHelpers is meant to cover), plus decoy files.
 function makeFakePtyTree() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ace-pty-'))
+  const root = makeTempDir('ace-pty-')
   const prebuild = path.join(root, 'prebuilds', 'darwin-arm64')
   const release = path.join(root, 'build', 'Release')
   fs.mkdirSync(prebuild, { recursive: true })
@@ -56,7 +57,9 @@ test('findSpawnHelpers returns empty for a missing directory (no throw)', () => 
 
 // The actual TICKET-0066 regression: a spawn-helper without +x is what made
 // posix_spawnp fail. Restoring the bit is what unblocks agent creation.
-test('chmodExec restores the executable bit lost from spawn-helper', () => {
+test('chmodExec restores the executable bit lost from spawn-helper', {
+  skip: process.platform === 'win32' ? 'Windows does not expose POSIX executable bits' : false,
+}, () => {
   const { root, helperA, helperB } = makeFakePtyTree()
   try {
     assert.equal(isExecutable(helperA), false)

@@ -85,7 +85,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    window.cpi.onAgentStatus((data) => {
+    window.ace.onAgentStatus((data) => {
       if (data.status === 'running') {
         addAgent({ agentId: data.agentId, ...data.meta, status: 'running' })
       } else {
@@ -93,7 +93,7 @@ export default function App() {
       }
     })
     return () => {
-      window.cpi.offAgentStatus()
+      window.ace.offAgentStatus()
     }
   }, [])
 
@@ -106,10 +106,10 @@ export default function App() {
 
   useEffect(() => {
     async function checkSetup() {
-      const dismissed = await window.cpi.getSetting('prereqs_setup_dismissed')
+      const dismissed = await window.ace.getSetting('prereqs_setup_dismissed')
       if (dismissed === 'true') { setSetupChecked(true); return }
       try {
-        const result = await window.cpi.prereqs.check()
+        const result = await window.ace.prereqs.check()
         setShowSetup(!result.claude?.present || !result.codex?.present)
       } finally {
         setSetupChecked(true)

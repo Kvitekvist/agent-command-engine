@@ -23,7 +23,7 @@ export default function EditorView() {
     if (!file || !file.dirty || !activeProject || saving) return
     setSaving(true)
     try {
-      const result = await window.cpi.fs.writeFile(activeProject.path, file.path, file.content)
+      const result = await window.ace.fs.writeFile(activeProject.path, file.path, file.content)
       if (result.ok) markFileSaved(file.path)
       else window.alert(`Couldn't save "${file.name}": ${result.error || 'unknown error'}`)
     } finally {

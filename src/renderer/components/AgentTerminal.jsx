@@ -11,7 +11,7 @@ import useStore from '../store/useStore'
 // TICKET-0019 (correction): each agent card embeds its own live PTY session
 // running the real interactive `claude`/`codex` CLI, instead of the
 // headless chat-bubble thread this component replaces. Reuses the same
-// `window.cpi.terminal.*` multi-session API TerminalPanel.jsx used to power
+// `window.ace.terminal.*` multi-session API TerminalPanel.jsx used to power
 // a single standalone shell -- ptyHost.js already keys sessions by id, so
 // nothing on the backend changed to support many concurrent sessions here.
 const XTERM_THEME = {
@@ -85,7 +85,7 @@ export default function AgentTerminal({ agent }) {
 
     if (text.length <= LARGE_PASTE_THRESHOLD) {
       // Small paste - write immediately
-      window.cpi.terminal.write(sessionIdRef.current, text)
+      window.ace.terminal.write(sessionIdRef.current, text)
       return
     }
 
@@ -95,7 +95,7 @@ export default function AgentTerminal({ agent }) {
       const chunks = Math.ceil(text.length / PASTE_CHUNK_SIZE)
       for (let i = 0; i < text.length; i += PASTE_CHUNK_SIZE) {
         const chunk = text.slice(i, i + PASTE_CHUNK_SIZE)
-        window.cpi.terminal.write(sessionIdRef.current, chunk)
+        window.ace.terminal.write(sessionIdRef.current, chunk)
         // Brief delay between chunks to let PTY buffer drain
         if (i + PASTE_CHUNK_SIZE < text.length) {
           await new Promise(resolve => setTimeout(resolve, PASTE_CHUNK_DELAY_MS))
@@ -116,7 +116,7 @@ export default function AgentTerminal({ agent }) {
   useEffect(() => {
     async function readPkg(relPath) {
       try {
-        const res = await window.cpi.fs.readFile(agent.projectPath, relPath)
+        const res = await window.ace.fs.readFile(agent.projectPath, relPath)
         return res?.ok ? res.content : null
       } catch (_) {
         return null
@@ -179,7 +179,7 @@ export default function AgentTerminal({ agent }) {
       const { cols, rows } = term
       // Auto-answer starts off for every new session -- see the state
       // comment above. Use the 🛡️ Auto-approve pill to turn it on.
-      const result = await window.cpi.terminal.spawn({
+      const result = await window.ace.terminal.spawn({
         cols,
         rows,
         cwd: agent.projectPath,
@@ -194,31 +194,41 @@ export default function AgentTerminal({ agent }) {
       sessionIdRef.current = result.id
       setStatus('ready')
 
-      unsubData = window.cpi.terminal.onData(({ id, chunk }) => {
+      unsubData = window.ace.terminal.onData(({ id, chunk }) => {
         if (id === sessionIdRef.current) term.write(chunk)
       })
-      unsubExit = window.cpi.terminal.onExit(({ id, exitCode }) => {
+      unsubExit = window.ace.terminal.onExit(({ id, exitCode }) => {
         if (id !== sessionIdRef.current) return
         setStatus('exited')
         term.write(`\r\n\x1b[90m[process exited with code ${exitCode}]\x1b[0m\r\n`)
         revealImmediately()
       })
-      unsubHostRestarted = window.cpi.terminal.onHostRestarted(() => {
+      unsubHostRestarted = window.ace.terminal.onHostRestarted(() => {
         setStatus('exited')
         term.write('\r\n\x1b[31m[terminal process was lost -- stop and relaunch this agent to start a new session]\x1b[0m\r\n')
         revealImmediately()
       })
 
       term.onData((data) => {
-        if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, data)
+        if (sessionIdRef.current) window.ace.terminal.write(sessionIdRef.current, data)
         if (!titleCapturedRef.current) {
           const { buffer, line } = feedLineCapture(titleBufferRef.current, data)
           titleBufferRef.current = buffer
           if (line) {
             titleCapturedRef.current = true
-            const title = deriveTitle(line)
-            useStore.getState().updateAgentLabel(agent.agentId, title)
-            window.cpi.updateAgentLabel(agent.agentId, title)
+            // Show the local heuristic title immediately (instant, never
+            // fails) then try to upgrade it to a short AI-generated title
+            // that captures what's actually being solved, once that headless
+            // call resolves a moment later. Any failure there (CLI missing,
+            // timeout, empty reply) just leaves the fallback title in place.
+            const fallbackTitle = deriveTitle(line)
+            useStore.getState().updateAgentLabel(agent.agentId, fallbackTitle)
+            window.ace.updateAgentLabel(agent.agentId, fallbackTitle)
+            window.ace.generateTitle(line, agent.projectPath, agent.provider).then(({ title } = {}) => {
+              if (!title || title === fallbackTitle) return
+              useStore.getState().updateAgentLabel(agent.agentId, title)
+              window.ace.updateAgentLabel(agent.agentId, title)
+            }).catch(() => {})
           }
         }
       })
@@ -276,7 +286,7 @@ export default function AgentTerminal({ agent }) {
       // its own auto-generated session and stays "Untracked" there.
       const cliSessionId = agent.provider === 'codex' ? null : crypto.randomUUID()
       if (cliSessionId) {
-        window.cpi.recordAgentSession({
+        window.ace.recordAgentSession({
           session_id: cliSessionId,
           agent_id: agent.agentId,
           project_id: agent.projectId,
@@ -285,7 +295,7 @@ export default function AgentTerminal({ agent }) {
       }
 
       // Boot straight into the real CLI instead of leaving an empty shell.
-      window.cpi.terminal.write(sessionIdRef.current, buildLaunchCommand(agent, cliSessionId) + '\r')
+      window.ace.terminal.write(sessionIdRef.current, buildLaunchCommand(agent, cliSessionId) + '\r')
 
       // See LAUNCH_BANNER_HIDE_MS above -- wipe the CLI's own splash once
       // it's had time to render, then reveal the already-clean session.
@@ -301,7 +311,7 @@ export default function AgentTerminal({ agent }) {
       try {
         fitAddon.fit()
         const { cols, rows } = term
-        if (sessionIdRef.current) window.cpi.terminal.resize(sessionIdRef.current, cols, rows)
+        if (sessionIdRef.current) window.ace.terminal.resize(sessionIdRef.current, cols, rows)
       } catch (_) { /* container mid-teardown */ }
     })
     resizeObserver.observe(containerRef.current)
@@ -313,7 +323,7 @@ export default function AgentTerminal({ agent }) {
       unsubData?.()
       unsubExit?.()
       unsubHostRestarted?.()
-      if (sessionIdRef.current) window.cpi.terminal.dispose(sessionIdRef.current)
+      if (sessionIdRef.current) window.ace.terminal.dispose(sessionIdRef.current)
       term.dispose()
     }
     // Intentionally empty deps -- this effect owns one PTY session for the
@@ -330,7 +340,7 @@ export default function AgentTerminal({ agent }) {
     if (!sessionIdRef.current) return
     const next = !autoAnswer
     setAutoAnswer(next)
-    window.cpi.terminal.setAutoAnswer(sessionIdRef.current, next)
+    window.ace.terminal.setAutoAnswer(sessionIdRef.current, next)
   }
 
   return (
@@ -355,7 +365,7 @@ export default function AgentTerminal({ agent }) {
             disabled={commitPushStatus?.type === 'loading'}
             onClick={() => runOperation(
               commitPushStatus, setCommitPushStatus, 'Commit & Push',
-              () => window.cpi.git.commitAndPush(agent.projectPath),
+              () => window.ace.git.commitAndPush(agent.projectPath),
             )}
             title="Commit and push changes directly (no AI)"
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -365,7 +375,7 @@ export default function AgentTerminal({ agent }) {
             disabled={pullStatus?.type === 'loading'}
             onClick={() => runOperation(
               pullStatus, setPullStatus, 'Pull',
-              () => window.cpi.git.pull(agent.projectPath),
+              () => window.ace.git.pull(agent.projectPath),
             )}
             title="Pull changes from remote (no AI)"
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -376,7 +386,7 @@ export default function AgentTerminal({ agent }) {
               disabled={buildStatus?.type === 'loading'}
               onClick={() => runOperation(
                 buildStatus, setBuildStatus, 'Build',
-                () => window.cpi.project.build(agent.projectPath),
+                () => window.ace.project.build(agent.projectPath),
               )}
               title="Build this project (runs its npm build script, no AI)"
               className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -386,7 +396,7 @@ export default function AgentTerminal({ agent }) {
           <button
             onClick={() => {
               if (sessionIdRef.current) {
-                window.cpi.terminal.write(sessionIdRef.current, '/calibrate-enhanced\r')
+                window.ace.terminal.write(sessionIdRef.current, '/calibrate-enhanced\r')
               }
             }}
             title="Run /calibrate-enhanced to review and improve session patterns"
@@ -396,7 +406,7 @@ export default function AgentTerminal({ agent }) {
           <button
             onClick={() => {
               if (sessionIdRef.current) {
-                window.cpi.terminal.write(sessionIdRef.current, '/clear\r')
+                window.ace.terminal.write(sessionIdRef.current, '/clear\r')
               }
             }}
             title="Clear the conversation context"

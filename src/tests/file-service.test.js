@@ -3,14 +3,14 @@ require('./helpers/electron-stub')
 const assert = require('node:assert/strict')
 const test = require('node:test')
 const fs = require('fs')
-const os = require('os')
 const path = require('path')
+const { makeTempDir } = require('./helpers/temp-dir')
 
 const { FileService, RUNNABLE_EXTENSIONS } = require('../main/services/FileService')
 
 // Each test gets its own isolated project root under the OS temp dir.
 function makeRoot() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'ace-fileservice-'))
+  return makeTempDir('ace-fileservice-')
 }
 
 test('writeFile then readFile round-trips text content', () => {

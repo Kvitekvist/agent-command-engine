@@ -79,7 +79,12 @@ function stripAnsi(s) {
 // instead of WebFetch, whose prompt read "❯ 1. Allow / 2. Deny (esc)", not
 // "Yes". Matching the marker structurally (any text after "1.") fixed
 // that, but not the ❯-vs-> rendering gap found afterward.
-const PERMISSION_PROMPT_PATTERN = /[❯>]\s*1\.\s*\S/
+// Claude currently uses a heavy right chevron (U+276F) for its selected
+// option, while Codex uses the single right-pointing angle quote (U+203A).
+// Keep the ASCII fallback too: Ink chooses it when the PTY does not advertise
+// the terminal capabilities needed for the Unicode indicator. Explicit escapes
+// also keep this stable across console/source encodings.
+const PERMISSION_PROMPT_PATTERN = /(?:\u276f|\u203a|>)\s*1\.\s*\S/i
 
 // TICKET-0039: TICKET-0038's detection pattern (above) was correct, but the
 // setting was only ever read once, at spawn time (AgentTerminal.jsx), and

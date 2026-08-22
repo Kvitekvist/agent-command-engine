@@ -29,7 +29,7 @@ export default function TokenView() {
   async function load() {
     if (!activeProject) { setTokenStats([]); return }
     setLoading(true)
-    const { rows } = await window.cpi.getProjectHistory(activeProject.id, activeProject.path)
+    const { rows } = await window.ace.getProjectHistory(activeProject.id, activeProject.path)
     setTokenStats(rows || [])
     setLoading(false)
   }

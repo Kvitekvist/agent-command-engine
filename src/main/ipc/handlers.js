@@ -125,6 +125,14 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return { ok: true }
   })
 
+  // TICKET-0070 (follow-up): one-off headless call that turns the user's
+  // first submitted line into a short, meaningful title. Best-effort --
+  // AgentSvc.generateTitle never rejects, it resolves null on any failure.
+  ipcMain.handle('agents:generateTitle', async (_, { prompt, cwd, provider }) => {
+    const title = await AgentSvc.generateTitle(prompt, cwd, provider)
+    return { title }
+  })
+
   ipcMain.handle('agents:stop', (_, agentId) => {
     AgentSvc.stop(agentId)
     DB.updateAgentStatus(agentId, 'stopped')
@@ -370,7 +378,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // ── Screenshots (TICKET-0034, reworked from TICKET-0032) ───────────────────
   // Drag-to-select screen capture, saved into the requesting project's own
-  // .cpi/screenshots/ folder -- see ScreenshotService for the capture-overlay
+  // .ace/screenshots/ folder -- see ScreenshotService for the capture-overlay
   // flow and the clipboard-path handoff.
   ipcMain.handle('screenshots:captureRegion', async (_, projectPath) => {
     try {

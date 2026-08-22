@@ -10,7 +10,7 @@ export default function AuditView() {
   async function load() {
     setLoading(true)
     const filters = activeProject ? { projectId: activeProject.id, limit: 200 } : { limit: 200 }
-    const rows = await window.cpi.getPrompts(filters)
+    const rows = await window.ace.getPrompts(filters)
     setAuditPrompts(rows)
     setLoading(false)
   }

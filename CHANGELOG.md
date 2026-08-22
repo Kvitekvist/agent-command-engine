@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Renamed the app's internal `cpi` naming (leftover from before the project was renamed to ACE/Agent Command Engine) to `ace`: the `window.cpi` preload bridge is now `window.ace`, the SQLite database file is now `ace.db` (was `cpi.db`), and each project's own data folder is now `.ace/` (was `.cpi/`). Purely internal/cosmetic — an existing install's `cpi.db` and a project's `.cpi/` folder are migrated forward automatically on first launch after upgrading, so no data or existing `.gitignore` setup is lost (TICKET-0071)
+
 ### Added
 - Auto-title for agent cards: an agent's label now updates from the first
   non-empty line the user submits into its embedded terminal, so several

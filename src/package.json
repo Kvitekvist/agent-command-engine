@@ -1,6 +1,6 @@
 {
   "name": "agent-command-engine",
-  "version": "0.1.10",
+  "version": "0.1.17",
   "description": "A specialized Electron interface for managing Claude & OpenAI Codex agents across multiple projects",
   "main": "dist/main/index.js",
   "scripts": {
@@ -95,11 +95,5 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
     }
-  },
-  "allowScripts": {
-    "node-pty@1.1.0": true,
-    "electron@31.7.7": true,
-    "esbuild@0.21.5": true,
-    "png2icons@*": true
   }
 }

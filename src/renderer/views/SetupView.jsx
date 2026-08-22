@@ -13,7 +13,7 @@ export default function SetupView({ onContinue }) {
 
   async function handleContinue() {
     if (dontShowAgain) {
-      await window.cpi.setSetting('prereqs_setup_dismissed', 'true')
+      await window.ace.setSetting('prereqs_setup_dismissed', 'true')
     }
     onContinue()
   }

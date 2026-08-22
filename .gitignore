@@ -47,4 +47,4 @@ obj/
 .git.tmp/
 
 # Agent Command Engine data (screenshots, etc.)
-.cpi/
+.ace/

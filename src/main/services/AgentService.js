@@ -125,7 +125,10 @@ function buildCodexArgs(permissionMode) {
   if (permissionMode === 'ask') {
     return ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request']
   }
-  return ['--sandbox', 'read-only', '--ask-for-approval', 'untrusted']
+  // Current Codex releases accept only `on-request` and `never` here.
+  // Safe mode is already constrained by the read-only sandbox, so it must
+  // never request an escalation outside that sandbox.
+  return ['--sandbox', 'read-only', '--ask-for-approval', 'never']
 }
 
 // If this app is itself launched from a terminal that has an active Claude
@@ -144,6 +147,54 @@ function buildChildEnv() {
 
 function createExecutionId() {
   return randomUUID()
+}
+
+// TICKET-0070 (follow-up): title generation is a short, high-volume task, so
+// use each provider's economical model instead of the interactive agent's
+// selected model. It remains best-effort: if a model is unavailable, the
+// renderer keeps the instant local fallback title.
+const TITLE_MODELS = {
+  claude: 'claude-haiku-4-5-20251001',
+  codex: 'gpt-5.6-luna',
+}
+const TITLE_TIMEOUT_MS = 12000
+const TITLE_MAX_LENGTH = 60
+
+function buildTitleCommand(provider = 'claude') {
+  if (provider === 'codex') {
+    return {
+      command: 'codex',
+      args: ['exec', '--model', TITLE_MODELS.codex, ...buildCodexArgs('safe')],
+    }
+  }
+  return {
+    command: 'claude',
+    args: [
+      '--print', '--output-format', 'text', '--model', TITLE_MODELS.claude,
+      ...buildPermissionArgs('safe'),
+    ],
+  }
+}
+
+// Cleans up the raw text a headless title-generation call returns: strips
+// wrapping quotes/markdown emphasis the model sometimes adds despite being
+// told not to, keeps only the first line (in case it answers in more than
+// one despite instructions), and falls back to the same word-boundary
+// truncation the local heuristic title used, as a hard safety net in case
+// the model ignores the length instruction. Returns null for an empty/
+// unusable result so the caller knows to keep its fallback title instead.
+function sanitizeTitle(raw) {
+  let text = raw.split('\n')[0]
+    .trim()
+    .replace(/^["'`*_]+|["'`*_]+$/g, '')
+    .replace(/\.+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!text) return null
+  if (text.length <= TITLE_MAX_LENGTH) return text
+  const cut = text.slice(0, TITLE_MAX_LENGTH)
+  const lastSpace = cut.lastIndexOf(' ')
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut) + '…'
 }
 
 class AgentService extends EventEmitter {
@@ -390,6 +441,64 @@ class AgentService extends EventEmitter {
     })
   }
 
+  // TICKET-0070 (follow-up): turns the user's raw first-submitted line into a
+  // short, meaningful title (e.g. "Fix login redirect bug" rather than a
+  // truncated copy of the literal wording) via a one-off headless call to the
+  // matching provider CLI. Deliberately separate from the agent's own interactive
+  // session -- no --resume, nothing added to its history -- so this can
+  // never consume the agent's turn or leak into its context. The inexpensive
+  // default is Haiku for Claude and Luna for Codex.
+  // Best-effort: resolves to null (never rejects) on any failure -- CLI
+  // missing, non-zero exit, timeout, empty/unusable reply -- so the caller
+  // can just keep the local heuristic title it already showed instantly.
+  generateTitle(promptLine, cwd, provider = 'claude') {
+    return new Promise((resolve) => {
+      let settled = false
+      const done = (value) => {
+        if (settled) return
+        settled = true
+        resolve(value)
+      }
+
+      const instruction =
+        'Summarize the following user request as a short title for a task list, ' +
+        'focused on WHAT is being solved (the goal), not a restatement of the wording. ' +
+        '3 to 6 words, title case, no ending punctuation, no quotes, no markdown. ' +
+        'Reply with ONLY the title text and nothing else.\n\nRequest:\n' + promptLine
+
+      let proc
+      try {
+        const titleCommand = buildTitleCommand(provider)
+        proc = spawn(titleCommand.command, titleCommand.args, {
+          cwd,
+          shell: process.platform === 'win32',
+          env: buildChildEnv(),
+          windowsHide: true,
+        })
+      } catch (_) {
+        return done(null)
+      }
+
+      const timer = setTimeout(() => {
+        try { proc.kill('SIGTERM') } catch (_) {}
+        done(null)
+      }, TITLE_TIMEOUT_MS)
+
+      let output = ''
+      proc.stdout.on('data', (data) => { output += data.toString() })
+      proc.stderr.on('data', () => {}) // best-effort call -- errors just fall through to done(null)
+      proc.on('error', () => { clearTimeout(timer); done(null) })
+      proc.on('close', (code) => {
+        clearTimeout(timer)
+        if (code !== 0) return done(null)
+        done(sanitizeTitle(output))
+      })
+
+      proc.stdin.write(instruction)
+      proc.stdin.end()
+    })
+  }
+
   // Drop the resumed session so the next prompt starts a brand-new conversation
   clearContext(agentId) {
     const agent = this.agents.get(agentId)
@@ -440,9 +549,11 @@ module.exports = {
   computeTokscaleDelta,
   buildPermissionArgs,
   buildCodexArgs,
+  buildTitleCommand,
   parsePermissionDenials,
   parseSessionId,
   parseText,
   parseTokens,
   parseToolUse,
+  sanitizeTitle,
 }

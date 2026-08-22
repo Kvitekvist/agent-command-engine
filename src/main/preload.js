@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-contextBridge.exposeInMainWorld('cpi', {
+contextBridge.exposeInMainWorld('ace', {
   platform: process.platform,
 
   // Projects
@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld('cpi', {
   // TICKET-0070: auto-title -- renames the card label from the user's first
   // submitted terminal line.
   updateAgentLabel: (agentId, label) => ipcRenderer.invoke('agents:updateLabel', agentId, label),
+  // TICKET-0070 (follow-up): headless call that turns a raw first line into
+  // a short, meaningful title. Resolves { title: null } on any failure --
+  // never rejects -- so callers can just keep their fallback title.
+  generateTitle: (prompt, cwd, provider) => ipcRenderer.invoke('agents:generateTitle', { prompt, cwd, provider }),
   clearContext: (agentId) => ipcRenderer.invoke('agents:clearContext', agentId),
   sendPrompt: (agentId, prompt) => ipcRenderer.invoke('agents:sendPrompt', agentId, prompt),
   // TICKET-0044: record which CLI session id an agent launched with, so the

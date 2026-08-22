@@ -12,14 +12,19 @@
 
 const MAX_TITLE_LENGTH = 60
 
-// Strips ANSI/VT escape sequences (arrow keys, Home/End, etc. all arrive as
-// an ESC-led sequence from xterm.js's onData) so they don't get appended to
-// the captured line as garbage characters. Matches a leading ESC, then
-// either a CSI sequence (`[...` ending in a letter) or a single following
-// byte (e.g. Alt+key), repeated for as many escape sequences as appear in
-// one chunk.
+// Strips ANSI/VT escape sequences (arrow keys, Home/End, SGR mouse-tracking
+// reports like `ESC[<35;27;28M`, etc. -- all arrive as an ESC-led sequence
+// from xterm.js's onData) so they don't get appended to the captured line as
+// garbage characters. Matches a leading ESC, then either a full CSI sequence
+// or a single following byte (e.g. Alt+key), repeated for as many escape
+// sequences as appear in one chunk. The CSI branch follows the general ANSI
+// grammar -- parameter bytes 0x30-0x3F (digits and `;:<=>?`), intermediate
+// bytes 0x20-0x2F, then a single final byte 0x40-0x7E -- rather than
+// assuming digits/`;` come right after `[`, since private-mode sequences
+// (like SGR mouse reports, which lead with `<`) otherwise fail to match and
+// only the `ESC[` prefix gets stripped, leaving the rest as literal text.
 function stripEscapeSequences(data) {
-  return data.replace(/\x1b(\[[0-9;]*[A-Za-z~]|.)/g, '')
+  return data.replace(/\x1b(\[[0-?]*[ -/]*[@-~]|.)/g, '')
 }
 
 // Feeds one chunk of raw terminal input (as delivered by xterm's onData) into

@@ -61,7 +61,14 @@ const DBService = {
 
     SQL = await initSqlJs({ locateFile: () => wasmPath })
 
-    dbPath = path.join(app.getPath('userData'), 'cpi.db')
+    dbPath = path.join(app.getPath('userData'), 'ace.db')
+    // TICKET-0071: the db was originally named cpi.db (the app's old internal
+    // name). Migrate an existing install's file forward on first launch after
+    // the rename rather than silently starting a fresh, empty database.
+    const legacyDbPath = path.join(app.getPath('userData'), 'cpi.db')
+    if (!fs.existsSync(dbPath) && fs.existsSync(legacyDbPath)) {
+      fs.renameSync(legacyDbPath, dbPath)
+    }
     let buffer = null
     if (fs.existsSync(dbPath)) {
       buffer = fs.readFileSync(dbPath)

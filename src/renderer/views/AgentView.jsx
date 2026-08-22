@@ -4,16 +4,8 @@ import ModelSelector from '../components/ModelSelector'
 import AgentTerminal from '../components/AgentTerminal'
 import UsageBar from '../components/UsageBar'
 import { generateAgentName } from '../utils/agentNames'
+import { DEFAULT_MODEL_BY_PROVIDER, MODEL_GROUPS_BY_PROVIDER } from '../utils/modelCatalog'
 
-const CLAUDE_MODELS = ['claude-haiku-4-5-20251001','claude-sonnet-4-5','claude-sonnet-5','claude-opus-4-8','claude-fable-5']
-// `codex-mini-latest`/`o3`/`o4-mini` are raw OpenAI-platform (API-key) model
-// slugs -- Codex CLI rejects all three with "not supported when using Codex
-// with a ChatGPT account" for a ChatGPT-subscription login (TICKET-0026).
-// These are the ChatGPT-account-compatible slugs instead, cross-checked
-// against this machine's own `~/.codex/models_cache.json` (fetched
-// 2026-08-09, codex-cli 0.147.0) -- like CLAUDE_MODELS above, expect these
-// to go stale as Codex ships new models and need a manual refresh.
-const CODEX_MODELS  = ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna']
 // TICKET-0039: the Safe/Guarded/Auto selector was removed from the launch
 // bar now that auto-answer permission prompts (see AgentTerminal.jsx) works
 // live -- Safe's restrictive allowedTools plus a working auto-approve
@@ -27,7 +19,7 @@ export default function AgentView() {
   const { activeProject, agents, removeAgent } = useStore()
   const [label, setLabel]         = useState(() => generateAgentName())
   const [provider, setProvider]   = useState('claude')
-  const [model, setModel]         = useState('claude-sonnet-5')
+  const [model, setModel]         = useState(DEFAULT_MODEL_BY_PROVIDER.claude)
   const [launching, setLaunching] = useState(false)
 
   // `agents` (the store) holds every agent across every project visited
@@ -41,7 +33,7 @@ export default function AgentView() {
     if (!activeProject) return
     setLaunching(true)
     try {
-      await window.cpi.startAgent({ projectId: activeProject.id, projectPath: activeProject.path, label, provider, model, permissionMode: PERMISSION_MODE })
+      await window.ace.startAgent({ projectId: activeProject.id, projectPath: activeProject.path, label, provider, model, permissionMode: PERMISSION_MODE })
       const existingLabels = useStore.getState().agents
         .filter((a) => a.projectId === activeProject.id)
         .map((a) => a.label)
@@ -53,11 +45,11 @@ export default function AgentView() {
   // this card to 'stopped' in place (keeping history + revealing Delete) —
   // don't also removeAgent() here, or the card vanishes instead of that.
   async function stopAgent(agentId) {
-    await window.cpi.stopAgent(agentId)
+    await window.ace.stopAgent(agentId)
   }
 
   async function deleteAgent(agentId) {
-    await window.cpi.deleteAgent(agentId)
+    await window.ace.deleteAgent(agentId)
     removeAgent(agentId)
   }
 
@@ -84,14 +76,14 @@ export default function AgentView() {
     if (!activeProject) return
     let cancelled = false
     ;(async () => {
-      const rows = await window.cpi.getAgents(activeProject.id)
+      const rows = await window.ace.getAgents(activeProject.id)
       for (const row of rows) {
         if (cancelled) return
         if (useStore.getState().agents.some((a) => a.agentId === row.id)) continue
         let meta
         if (row.status === 'running') {
           // Re-register with AgentService so it can accept new prompts.
-          const restored = await window.cpi.restoreAgent({ ...row, projectPath: activeProject.path })
+          const restored = await window.ace.restoreAgent({ ...row, projectPath: activeProject.path })
           if (cancelled) return
           meta = restored.meta
         } else {
@@ -128,7 +120,7 @@ export default function AgentView() {
     )
   }
 
-  const models = provider === 'claude' ? CLAUDE_MODELS : CODEX_MODELS
+  const modelGroups = MODEL_GROUPS_BY_PROVIDER[provider]
 
   return (
     <div className="flex flex-col h-full">
@@ -138,13 +130,13 @@ export default function AgentView() {
         <input className="input w-32 text-xs" placeholder="Agent label" value={label} onChange={(e) => setLabel(e.target.value)} />
         <div className="flex rounded overflow-hidden border border-border text-xs">
           {['claude','codex'].map((p) => (
-            <button key={p} onClick={() => { setProvider(p); setModel(p === 'claude' ? CLAUDE_MODELS[1] : CODEX_MODELS[0]) }}
+            <button key={p} onClick={() => { setProvider(p); setModel(DEFAULT_MODEL_BY_PROVIDER[p]) }}
               className={'px-3 py-1.5 transition-colors ' + (provider === p ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
               {p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
             </button>
           ))}
         </div>
-        <ModelSelector models={models} value={model} onChange={setModel} />
+        <ModelSelector groups={modelGroups} value={model} onChange={setModel} className="w-72" />
         <button onClick={launchAgent} disabled={launching} className="btn-primary ml-auto text-xs">
           {launching ? 'Launching…' : '+ New Agent'}
         </button>
@@ -199,7 +191,7 @@ function AgentPane({ agent, onStop, onDelete }) {
 
   // TICKET-0034 (reworked from TICKET-0032's clipboard-paste model): hides
   // the app, lets the user drag-select a region of the primary display, and
-  // saves it into this project's own .cpi/screenshots/ folder. Overwrites
+  // saves it into this project's own .ace/screenshots/ folder. Overwrites
   // the clipboard with the saved file's path (relative to the project
   // root, since that's the agent's own cwd) so the natural next step
   // (pasting into this card's terminal to reference it in a prompt) yields
@@ -207,7 +199,7 @@ function AgentPane({ agent, onStop, onDelete }) {
   async function captureScreenshot() {
     setCapturing(true)
     try {
-      const result = await window.cpi.screenshots.captureRegion(agent.projectPath)
+      const result = await window.ace.screenshots.captureRegion(agent.projectPath)
       if (result.ok) {
         setScreenshotMsg(`Saved ${result.filename} — path copied, paste into the terminal`)
       } else if (result.reason === 'cancelled') {
@@ -239,7 +231,7 @@ function AgentPane({ agent, onStop, onDelete }) {
         <div className="flex items-center gap-1.5">
           {agent.status === 'running' && (
             <button onClick={captureScreenshot} disabled={capturing}
-              title="Drag-select a screen region to save into this project's .cpi/screenshots/ folder"
+              title="Drag-select a screen region to save into this project's .ace/screenshots/ folder"
               className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50">
               {capturing ? '…' : '📸'}
             </button>

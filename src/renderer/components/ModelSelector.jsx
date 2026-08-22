@@ -1,6 +1,6 @@
 import React from 'react'
 
-export default function ModelSelector({ models, value, onChange, className = '' }) {
+export default function ModelSelector({ groups, value, onChange, className = '' }) {
   return (
     <select
       value={value}
@@ -8,8 +8,14 @@ export default function ModelSelector({ models, value, onChange, className = '' 
       className={`bg-surface border border-border rounded px-2 py-1 text-xs text-gray-200
                   focus:outline-none focus:border-accent cursor-pointer ${className}`}
     >
-      {models.map((m) => (
-        <option key={m} value={m}>{m}</option>
+      {groups.map((group) => (
+        <optgroup key={group.label} label={group.label}>
+          {group.options.map((model) => (
+            <option key={model.id} value={model.id} title={model.description}>
+              {model.label} — {model.description}
+            </option>
+          ))}
+        </optgroup>
       ))}
     </select>
   )
