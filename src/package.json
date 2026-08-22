@@ -1,6 +1,6 @@
 {
   "name": "agent-command-engine",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "A specialized Electron interface for managing Claude & OpenAI Codex agents across multiple projects",
   "main": "dist/main/index.js",
   "scripts": {
