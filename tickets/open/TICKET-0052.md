@@ -1,6 +1,6 @@
 # TICKET-0052: Fix Terminal Paste Truncation for Large Text
 
-**Status:** Open  
+**Status:** Awaiting verification  
 **Priority:** Medium  
 **Created:** 2026-08-14
 
@@ -127,3 +127,44 @@ counts every write reaching the mock PTY. Set real OS clipboard content via
 Also confirmed `npm run build:renderer` and `npm test` (13/13) both pass. Live
 verification inside the actual packaged/dev Electron app (real PTY, real clipboard
 permissions) was not additionally performed this session.
+
+---
+
+## Follow-up: double-paste persisted (2026-08-22)
+
+**Report:** Ctrl+V still inserted each clipboard payload twice in the real ACE
+terminal.
+
+**Root cause:** suppressing the keydown default was not a reliable ownership
+boundary. xterm 6 registers native `paste` listeners on both its hidden textarea
+and terminal element. ACE also performed a manual clipboard read/write. The
+existing ACE `paste` listener was registered on the parent container in the
+bubble phase, after xterm's target listener could already emit the same text
+through `term.onData`.
+
+**Fix:** Ctrl/Cmd+V now follows the native paste event only. ACE intercepts that
+event on the parent in the capture phase, before either xterm listener, stops it,
+and sends the event clipboard payload through the one chunk-aware writer.
+Right-click remains a separate single manual read because ACE suppresses the OS
+context menu. Both named listeners are removed during terminal cleanup.
+
+**Regression coverage:** `terminal-paste.test.js` verifies event clipboard data
+does not trigger a second clipboard read and that the non-event fallback reads
+exactly once.
+
+**Files modified:**
+
+- `src/renderer/components/AgentTerminal.jsx`
+- `src/renderer/utils/terminalPaste.mjs`
+- `src/tests/terminal-paste.test.js`
+- `CHANGELOG.md`
+- `tickets/open/TICKET-0052.md`
+
+**Automated verification:**
+
+- `node --test tests/terminal-paste.test.js` — 2 passed
+- `npm test` — 66 passed, 1 platform skip, 0 failed
+- `npm run build` — renderer and main builds passed
+
+Live verification in the real Electron terminal remains required before this
+ticket can close, including small and large Ctrl/Cmd+V pastes and right-click.

@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css'
 import { buildLaunchCommand } from '../utils/agentLaunch'
 import { runOperation } from '../utils/runOperation'
 import { feedLineCapture, deriveTitle } from '../utils/firstLineCapture.mjs'
+import { readPasteText } from '../utils/terminalPaste.mjs'
 import OperationFeedback from './OperationFeedback'
 import useStore from '../store/useStore'
 
@@ -150,6 +151,8 @@ export default function AgentTerminal({ agent }) {
     let unsubExit
     let unsubHostRestarted
     let hideBannerTimer
+    let handleContextMenu
+    let handlePaste
 
     // Used when the session errors or exits before the timed reveal fires --
     // don't leave the error/exit message hidden behind the overlay.
@@ -241,18 +244,13 @@ export default function AgentTerminal({ agent }) {
           navigator.clipboard.writeText(selection)
           return false // Prevent default
         }
-        // Ctrl+V - paste from clipboard (TICKET-0052: chunked for large pastes)
-        if (event.ctrlKey && event.key === 'v' && event.type === 'keydown') {
-          // Returning false only stops xterm from handling the keystroke -- it does
-          // NOT call preventDefault(), so without this the browser still fires its
-          // native paste on xterm's underlying textarea, which xterm handles itself
-          // and pastes once, on top of the manual clipboard read below (double-paste).
-          event.preventDefault()
-          navigator.clipboard.readText().then(pasteToTerminal).catch(err => {
-            console.error('Paste failed:', err)
-            term.write('\r\n\x1b[31mPaste failed\x1b[0m\r\n')
-          })
-          return false // Prevent default
+        // Ctrl/Cmd+V stays on the browser's normal paste-event path. The
+        // capture-phase handler below owns that event before xterm's textarea
+        // can also turn it into onData, guaranteeing one PTY write path.
+        // Returning false suppresses xterm's key processing without cancelling
+        // the browser's native paste event.
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v' && event.type === 'keydown') {
+          return false
         }
         return true // Allow all other keys
       })
@@ -262,23 +260,30 @@ export default function AgentTerminal({ agent }) {
       // (TICKET-0051, wired in App.jsx) from also firing over the terminal --
       // the terminal owns its own copy (Ctrl+C on a selection) and paste
       // (right-click / Ctrl+V) behaviour.
-      containerRef.current.addEventListener('contextmenu', (e) => {
+      handleContextMenu = (e) => {
         e.preventDefault()
         e.stopPropagation()
         navigator.clipboard.readText().then(pasteToTerminal).catch(err => {
           console.error('Paste failed:', err)
           term.write('\r\n\x1b[31mPaste failed\x1b[0m\r\n')
         })
-      })
+      }
+      containerRef.current.addEventListener('contextmenu', handleContextMenu)
 
-      // Prevent xterm.js's default paste handler from also firing when the user
-      // pastes (via Ctrl+V or right-click), which would cause a double-paste.
-      // We handle paste explicitly above via attachCustomKeyEventHandler for Ctrl+V
-      // and contextmenu listener for right-click.
-      containerRef.current.addEventListener('paste', (e) => {
+      // xterm registers paste listeners on both its textarea and terminal
+      // element. A bubble listener on our parent runs too late because the
+      // textarea target handler has already emitted onData. Capture the event
+      // first, stop it before xterm sees it, and route its payload through the
+      // single chunk-aware PTY writer.
+      handlePaste = (e) => {
         e.preventDefault()
-        e.stopPropagation()
-      })
+        e.stopImmediatePropagation()
+        readPasteText(e, navigator.clipboard).then(pasteToTerminal).catch(err => {
+          console.error('Paste failed:', err)
+          term.write('\r\n\x1b[31mPaste failed\x1b[0m\r\n')
+        })
+      }
+      containerRef.current.addEventListener('paste', handlePaste, true)
 
       // TICKET-0044: force a known CLI session id for Claude agents so their
       // tokscale usage can be attributed to this agent's name in the Token
@@ -323,6 +328,8 @@ export default function AgentTerminal({ agent }) {
       unsubData?.()
       unsubExit?.()
       unsubHostRestarted?.()
+      if (handleContextMenu) containerRef.current?.removeEventListener('contextmenu', handleContextMenu)
+      if (handlePaste) containerRef.current?.removeEventListener('paste', handlePaste, true)
       if (sessionIdRef.current) window.ace.terminal.dispose(sessionIdRef.current)
       term.dispose()
     }
