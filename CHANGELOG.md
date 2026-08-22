@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+- Auto-title for agent cards: an agent's label now updates from the first
+  non-empty line the user submits into its embedded terminal, so several
+  running agents read as e.g. "fix login bug" / "add dark mode toggle"
+  instead of interchangeable random names, for easier session management.
+  Purely local heuristic (word-boundary truncation to 60 chars, no extra AI
+  call). Fires once per session — a restored agent (fresh terminal, already
+  captured in a previous session) is not re-titled by its next line, tracked
+  via a new `agents.title_set` column (TICKET-0070)
+
 ### Fixed
 - App showed the default Electron icon instead of the ACE icon on macOS. `build/icon.icns` (referenced by both the electron-builder `mac.icon` config and the runtime BrowserWindow) was never generated or committed, and `.gitignore` didn't even allow-list it under the otherwise-ignored `/build/` folder. Generated the `.icns` from the existing `build/icon.iconset/` and allow-listed it so it's tracked; the Windows `.ico` was always fine. The packaged dmg now shows the correct icon. Also set the dock icon at runtime via `app.dock.setIcon()` on macOS in dev, since an unpackaged `npm run dev` run has no `.app` bundle and macOS ignores `BrowserWindow`'s `icon` option, so dev previously always showed the default Electron icon (TICKET-0069)
 - Token Usage → "History (this project)" showed no data (and no price) on macOS/Linux while Live Usage still showed totals. `TokscaleService.getWorkspaceReport` passed `--workspace <key>` as two argv tokens; every macOS/Linux workspace key starts with `-` (paths start with `/`, flattened to `-`), which tokscale's CLI parser misreads as an unknown flag (exit 2), failing silently per-client and blanking History. Fixed by passing `--workspace=<key>` as one token. Re-applies the reverted TICKET-0059; verified live against the real tokscale binary (TICKET-0067)

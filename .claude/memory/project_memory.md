@@ -15,6 +15,13 @@ Make process execution, persistence, packaging, and provider behavior dependable
 ---
 
 ## Active Priorities
+* Verify the TICKET-0070 auto-title feature live: launch an agent, type a
+  first prompt, confirm the card's label updates from its random default to
+  a short derived title; switch tabs/projects away and back and confirm the
+  title persists; stop and relaunch (or restart the app) after a title was
+  already set and type a follow-up line, confirming it does NOT re-title
+  the card (the `agents.title_set` guard) — implemented, build/tests clean,
+  not yet live-verified in a running app (see ticket_memory.md)
 * TICKET-0043 (closed 2026-08-11): fixed the user's "can't type the new-
   project name" report. It was NOT a renderer bug — the input is correct and
   the packaged build accepts keys fine when driven over CDP (proven, incl.

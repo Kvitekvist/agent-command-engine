@@ -426,6 +426,56 @@ read it straight from disk by a relative path:
   project as cwd. TICKET-0032 stays closed as shipped-then-superseded
   rather than reopened.
 
+### Auto-Title (TICKET-0070)
+Renames an agent's card label from a random default name to a short,
+content-derived title, so several running cards are distinguishable at a
+glance — helps session management the same way ChatGPT/Claude.ai auto-titling
+a conversation does, without an extra AI call:
+- **`renderer/utils/firstLineCapture.mjs`** (pure, no DOM/Electron deps) —
+  the one renderer util that's `.mjs` rather than `.js`: it needs to load
+  unambiguously as ESM both through Vite (renderer bundle) and via Node's
+  built-in test runner's dynamic `import()` (`tests/first-line-capture.test.js`),
+  and `package.json` has no `"type": "module"` for a plain `.js` file using
+  `export` to work either way without a bundler in between.
+  - `feedLineCapture(buffer, data)`: a small parallel line-buffer fed every
+    chunk `AgentTerminal.jsx`'s existing `term.onData` handler already
+    receives (the same chunks forwarded to the PTY) — handles backspace,
+    strips ANSI/VT escape sequences (arrow keys etc.) instead of appending
+    them, and finalizes on `\r`/`\n`, skipping empty submissions (e.g. an
+    accidental Enter) so it keeps waiting for the first real line.
+  - `deriveTitle(rawLine)`: trims/collapses whitespace and truncates to 60
+    chars at a word boundary with an ellipsis.
+  - **Known, accepted limitation**: this is a parallel reconstruction, not a
+    real terminal-line emulator — in-line edits made with arrow keys/Home/End
+    inside the CLI's own readline-style input aren't replayed faithfully.
+    Fine for a best-effort auto-title; not worth a real emulator for this.
+- **`AgentTerminal.jsx`** feeds every `term.onData` chunk through
+  `feedLineCapture` alongside its existing forward-to-PTY call, guarded by
+  `titleCapturedRef` (initialized from `agent.titleSet`, see below) so this
+  only ever fires once per mounted session. On the first finalized non-empty
+  line, calls `deriveTitle` and updates the label both in the Zustand store
+  (`useStore.getState().updateAgentLabel`, immediate UI update) and via
+  `window.cpi.updateAgentLabel` → `agents:updateLabel` IPC →
+  `DBService.updateAgentLabel` (persists `label` and sets the new
+  `agents.title_set` column so the title survives a restart/restore).
+- **Why `label` itself, not a second field**: `label` is already the one
+  thing rendered everywhere an agent needs identifying (card header, delete
+  confirm, launch-bar default-uniqueness check, the `agent_sessions`
+  snapshot backing the Token Usage "By Agent" breakdown) — a parallel
+  `title` field would either duplicate all of those reads or leave most of
+  them still showing the stale random name.
+- **`agents.title_set` (new column, migrated in `DBService._migrateSchema()`)**
+  exists specifically so a *restored* agent (project switch back, or app
+  restart — always a brand-new `AgentTerminal` mount per the Terminal
+  section above, since there's no live PTY to reconnect to) doesn't treat
+  the next line the user types as a fresh "initial request" and clobber an
+  already-good title with a mid-conversation follow-up. `AgentView.jsx`'s
+  restore effect reads it off the DB row (`!!row.title_set`) and passes it
+  through as `agent.titleSet` regardless of which restore branch (running
+  vs. stopped) built the rest of `meta`. A brand-new agent (never
+  persisted) simply has `agent.titleSet` undefined → falsy → capture arms
+  normally.
+
 ### File Explorer / Editor (TICKET-0021)
 A VS Code-style file tree in the Sidebar plus a Monaco editor, so the user
 can browse and edit a project's files directly rather than only through an

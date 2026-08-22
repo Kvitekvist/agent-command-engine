@@ -4,7 +4,9 @@ import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { buildLaunchCommand } from '../utils/agentLaunch'
 import { runOperation } from '../utils/runOperation'
+import { feedLineCapture, deriveTitle } from '../utils/firstLineCapture.mjs'
 import OperationFeedback from './OperationFeedback'
+import useStore from '../store/useStore'
 
 // TICKET-0019 (correction): each agent card embeds its own live PTY session
 // running the real interactive `claude`/`codex` CLI, instead of the
@@ -48,6 +50,13 @@ export default function AgentTerminal({ agent }) {
   const containerRef = useRef(null)
   const terminalRef = useRef(null)
   const sessionIdRef = useRef(null)
+  // TICKET-0070: auto-title -- captures the first non-empty line the user
+  // submits into this terminal and turns it into the card's label. Skipped
+  // entirely (ref starts true) for an agent restored with an already-set
+  // title, so a follow-up line typed after a restore doesn't clobber it --
+  // see AgentView.jsx's restore effect for where `titleSet` comes from.
+  const titleCapturedRef = useRef(!!agent.titleSet)
+  const titleBufferRef = useRef('')
   const [status, setStatus] = useState('connecting') // connecting | ready | exited | error
   const [showBanner, setShowBanner] = useState(true)
   // TICKET-0039: per-agent only, no global setting -- defaults off (silently
@@ -202,6 +211,16 @@ export default function AgentTerminal({ agent }) {
 
       term.onData((data) => {
         if (sessionIdRef.current) window.cpi.terminal.write(sessionIdRef.current, data)
+        if (!titleCapturedRef.current) {
+          const { buffer, line } = feedLineCapture(titleBufferRef.current, data)
+          titleBufferRef.current = buffer
+          if (line) {
+            titleCapturedRef.current = true
+            const title = deriveTitle(line)
+            useStore.getState().updateAgentLabel(agent.agentId, title)
+            window.cpi.updateAgentLabel(agent.agentId, title)
+          }
+        }
       })
 
       // Enable clipboard support - Ctrl+C to copy, Ctrl+V to paste

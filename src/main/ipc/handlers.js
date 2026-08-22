@@ -118,6 +118,13 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     })
   })
 
+  // TICKET-0070: renames an agent's card label -- fired once, client-side,
+  // from the first line the user submits into its terminal (auto-title).
+  ipcMain.handle('agents:updateLabel', (_, agentId, label) => {
+    DB.updateAgentLabel(agentId, label)
+    return { ok: true }
+  })
+
   ipcMain.handle('agents:stop', (_, agentId) => {
     AgentSvc.stop(agentId)
     DB.updateAgentStatus(agentId, 'stopped')

@@ -105,7 +105,12 @@ export default function AgentView() {
             permissionMode: row.permission_mode,
           }
         }
-        useStore.getState().addAgent({ ...meta, agentId: row.id, status: row.status })
+        // TICKET-0070: carry forward whether this agent's label was already
+        // auto-titled -- a restored agent gets a brand-new terminal session
+        // (see the effect comment above), so without this its next typed
+        // line would look like a fresh "initial request" and clobber a real
+        // title that was already set in a previous session.
+        useStore.getState().addAgent({ ...meta, agentId: row.id, status: row.status, titleSet: !!row.title_set })
       }
     })()
     return () => { cancelled = true }

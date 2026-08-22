@@ -82,6 +82,14 @@ const useStore = create((set, get) => ({
       agents: s.agents.filter((a) => a.agentId !== agentId),
     })),
 
+  // TICKET-0070: auto-title -- updates just the label in place so the
+  // card's badge and every other `agent.label` read (delete confirm,
+  // launch-bar uniqueness check) pick it up without a full agent reload.
+  updateAgentLabel: (agentId, label) =>
+    set((s) => ({
+      agents: s.agents.map((a) => a.agentId === agentId ? { ...a, label } : a),
+    })),
+
   // ── Audit log ──────────────────────────────────────────────────────────────
   auditPrompts: [],
   setAuditPrompts: (prompts) => set({ auditPrompts: prompts }),

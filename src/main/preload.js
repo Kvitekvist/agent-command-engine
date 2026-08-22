@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('cpi', {
   restoreAgent: (row) => ipcRenderer.invoke('agents:restore', row),
   stopAgent: (agentId) => ipcRenderer.invoke('agents:stop', agentId),
   deleteAgent: (agentId) => ipcRenderer.invoke('agents:delete', agentId),
+  // TICKET-0070: auto-title -- renames the card label from the user's first
+  // submitted terminal line.
+  updateAgentLabel: (agentId, label) => ipcRenderer.invoke('agents:updateLabel', agentId, label),
   clearContext: (agentId) => ipcRenderer.invoke('agents:clearContext', agentId),
   sendPrompt: (agentId, prompt) => ipcRenderer.invoke('agents:sendPrompt', agentId, prompt),
   // TICKET-0044: record which CLI session id an agent launched with, so the

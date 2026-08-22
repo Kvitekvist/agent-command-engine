@@ -1246,3 +1246,38 @@ dev) + '../build/...'. No-op when packaged or off mac. build:main + node
 icons - after rebuilding a bundle at the same path the old icon can persist
 until the icon cache is cleared (sudo rm -rf /Library/Caches/
 com.apple.iconservices.store; killall Dock Finder).
+
+TICKET-0070
+2026-08-22
+Added auto-title for agent cards: agent.label now updates from the first
+non-empty line the user submits into its embedded terminal (e.g. "fix login
+bug" instead of a random name like "Priya"), for easier session management
+across several running agents. Captured via a new pure helper
+(firstLineCapture.mjs -- .mjs specifically so it loads unambiguously as ESM
+both through Vite and via Node's test runner's dynamic import(), since
+package.json has no "type":"module") fed every chunk AgentTerminal.jsx's
+existing term.onData handler already receives, in parallel with forwarding
+to the PTY -- handles backspace, strips ANSI escape sequences (arrow keys),
+finalizes on \r/\n, skips empty submissions. Title = trimmed/whitespace-
+collapsed first line, truncated to 60 chars at a word boundary. Deliberately
+local/heuristic, no extra AI call. Reused the existing `label` field rather
+than adding a parallel `title`, since label is already what every other UI
+surface reads (card header, delete confirm, launch-bar uniqueness check,
+agent_sessions snapshot for Token Usage By Agent). New `agents.title_set`
+column (DBService._migrateSchema) plus `agents:updateLabel` IPC/
+DBService.updateAgentLabel prevent a *restored* agent (fresh AgentTerminal
+mount, no live PTY to reconnect to -- see Terminal architecture notes) from
+having its next typed line mistaken for a fresh "initial request" and
+clobbering an already-good title with a mid-conversation follow-up;
+AgentView.jsx's restore effect reads title_set off the DB row and passes it
+through as agent.titleSet regardless of which restore branch built the rest
+of meta. Known accepted limitation: the capture buffer is a simple parallel
+reconstruction, not a real terminal-line emulator -- in-line edits via
+arrow keys/Home/End aren't replayed faithfully; fine for a best-effort
+auto-title. New tests/first-line-capture.test.js (10 cases, dependency-
+free, dynamic import() of the .mjs module). build:renderer + build:main +
+node --check clean; npm test 53/54 (the 1 failure is TICKET-0068's
+pre-existing pty-perms Windows chmod limitation, unrelated). Live
+verification (title actually updates in a running card, survives tab/
+project switch, a restored agent isn't re-titled by its next line) still
+open -- see project_memory.md.

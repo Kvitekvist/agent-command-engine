@@ -90,6 +90,7 @@ const DBService = {
         status TEXT NOT NULL DEFAULT 'idle',
         permission_mode TEXT NOT NULL DEFAULT 'safe',
         session_id TEXT,
+        title_set INTEGER NOT NULL DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (project_id) REFERENCES projects(id)
       );
@@ -151,6 +152,13 @@ const DBService = {
     if (!cols.includes('session_id')) {
       db.run('ALTER TABLE agents ADD COLUMN session_id TEXT')
     }
+    // TICKET-0070: tracks whether an agent's label has already been
+    // auto-titled from its first submitted terminal line, so a restored
+    // session (fresh AgentTerminal mount, pre-existing label) doesn't
+    // re-arm capture and clobber a real title with a later follow-up line.
+    if (!cols.includes('title_set')) {
+      db.run('ALTER TABLE agents ADD COLUMN title_set INTEGER NOT NULL DEFAULT 0')
+    }
     const promptCols = toRows(db.exec('PRAGMA table_info(prompts)')).map((c) => c.name)
     if (!promptCols.includes('cache_read_tokens')) {
       db.run('ALTER TABLE prompts ADD COLUMN cache_read_tokens INTEGER DEFAULT 0')
@@ -189,6 +197,13 @@ const DBService = {
     `).run(id, project_id, label, provider, model, status, permission_mode || 'safe'),
   updateAgentStatus: (id, status) =>
     prepare('UPDATE agents SET status = ? WHERE id = ?').run(status, id),
+  // TICKET-0070: renames an agent's label -- used to auto-title a card from
+  // the user's first submitted terminal line. Sets title_set so a later
+  // restore (fresh AgentTerminal mount, same persisted label) doesn't re-arm
+  // capture and overwrite it with a follow-up line. Doesn't touch
+  // agent_sessions' own snapshotted label (see its comment above), by design.
+  updateAgentLabel: (id, label) =>
+    prepare('UPDATE agents SET label = ?, title_set = 1 WHERE id = ?').run(label, id),
   updateAgentSession: (id, sessionId) =>
     prepare('UPDATE agents SET session_id = ? WHERE id = ?').run(sessionId, id),
   // Removes the agent row only — prompt/audit history is kept for the
