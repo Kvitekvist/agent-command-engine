@@ -538,6 +538,7 @@ class AgentService extends EventEmitter {
   getRunning() {
     return [...this.agents.entries()].map(([id, a]) => ({
       agentId: id, ...a.meta,
+      pid: a.activeProc?.pid || null,
       inputTokens: a.inputTokens, outputTokens: a.outputTokens,
     }))
   }

@@ -50,6 +50,18 @@ A specialized Electron desktop application for managing Claude and OpenAI Codex 
 
 ---
 
+## Install
+
+**macOS** — installs the latest release straight into `/Applications`, no manual download:
+```
+curl -fsSL https://raw.githubusercontent.com/Kvitekvist/agent-command-engine/main/scripts/install-mac.sh | bash
+```
+Builds are unsigned, so first launch needs a right-click > Open the very first time (the script already strips the quarantine flag, so this is a one-time Gatekeeper confirmation, not an error).
+
+**Windows** — download the installer or portable exe from the [latest release](https://github.com/Kvitekvist/agent-command-engine/releases/latest).
+
+---
+
 ## Quick Start
 
 **Windows:**

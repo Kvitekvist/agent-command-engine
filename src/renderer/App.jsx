@@ -6,6 +6,7 @@ import AuditView from './views/AuditView'
 import TokenView from './views/TokenView'
 import SettingsView from './views/SettingsView'
 import EditorView from './views/EditorView'
+import ProcessesView from './views/ProcessesView'
 import SetupView from './views/SetupView'
 import ContextMenu from './components/ContextMenu'
 
@@ -145,10 +146,11 @@ export default function App() {
         <div className={activeView === 'agents' ? 'h-full' : 'hidden'}>
           <AgentView />
         </div>
-        {activeView === 'audit'    && <AuditView />}
-        {activeView === 'tokens'   && <TokenView />}
-        {activeView === 'settings' && <SettingsView />}
-        {activeView === 'editor'   && <EditorView />}
+        {activeView === 'audit'     && <AuditView />}
+        {activeView === 'processes' && <ProcessesView />}
+        {activeView === 'tokens'    && <TokenView />}
+        {activeView === 'settings'  && <SettingsView />}
+        {activeView === 'editor'    && <EditorView />}
       </main>
       {ctxMenu && (
         <ContextMenu

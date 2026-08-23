@@ -1,0 +1,50 @@
+name: Release
+
+# Builds installers on a version tag push (e.g. `git tag v0.1.20 && git push
+# origin v0.1.20`) and attaches them to a GitHub Release for that tag,
+# creating the release if it doesn't already exist. Runs on real macOS/Windows
+# runners because electron-builder's dmg target needs to run on macOS.
+#
+# Builds are unsigned (no Apple Developer / code-signing certs configured) --
+# macOS Gatekeeper will show an "unidentified developer" warning on first
+# launch; right-click > Open bypasses it. scripts/install-mac.sh strips the
+# quarantine flag for the same reason.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci
+
+      - run: npm run package
+
+      - name: Upload artifacts to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes
+          cd ../releases
+          shopt -s nullglob
+          files=(*.dmg *.exe)
+          gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber

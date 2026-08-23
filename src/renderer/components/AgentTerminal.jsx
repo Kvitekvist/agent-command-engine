@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css'
 import { buildLaunchCommand } from '../utils/agentLaunch'
 import { runOperation } from '../utils/runOperation'
 import { feedLineCapture, deriveTitle } from '../utils/firstLineCapture.mjs'
+import { buildImageGenerationPrompt } from '../utils/imageGenerationPrompt.mjs'
 import { readPasteText } from '../utils/terminalPaste.mjs'
 import OperationFeedback from './OperationFeedback'
 import useStore from '../store/useStore'
@@ -350,6 +351,15 @@ export default function AgentTerminal({ agent }) {
     window.ace.terminal.setAutoAnswer(sessionIdRef.current, next)
   }
 
+  // Image generation is provided by the signed-in Codex CLI session. This
+  // does not swap the selected coding model or send an API key through ACE.
+  function requestImageGeneration() {
+    const brief = window.prompt('Describe the image you want Codex to generate:')
+    const prompt = buildImageGenerationPrompt(brief)
+    if (!prompt || !sessionIdRef.current) return
+    window.ace.terminal.write(sessionIdRef.current, `${prompt}\r`)
+  }
+
   return (
     <div className="flex-1 min-h-0 flex flex-col relative">
       {(status === 'error' || status === 'exited') && (
@@ -410,6 +420,14 @@ export default function AgentTerminal({ agent }) {
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
             🎯 Calibrate
           </button>
+          {agent.provider === 'codex' && (
+            <button
+              onClick={requestImageGeneration}
+              title="Ask this signed-in Codex session to generate an image and save it under .ace/generated-images"
+              className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
+              Generate image
+            </button>
+          )}
           <button
             onClick={() => {
               if (sessionIdRef.current) {

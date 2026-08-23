@@ -632,6 +632,44 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   ipcMain.on('terminal:resize', (_, { id, cols, rows } = {}) => TerminalSvc.resize(id, cols, rows))
   ipcMain.on('terminal:dispose', (_, { id } = {}) => TerminalSvc.dispose(id))
   ipcMain.on('terminal:setAutoAnswer', (_, { id, enabled } = {}) => TerminalSvc.setAutoAnswer(id, enabled))
+
+  // ── Processes panel ─────────────────────────────────────────────────────────
+  const ELECTRON_TYPE_LABELS = {
+    Browser: 'Main Process',
+    Tab: 'Renderer (UI)',
+    GPU: 'GPU Compositor',
+    Utility: 'Utility Service',
+    Zygote: 'Zygote',
+  }
+
+  ipcMain.handle('processes:list', () => {
+    const metrics = app.getAppMetrics()
+    const ptyHostPid = TerminalSvc?.host?.pid || null
+
+    const internal = metrics.map((m) => ({
+      kind: 'internal',
+      pid: m.pid,
+      label: m.pid === ptyHostPid
+        ? 'PTY Host (terminals)'
+        : (ELECTRON_TYPE_LABELS[m.type] || m.serviceName || m.type),
+      memoryKB: Math.round(m.memory.workingSetSize),
+      cpu: +(m.cpu.percentCPUUsage.toFixed(1)),
+    }))
+
+    const agents = AgentSvc.getRunning().map((a) => ({
+      kind: 'agent',
+      pid: a.pid,
+      label: a.label,
+      provider: a.provider,
+      model: a.model,
+      inputTokens: a.inputTokens,
+      outputTokens: a.outputTokens,
+      memoryKB: null,
+      cpu: null,
+    }))
+
+    return { internal, agents }
+  })
 }
 
 module.exports = { registerHandlers }

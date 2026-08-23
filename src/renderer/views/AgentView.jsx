@@ -76,14 +76,8 @@ export default function AgentView() {
     } finally { setLaunching(false) }
   }
 
-  // Backend emits an 'agent:status' event on stop that App.jsx uses to flip
-  // this card to 'stopped' in place (keeping history + revealing Delete) —
-  // don't also removeAgent() here, or the card vanishes instead of that.
-  async function stopAgent(agentId) {
+  async function closeAgent(agentId) {
     await window.ace.stopAgent(agentId)
-  }
-
-  async function deleteAgent(agentId) {
     await window.ace.deleteAgent(agentId)
     removeAgent(agentId)
   }
@@ -91,8 +85,7 @@ export default function AgentView() {
   // Restore agent cards the first time a project is selected this session
   // — e.g. right after the app opens, or the first switch to a project not
   // visited yet. Every persisted agent is restored here, running or
-  // stopped — a stopped agent still needs its card back so its Delete
-  // button shows up. A restored 'running' agent gets a brand-new terminal
+  // stopped. A restored 'running' agent gets a brand-new terminal
   // session (AgentTerminal always starts fresh on mount) since there's no
   // live PTY process to reconnect to yet — see AgentTerminal.jsx.
   //
@@ -204,13 +197,12 @@ export default function AgentView() {
             isn't active. Cards for other projects are hidden with CSS
             instead of being unmounted, mirroring App.jsx's tab-level
             hide-not-unmount pattern (TICKET-0027). A project switch no
-            longer tears any session down -- only Stop/Delete/app quit do. */}
+            longer tears any session down -- only Close/app quit do. */}
         <div className={'grid grid-cols-1 xl:grid-cols-2 gap-4' + (projectAgents.length === 0 ? ' hidden' : '')}>
           {agents.map((agent) => (
             <div key={agent.agentId} className={agent.projectId === activeProject.id ? '' : 'hidden'}>
               <AgentPane agent={agent}
-                onStop={() => stopAgent(agent.agentId)}
-                onDelete={() => deleteAgent(agent.agentId)} />
+                onClose={() => closeAgent(agent.agentId)} />
             </div>
           ))}
         </div>
@@ -227,13 +219,9 @@ export default function AgentView() {
 // here anymore; Claude Code's own interactive UI (visible inside the
 // terminal) handles all of that.
 
-function AgentPane({ agent, onStop, onDelete }) {
+function AgentPane({ agent, onClose }) {
   const [screenshotMsg, setScreenshotMsg] = useState(null)
   const screenshotMsgTimer = useRef(null)
-
-  function handleDelete() {
-    if (window.confirm(`Delete "${agent.label}"? This removes it from the interface.`)) onDelete()
-  }
 
   const [capturing, setCapturing] = useState(false)
 
@@ -284,14 +272,7 @@ function AgentPane({ agent, onStop, onDelete }) {
               {capturing ? '…' : '📸'}
             </button>
           )}
-          {agent.status === 'running' ? (
-            <button onClick={onStop} className="btn-danger text-xs py-0.5">Stop</button>
-          ) : (
-            <button onClick={handleDelete} title="Remove this agent from the interface"
-              className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/40 transition-colors">
-              🗑️ Delete
-            </button>
-          )}
+          <button onClick={onClose} className="btn-danger text-xs py-0.5">Close</button>
         </div>
       </div>
 
@@ -299,12 +280,8 @@ function AgentPane({ agent, onStop, onDelete }) {
         <div className="text-xs text-muted mb-1.5 shrink-0 truncate select-none" title="Not the path itself -- selecting/copying this line overwrites the clipboard the button just set">{screenshotMsg}</div>
       )}
 
-      {agent.status === 'running' ? (
+      {agent.status === 'running' && (
         <AgentTerminal agent={agent} />
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-muted text-xs">
-          Stopped — Delete to remove, or launch a new agent above.
-        </div>
       )}
     </div>
   )

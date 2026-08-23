@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('ace', {
   // Token Usage "By Agent" breakdown can map tokscale sessions to agent names.
   recordAgentSession: (payload) => ipcRenderer.invoke('agents:recordSession', payload),
 
+  // Processes
+  getProcesses: () => ipcRenderer.invoke('processes:list'),
+
   // Audit log
   getPrompts: (filters) => ipcRenderer.invoke('prompts:get', filters),
   getPromptById: (id) => ipcRenderer.invoke('prompts:getById', id),
