@@ -14,7 +14,7 @@
 const fs = require("fs"), path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const EXCLUDE_NAMES = new Set([".gitkeep", ".env", "node-map.html"]);
-const EXCLUDE_DIRS = new Set([".git","node_modules",".venv","__pycache__","dist","build",".vs",".vscode","releases"]);
+const EXCLUDE_DIRS = new Set([".git","node_modules",".venv","__pycache__","dist","build",".vs",".vscode","releases","project-template"]);
 
 function human(bytes){
   if (bytes < 1024) return bytes + " B";

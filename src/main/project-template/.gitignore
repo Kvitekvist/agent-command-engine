@@ -1,0 +1,41 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDE
+.vs/
+.vscode/
+.idea/
+
+# Build & release output
+/build/*
+!/build/.gitkeep
+/releases/*
+!/releases/.gitkeep
+/dist/
+/src/dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# .NET
+bin/
+obj/
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+.env.local
+
+# Claude Code runtime state
+.claude/scheduled_tasks.lock
+.claude/temp_nodedata.json

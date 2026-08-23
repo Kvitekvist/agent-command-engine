@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import Editor, { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
 import useStore from '../store/useStore'
@@ -16,6 +16,7 @@ export default function EditorView() {
     setActiveFile, closeFile, updateFileContent, markFileSaved,
   } = useStore()
   const [saving, setSaving] = useState(false)
+  const editorRef = useRef(null)
 
   const activeFile = openFiles.find((f) => f.path === activeFilePath)
 
@@ -50,6 +51,10 @@ export default function EditorView() {
     closeFile(filePath)
   }
 
+  function runEditorAction(id) {
+    editorRef.current?.getAction(id)?.run()
+  }
+
   if (!openFiles.length) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted">
@@ -73,6 +78,14 @@ export default function EditorView() {
           </button>
         ))}
         <div className="ml-auto px-3 flex items-center gap-2 shrink-0">
+          <button onClick={() => runEditorAction('actions.find')}
+            className="text-xs text-muted hover:text-gray-100" title="Find (Ctrl/Cmd+F)">
+            Find
+          </button>
+          <button onClick={() => runEditorAction('editor.action.startFindReplaceAction')}
+            className="text-xs text-muted hover:text-gray-100" title="Replace (Ctrl/Cmd+H)">
+            Replace
+          </button>
           {activeFile?.dirty && <span className="text-xs text-muted">Unsaved</span>}
           <button onClick={() => save(activeFile)} disabled={!activeFile?.dirty || saving}
             className="btn-primary text-xs px-3 py-1 disabled:opacity-50">
@@ -86,6 +99,7 @@ export default function EditorView() {
             path={activeFile.path}
             value={activeFile.content}
             theme="vs-dark"
+            onMount={(editor) => { editorRef.current = editor }}
             onChange={(value) => updateFileContent(activeFile.path, value ?? '')}
             options={{ fontSize: 13, minimap: { enabled: false }, automaticLayout: true }}
           />

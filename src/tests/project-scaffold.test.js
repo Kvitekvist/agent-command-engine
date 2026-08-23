@@ -1,0 +1,30 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const test = require('node:test')
+const { makeTempDir } = require('./helpers/temp-dir')
+const { createProjectFromScaffold } = require('../main/services/ProjectScaffoldService')
+
+test('new projects copy the bundled scaffold without overwriting existing folders', async (t) => {
+  const root = makeTempDir('ace-project-scaffold-')
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+
+  const scaffoldDir = path.join(root, 'scaffold')
+  fs.mkdirSync(path.join(scaffoldDir, '.claude'), { recursive: true })
+  fs.writeFileSync(path.join(scaffoldDir, 'AGENTS.md'), 'agent guide')
+  fs.writeFileSync(path.join(scaffoldDir, '.claude', 'PROJECT_RULES.md'), 'rules')
+  fs.writeFileSync(path.join(scaffoldDir, '.claude', '.ace-gitkeep'), '')
+
+  const result = await createProjectFromScaffold({ name: 'My Project', parentDir: root, scaffoldDir })
+  assert.equal(fs.readFileSync(path.join(result.path, 'AGENTS.md'), 'utf8'), 'agent guide')
+  assert.equal(fs.readFileSync(path.join(result.path, '.claude', 'PROJECT_RULES.md'), 'utf8'), 'rules')
+  assert.equal(fs.existsSync(path.join(result.path, '.claude', '.gitkeep')), true)
+  assert.equal(fs.existsSync(path.join(result.path, '.claude', '.ace-gitkeep')), false)
+  assert.equal(fs.existsSync(path.join(result.path, 'build', '.gitkeep')), true)
+  assert.equal(fs.existsSync(path.join(result.path, 'releases', '.gitkeep')), true)
+
+  const collision = await createProjectFromScaffold({ name: 'My Project', parentDir: root, scaffoldDir })
+  assert.match(collision.error, /already exists/)
+  assert.match((await createProjectFromScaffold({ name: '..', parentDir: root, scaffoldDir })).error, /must not contain a path/)
+  assert.match((await createProjectFromScaffold({ name: 42, parentDir: root, scaffoldDir })).error, /Missing project name/)
+})

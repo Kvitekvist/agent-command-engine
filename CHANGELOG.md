@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Files editor toolbar buttons for Monaco's native Find and Replace widgets,
+  including match navigation and Replace All (TICKET-0097)
 - `/build-node-map` skill and `scripts/build_node_map.bat` /
   `scripts/build_node_map.sh` helpers for rebuilding the second brain. The
   generic `/node-map` skill does a live rescan that drops ACE's curated
@@ -44,6 +46,7 @@
   nodes without it score exactly as before (TICKET-0093)
 
 ### Fixed
+- Creating a project through `+` → `New` now copies the standard scaffold bundled with ACE instead of producing an empty folder. The runtime no longer depends on a machine-specific external Template directory (TICKET-0096)
 - Terminal Ctrl/Cmd+V paste no longer travels through both ACE's manual
   clipboard path and xterm's native textarea path. ACE now captures the native
   paste event before xterm, stops duplicate dispatch, and sends the payload

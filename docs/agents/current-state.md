@@ -10,7 +10,7 @@
 - Runtime: Electron main process, React renderer, preload IPC bridge, and a
   forked PTY host.
 - Test/build: from `src/`, `npm test` and `npm run build`. CI runs
-  `bash scripts/run_tests.sh`. Last full run: 66 passed, 1 skipped
+  `bash scripts/run_tests.sh`. Last full run: 69 passed, 1 skipped
   (POSIX-only), 0 failed.
 
 ## Active priorities

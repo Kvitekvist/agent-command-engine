@@ -4,6 +4,7 @@ const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 const { FileService } = require('../services/FileService')
 const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
 const { ScreenshotService } = require('../services/ScreenshotService')
+const { createProjectFromScaffold } = require('../services/ProjectScaffoldService')
 
 function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keep window ref updated
@@ -60,26 +61,15 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     }
   })
 
-  // TICKET-0057: replaces the old template-copy flow (createFromTemplate),
-  // which copied from a hardcoded, no-longer-existing, Windows-only path --
-  // dead code that could never have worked on Mac regardless. Just creates
-  // an empty project folder at <parentDir>/<name>; fs.promises.mkdir is
-  // already cross-platform.
-  ipcMain.handle('projects:createNew', async (_, { name, parentDir } = {}) => {
-    if (!name || !parentDir) return { error: 'Missing project name or location' }
-    const fs = require('fs')
+  // The scaffold lives inside ACE in development and is shipped as an
+  // unpacked application resource, so project creation never depends on an
+  // external machine-specific Template folder.
+  ipcMain.handle('projects:createNew', (_, { name, parentDir } = {}) => {
     const path = require('path')
-
-    const newProjectPath = path.join(parentDir, name)
-    if (fs.existsSync(newProjectPath)) {
-      return { error: 'A folder with this name already exists in the selected location' }
-    }
-    try {
-      await fs.promises.mkdir(newProjectPath, { recursive: true })
-      return { path: newProjectPath }
-    } catch (error) {
-      return { error: error.message }
-    }
+    const scaffoldDir = app.isPackaged
+      ? path.join(process.resourcesPath, 'project-template')
+      : path.join(app.getAppPath(), 'main', 'project-template')
+    return createProjectFromScaffold({ name, parentDir, scaffoldDir })
   })
 
   // ── Agents ──────────────────────────────────────────────────────────────────

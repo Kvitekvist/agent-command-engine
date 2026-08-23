@@ -56,6 +56,12 @@
       "node_modules/@tokscale/**/*",
       "node_modules/node-pty/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "main/project-template",
+        "to": "project-template"
+      }
+    ],
     "asarUnpack": [
       "node_modules/tokscale/**/*",
       "node_modules/@tokscale/**/*",
