@@ -1,8 +1,9 @@
 {
   "name": "agent-command-engine",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "description": "A specialized Electron interface for managing Claude & OpenAI Codex agents across multiple projects",
   "main": "dist/main/index.js",
+  "author": "Jens",
   "scripts": {
     "postinstall": "node scripts/fix-pty-perms.js",
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
