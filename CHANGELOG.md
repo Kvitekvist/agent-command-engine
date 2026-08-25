@@ -31,6 +31,14 @@
   `Open` / `Awaiting verification` / `Blocked` / `Closed` status vocabulary
   (TICKET-0093)
 
+### Fixed
+- Token Usage tab no longer shows empty token info / History on macOS when
+  tokscale's `report` prepends a `"<N> new sessions added to wiki"` status
+  line to its JSON. The `extractJson` hardening (originally TICKET-0061) was
+  lost in a blanket revert (`b1ad161`) that only had its sibling arg-parsing
+  fix re-applied, so the regression returned; re-applied and covered by unit
+  tests (TICKET-0098)
+
 ### Added
 - Second-brain retrieval for agents. The `node-map` skill is installed at
   `.claude/skills/node-map/`, and `docs/node-map.html` indexes all 180 memory
