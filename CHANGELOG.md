@@ -31,6 +31,18 @@
   `Open` / `Awaiting verification` / `Blocked` / `Closed` status vocabulary
   (TICKET-0093)
 
+### Fixed
+- Token Usage tab showed 0 for everything (quota, today, by-model, by-project,
+  and History) in the packaged macOS app. tokscale's Node shim located its
+  native binary inside `app.asar` and tried to exec it from the virtual
+  archive, which fails, so every tokscale call returned nothing. ACE now spawns
+  the unpacked native binary directly on macOS and Linux too — previously only
+  Windows did (TICKET-0029) — fixing the packaged macOS build (TICKET-0100)
+- Hardened tokscale output parsing to tolerate a non-JSON status preamble
+  before the payload, as defensive cover for older tokscale builds (this was
+  originally investigated as the cause of the macOS blank-tab report under
+  TICKET-0098, but the real cause was the packaging issue above)
+
 ### Added
 - Second-brain retrieval for agents. The `node-map` skill is installed at
   `.claude/skills/node-map/`, and `docs/node-map.html` indexes all 180 memory

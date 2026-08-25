@@ -5,28 +5,54 @@ const path = require('path')
 // (~/.claude/projects, ~/.codex/sessions) and reports already-computed
 // token + cost totals per session — far more accurate than parsing live CLI
 // stdout, since it captures cache tokens too and needs no per-provider
-// output-format flag. It ships as a Node shim (tokscale/bin.js) that
-// resolves the right native platform binary as an optional dependency and
-// runs it via a bare, un-hidden `spawnSync` (see @tokscale/cli/dist/index.js)
-// — fine on a real terminal, but on Windows that inner spawn briefly flashes
-// a visible console window every poll, since `spawnSync` there doesn't set
-// `windowsHide`. That's not our code to fix, so on win32 we skip the JS
-// shim entirely and invoke the platform binary package directly ourselves
-// with `windowsHide: true` (TICKET-0029). Elsewhere, go through the shim as
-// before via the ELECTRON_RUN_AS_NODE trick (same one the reference project,
-// token-monitor, uses to run tokscale from inside an Electron main process).
-function resolveWindowsBinary() {
-  const pkg = process.arch === 'arm64' ? '@tokscale/cli-win32-arm64-msvc' : '@tokscale/cli-win32-x64-msvc'
+// output-format flag. It ships as a Node shim (tokscale/bin.js -> @tokscale/cli)
+// that, at runtime, locates the right native platform binary (an optional
+// dependency, e.g. @tokscale/cli-darwin-arm64) relative to its OWN module
+// location and runs it via spawnSync (see @tokscale/cli/dist/index.js). That
+// works from a normal node_modules tree but breaks two ways inside a packaged
+// Electron app:
+//   1. Windows: the inner spawnSync doesn't set windowsHide, so it flashes a
+//      console window every poll (TICKET-0029).
+//   2. Every OS: the shim finds its binary INSIDE app.asar (existsSync returns
+//      true there because Electron patches fs), then tries to exec a file that
+//      lives in the virtual archive — which the OS cannot do. It exits 1 with
+//      no output, so every tokscale call returns nothing and the whole Token
+//      Usage tab reads 0. TICKET-0029 dodged both by bypassing the shim, but
+//      ONLY on win32; macOS/Linux still went through it, so a packaged mac
+//      build showed 0 usage everywhere (TICKET-0100).
+// So on every platform we skip the shim and invoke the native binary package
+// directly, redirecting an app.asar path to its unpacked sibling. Each native
+// package's `main` field IS its `bin/tokscale[.exe]` executable, so
+// require.resolve returns the binary path itself.
+
+// Maps the current platform+arch to tokscale's native binary package. Exported
+// for unit testing. Returns null for a platform/arch tokscale doesn't ship, so
+// runTokscale can fall back to the JS shim. Linux resolves the glibc (gnu)
+// build: ACE packages and runs against glibc (electron-builder default, CI
+// ubuntu); the musl variants aren't bundled.
+function nativePackageFor(platform, arch) {
+  if (platform === 'win32') return arch === 'arm64' ? '@tokscale/cli-win32-arm64-msvc' : '@tokscale/cli-win32-x64-msvc'
+  if (platform === 'darwin') return arch === 'arm64' ? '@tokscale/cli-darwin-arm64' : '@tokscale/cli-darwin-x64'
+  if (platform === 'linux') return arch === 'arm64' ? '@tokscale/cli-linux-arm64-gnu' : '@tokscale/cli-linux-x64-gnu'
+  return null
+}
+
+// Redirects a path that points inside an app.asar archive to its unpacked
+// sibling (app.asar.unpacked), where asarUnpack (package.json) places a real,
+// spawnable copy. Outside a packaged app there is no app.asar segment, so this
+// is a no-op. Exported for unit testing; `sep` is injectable so the Windows
+// separator can be tested on any host.
+function redirectAsarToUnpacked(resolvedPath, sep = path.sep) {
+  return resolvedPath.split(`${sep}app.asar${sep}`).join(`${sep}app.asar.unpacked${sep}`)
+}
+
+function resolveNativeBinary() {
+  const pkg = nativePackageFor(process.platform, process.arch)
+  if (!pkg) return null
   try {
-    const resolved = require.resolve(pkg)
-    // Inside a packaged app, require.resolve() returns the path as it
-    // appears in the app.asar archive. That's fine for fs reads (Electron
-    // patches fs to serve archive contents transparently) but spawn() makes
-    // a real Windows CreateProcess call, which can't launch a binary that
-    // lives inside the virtual archive -- only the unpacked copy on disk
-    // works there. asarUnpack (package.json) places that copy in a sibling
-    // app.asar.unpacked tree, so redirect the path to it.
-    return resolved.split(`${path.sep}app.asar${path.sep}`).join(`${path.sep}app.asar.unpacked${path.sep}`)
+    // The native package's `main` is its bin/tokscale executable, so this
+    // resolves straight to the binary path.
+    return redirectAsarToUnpacked(require.resolve(pkg))
   } catch (error) {
     return null
   }
@@ -34,12 +60,16 @@ function resolveWindowsBinary() {
 
 function runTokscale(args, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
-    const windowsBinary = process.platform === 'win32' ? resolveWindowsBinary() : null
+    const nativeBinary = resolveNativeBinary()
 
     let child
-    if (windowsBinary) {
-      child = spawn(windowsBinary, args, { windowsHide: true })
+    if (nativeBinary) {
+      child = spawn(nativeBinary, args, { windowsHide: true })
     } else {
+      // Fallback for a platform/arch with no native package, or a dev machine
+      // that skipped optional deps: go through the JS shim via the
+      // ELECTRON_RUN_AS_NODE trick. (Inside a packaged app this is the broken
+      // path above, but we only reach it when there's no native binary to run.)
       let binPath
       try {
         binPath = require.resolve('tokscale/bin.js')
@@ -70,12 +100,35 @@ function runTokscale(args, timeoutMs = 15000) {
         return
       }
       try {
-        resolve(JSON.parse(stdout))
+        resolve(extractJson(stdout))
       } catch (error) {
         reject(new Error(`Could not parse tokscale JSON output: ${stdout.slice(0, 300)}`))
       }
     })
   })
+}
+
+// tokscale writes its data as JSON to stdout, but the `report` subcommand also
+// emits a plain-text status line ("<N> new sessions added to wiki") the first
+// time it catalogs previously-unseen sessions -- and that line can land on
+// stdout, prepended to the JSON. A bare JSON.parse(stdout) then throws on that
+// otherwise-successful run, which getWorkspaceReport swallows into an empty
+// History (working only on a later refresh once the sessions are catalogued).
+// Slice from the first JSON opener so any human-readable preamble is dropped
+// before parsing. Exported for unit testing. Originally TICKET-0061; that
+// commit was blanket-reverted (b1ad161) and only its sibling arg-parsing fix
+// was re-applied (TICKET-0067), so the macOS History regression returned and
+// this is re-applied under TICKET-0098.
+function extractJson(stdout) {
+  const text = String(stdout == null ? '' : stdout)
+  const opens = [text.indexOf('{'), text.indexOf('[')].filter((i) => i >= 0)
+  const closes = [text.lastIndexOf('}'), text.lastIndexOf(']')]
+  const start = opens.length ? Math.min(...opens) : -1
+  const end = Math.max(...closes)
+  // No JSON delimiters at all -> let JSON.parse throw on the raw text, so a
+  // genuinely broken/empty output still surfaces as a parse error.
+  if (start === -1 || end < start) return JSON.parse(text)
+  return JSON.parse(text.slice(start, end + 1))
 }
 
 function sessionKey(client, sessionId) {
@@ -232,7 +285,10 @@ const TokscaleService = {
           return Array.isArray(rows) ? rows.map((r) => ({ ...r, client })) : []
         } catch (error) {
           // One provider being unavailable (logged out, not installed) must
-          // not blank out the other's history.
+          // not blank out the other's history. Log it, though -- silently
+          // returning [] here made a broken tokscale call indistinguishable
+          // from a genuinely empty project (TICKET-0098).
+          console.warn(`[tokscale] report failed for client "${client}", workspace "${workspaceKey}": ${error.message}`)
           return []
         }
       })
@@ -244,4 +300,4 @@ const TokscaleService = {
   pathToWorkspaceKey,
 }
 
-module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey }
+module.exports = { TokscaleService, sessionKey, toUsageMap, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey, extractJson, nativePackageFor, redirectAsarToUnpacked }
