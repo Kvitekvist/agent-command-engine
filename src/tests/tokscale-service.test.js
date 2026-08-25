@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 
-const { toUsageMap, sessionKey, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey, extractJson } = require('../main/services/TokscaleService')
+const { toUsageMap, sessionKey, rowTokenTotal, shortenWorkspace, pathToWorkspaceKey, extractJson, nativePackageFor, redirectAsarToUnpacked } = require('../main/services/TokscaleService')
 
 // Sample shape verified against a real `tokscale --json --client claude
 // --group-by client,session,model` invocation.
@@ -79,6 +79,36 @@ test('extractJson tolerates a non-JSON preamble before the payload (TICKET-0098)
 test('extractJson still throws on genuinely unparseable output (TICKET-0098)', () => {
   assert.throws(() => extractJson('totally not json'))
   assert.throws(() => extractJson(''))
+})
+
+test('nativePackageFor maps every shipped platform/arch to its tokscale binary (TICKET-0100)', () => {
+  assert.equal(nativePackageFor('darwin', 'arm64'), '@tokscale/cli-darwin-arm64')
+  assert.equal(nativePackageFor('darwin', 'x64'), '@tokscale/cli-darwin-x64')
+  assert.equal(nativePackageFor('win32', 'arm64'), '@tokscale/cli-win32-arm64-msvc')
+  assert.equal(nativePackageFor('win32', 'x64'), '@tokscale/cli-win32-x64-msvc')
+  assert.equal(nativePackageFor('linux', 'arm64'), '@tokscale/cli-linux-arm64-gnu')
+  assert.equal(nativePackageFor('linux', 'x64'), '@tokscale/cli-linux-x64-gnu')
+  // An unshipped platform falls back to the JS shim rather than spawning junk.
+  assert.equal(nativePackageFor('aix', 'ppc64'), null)
+  assert.equal(nativePackageFor('freebsd', 'x64'), null)
+})
+
+test('redirectAsarToUnpacked rewrites packed paths and no-ops elsewhere (TICKET-0100)', () => {
+  // POSIX: a binary resolved inside app.asar must point at the unpacked copy.
+  assert.equal(
+    redirectAsarToUnpacked('/Apps/ACE.app/Contents/Resources/app.asar/node_modules/@tokscale/cli-darwin-arm64/bin/tokscale', '/'),
+    '/Apps/ACE.app/Contents/Resources/app.asar.unpacked/node_modules/@tokscale/cli-darwin-arm64/bin/tokscale',
+  )
+  // Windows separators, with the drive-letter path a packaged win build uses.
+  assert.equal(
+    redirectAsarToUnpacked('C:\\ACE\\resources\\app.asar\\node_modules\\@tokscale\\cli-win32-x64-msvc\\bin\\tokscale.exe', '\\'),
+    'C:\\ACE\\resources\\app.asar.unpacked\\node_modules\\@tokscale\\cli-win32-x64-msvc\\bin\\tokscale.exe',
+  )
+  // A dev-tree path (no app.asar segment) is returned unchanged.
+  assert.equal(
+    redirectAsarToUnpacked('/repo/src/node_modules/@tokscale/cli-darwin-arm64/bin/tokscale', '/'),
+    '/repo/src/node_modules/@tokscale/cli-darwin-arm64/bin/tokscale',
+  )
 })
 
 test('pathToWorkspaceKey flattens a filesystem path to tokscale\'s workspace key (TICKET-0044)', () => {

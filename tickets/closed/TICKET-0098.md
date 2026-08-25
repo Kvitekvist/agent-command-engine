@@ -1,12 +1,19 @@
-# TICKET-0098 — Token info empty on macOS again (extractJson regression)
+# TICKET-0098 — Defensive tokscale JSON-preamble hardening (misdiagnosis of the macOS blank-tab report)
+
+> **Superseded by [TICKET-0100].** This ticket originally attributed the macOS
+> "token info not displayed" report to a lost `extractJson` preamble fix
+> (TICKET-0061). That was wrong: current tokscale emits no preamble, and the
+> real cause was a packaging bug (native binary spawned from inside `app.asar`)
+> fixed in TICKET-0100. The `extractJson` change here is kept only as harmless
+> defensive parsing; it does not fix the reported symptom.
 
 **Status**
 
-Awaiting verification
+Closed
 
 **Type**
 
-Bug
+Enhancement
 
 **Priority**
 
@@ -81,4 +88,4 @@ not — worth guarding against by keeping the two hardening pieces together.
 
 ## Closed
 
-Pending a live macOS check of the Token Usage tab.
+2026-08-25 — kept as defensive hardening; real fix tracked in [TICKET-0100].

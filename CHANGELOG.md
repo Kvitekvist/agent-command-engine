@@ -32,12 +32,16 @@
   (TICKET-0093)
 
 ### Fixed
-- Token Usage tab no longer shows empty token info / History on macOS when
-  tokscale's `report` prepends a `"<N> new sessions added to wiki"` status
-  line to its JSON. The `extractJson` hardening (originally TICKET-0061) was
-  lost in a blanket revert (`b1ad161`) that only had its sibling arg-parsing
-  fix re-applied, so the regression returned; re-applied and covered by unit
-  tests (TICKET-0098)
+- Token Usage tab showed 0 for everything (quota, today, by-model, by-project,
+  and History) in the packaged macOS app. tokscale's Node shim located its
+  native binary inside `app.asar` and tried to exec it from the virtual
+  archive, which fails, so every tokscale call returned nothing. ACE now spawns
+  the unpacked native binary directly on macOS and Linux too — previously only
+  Windows did (TICKET-0029) — fixing the packaged macOS build (TICKET-0100)
+- Hardened tokscale output parsing to tolerate a non-JSON status preamble
+  before the payload, as defensive cover for older tokscale builds (this was
+  originally investigated as the cause of the macOS blank-tab report under
+  TICKET-0098, but the real cause was the packaging issue above)
 
 ### Added
 - Second-brain retrieval for agents. The `node-map` skill is installed at
