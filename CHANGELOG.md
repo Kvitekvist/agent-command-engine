@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- Packaging smoke test (`scripts/smoke-package.js`) wired into `release.yml` as
+  a post-`package` step. It asserts the tokscale native binary exists under the
+  built `app.asar.unpacked`, is executable, and spawns with a trivial arg —
+  the only layer that catches the TICKET-0029/0100 asar-spawn class of bug,
+  which is invisible to the unit matrix and `npm run dev`. A broken package now
+  fails the release build (TICKET-0101)
 - Files editor toolbar buttons for Monaco's native Find and Replace widgets,
   including match navigation and Replace All (TICKET-0097)
 - `/build-node-map` skill and `scripts/build_node_map.bat` /
