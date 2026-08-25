@@ -3,6 +3,13 @@ name: Tests
 # Runs the Agent Command Engine test suite on every push and pull request
 # targeting main. The suite is dependency-free (see scripts/run_tests.sh), so no
 # `npm install` / Electron download is needed -- it just needs Node.
+#
+# The suite runs on all three developer platforms (macOS, Windows, Linux), not
+# just Linux: past macOS-only regressions in platform-divergent code (tokscale
+# spawn paths, arg parsing, JSON preamble handling -- TICKET-0059/0061/0098)
+# passed a Linux-only CI and only surfaced on a teammate's Mac after merge. A
+# matrix here catches that class before merge, since the team develops on both
+# macOS and Windows (TICKET-0099).
 on:
   push:
     branches: [main]
@@ -11,7 +18,14 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      # Don't cancel the other OSes when one fails -- a platform-specific
+      # failure is exactly what this matrix exists to surface, so we want to
+      # see which platforms are affected.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -22,4 +36,7 @@ jobs:
           node-version: '22'
 
       - name: Run test suite
+        # bash is available on all three runners (Git Bash on windows-latest),
+        # so the one POSIX script drives the suite uniformly across the matrix.
+        shell: bash
         run: bash scripts/run_tests.sh
