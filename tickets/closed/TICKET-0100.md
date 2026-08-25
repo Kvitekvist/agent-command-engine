@@ -2,7 +2,7 @@
 
 **Status**
 
-Awaiting verification
+Closed
 
 **Type**
 
@@ -101,4 +101,6 @@ usage read) would catch this class; noted as a possible follow-up.
 
 ## Closed
 
-Pending a packaged-macOS check of the Token Usage tab.
+2026-08-25 — verified on a signed packaged macOS (arm64) build: the native
+binary is unpacked and executable under `app.asar.unpacked`, spawns directly,
+and the Token Usage tab shows real numbers instead of 0.

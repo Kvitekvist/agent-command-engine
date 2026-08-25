@@ -2,7 +2,7 @@
 
 **Status**
 
-Awaiting verification
+Closed
 
 **Type**
 
@@ -79,4 +79,4 @@ regression test for platform-specific fixes and surgical (per-fix) reverts.
 
 ## Closed
 
-Pending the first three-OS CI run.
+2026-08-25 — three-OS matrix (ubuntu/macos/windows) runs green on PR #1.
