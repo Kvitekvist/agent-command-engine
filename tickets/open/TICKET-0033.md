@@ -52,10 +52,18 @@ supports left-click-to-open; there is no context menu of any kind.
       considerations per TICKET-0029's lesson on vendor spawns), gated to
       an allowlist of executable-like extensions (`.bat`, `.exe`, `.cmd`,
       etc.) and only rendered in the menu for matching files
+* [x] Add **Copy File Name** and **Copy Full Path** actions using the
+      renderer's existing Clipboard API path
+* [x] Show copy actions for directories as well as files
+* [x] Add **Copy Relative Path** based on the active project root
+* [x] Add **Refresh Explorer** to reload the tree and discard cached directory
+      listings
 * [ ] Manual verification: right-click a regular file (Open, Open in
-      Explorer only), right-click a `.bat`/`.exe` (Run also present and
+      Explorer, Copy File Name, and Copy Full Path), right-click a
+      `.bat`/`.exe` (Run also present and
       working), confirm Explorer actually opens/highlights the file and
-      Run actually launches it
+      Run actually launches it; right-click a folder and verify all three
+      copy actions; create a file externally, refresh, and verify it appears
 
 ---
 
@@ -66,25 +74,28 @@ supports left-click-to-open; there is no context menu of any kind.
 - src/main/services/FileService.js
 - src/main/ipc/handlers.js
 - src/main/preload.js
+- CHANGELOG.md
 
 ---
 
 ## Testing
 
-`npm run build` (renderer + main, both clean) and `npm test` (11/11 pass,
-no new coverage — this is IPC/UI wiring and native process spawning, same
-reasoning as TICKET-0021/0025/0027 etc., which also shipped without new
-automated coverage for comparable UI/native-process behavior).
+`npm run build` clean. `npm test`: 73 passed, 1 skipped, 0 failed. No new
+automated coverage for the renderer-only menu and refresh wiring.
 
 ---
 
 ## Result
 
-Implemented as scoped. `FileTree.jsx`'s right-click handler suppresses the
-browser's own context menu on every row but only opens the custom
-`ContextMenu` for files, not directories (directories keep left-click-to-
-expand only — matches the ticket's own framing of this as a file-row
-feature). `Run`'s extension allowlist
+Follow-up: file and folder rows now offer name, full-path, and project-relative
+path copy actions using ACE's existing renderer Clipboard API. **Refresh
+Explorer** reloads the root and remounts the lazy nodes so cached directory
+listings cannot survive a refresh.
+
+Implemented as scoped. `FileTree.jsx`'s right-click handler opens the custom
+`ContextMenu` for files and directories. Directories retain left-click-to-
+expand behavior and omit the file-only **Open** and **Run** actions. `Run`'s
+extension allowlist
 (`.exe/.bat/.cmd/.ps1/.vbs/.com/.msi`) is duplicated by hand in
 `FileTree.jsx` (menu gating) and `FileService.js` (the real authority,
 re-checked server-side so a stale renderer copy can never widen what's

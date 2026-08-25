@@ -38,10 +38,8 @@ function FileTreeNode({ root, entry, depth, onOpenFile, onContextMenu }) {
   }
 
   function handleContextMenu(e) {
-    // TICKET-0033: the custom menu only applies to files -- directories
-    // keep the default browser menu suppressed but no custom actions.
     e.preventDefault()
-    if (!entry.isDirectory) onContextMenu(e, entry)
+    onContextMenu(e, entry)
   }
 
   return (
@@ -70,6 +68,7 @@ export default function FileTree({ project }) {
   const [rootEntries, setRootEntries] = useState(null)
   const [error, setError] = useState(null)
   const [contextMenu, setContextMenu] = useState(null) // { x, y, entry }
+  const [refreshVersion, setRefreshVersion] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -81,7 +80,7 @@ export default function FileTree({ project }) {
       else setError(result.error)
     })
     return () => { cancelled = true }
-  }, [project.path])
+  }, [project.path, refreshVersion])
 
   async function handleOpenFile(entry) {
     const result = await window.ace.fs.readFile(project.path, entry.path)
@@ -114,7 +113,7 @@ export default function FileTree({ project }) {
     <div className="overflow-y-auto">
       {rootEntries.map((entry) => (
         <FileTreeNode
-          key={entry.path}
+          key={`${refreshVersion}:${entry.path}`}
           root={project.path}
           entry={entry}
           depth={0}
@@ -128,11 +127,20 @@ export default function FileTree({ project }) {
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
           items={[
-            { label: 'Open', onClick: () => handleOpenFile(contextMenu.entry) },
-            { label: 'Open in Explorer', onClick: () => handleOpenInExplorer(contextMenu.entry) },
-            ...(isRunnable(contextMenu.entry.name)
-              ? [{ divider: true }, { label: 'Run', onClick: () => handleRun(contextMenu.entry) }]
+            ...(!contextMenu.entry.isDirectory
+              ? [{ label: 'Open', onClick: () => handleOpenFile(contextMenu.entry) }]
               : []),
+            { label: 'Open in Explorer', onClick: () => handleOpenInExplorer(contextMenu.entry) },
+            ...(!contextMenu.entry.isDirectory && isRunnable(contextMenu.entry.name)
+              ? [{ label: 'Run', onClick: () => handleRun(contextMenu.entry) }]
+              : []),
+            { divider: true },
+            { label: contextMenu.entry.isDirectory ? 'Copy Folder Name' : 'Copy File Name', onClick: () => navigator.clipboard.writeText(contextMenu.entry.name) },
+            { label: 'Copy Full Path', onClick: () => navigator.clipboard.writeText(contextMenu.entry.path) },
+            { label: 'Copy Relative Path', onClick: () => navigator.clipboard.writeText(contextMenu.entry.path.slice(project.path.length).replace(/^[\\/]/, '')) },
+            { divider: true },
+            // ponytail: whole-tree refresh collapses folders; preserve expansion state if users need it.
+            { label: 'Refresh Explorer', onClick: () => setRefreshVersion((version) => version + 1) },
           ]}
         />
       )}

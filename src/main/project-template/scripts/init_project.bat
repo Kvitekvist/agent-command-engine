@@ -178,9 +178,19 @@ echo [5/6] Updating README...
 ) > README.md
 
 REM Create initialization marker
-echo [6/6] Finalizing...
+echo [6/7] Finalizing...
 echo Initialized on %date% %time% > .initialized
 echo Project: !PROJECT_NAME! >> .initialized
+
+REM Initialize git repository
+echo [7/7] Initializing git repository...
+git init >nul 2>&1
+if errorlevel 1 (
+    echo WARNING: Git initialization failed. Is git installed?
+    echo You can manually run: git init
+) else (
+    echo Git repository initialized.
+)
 
 REM Clean up template tickets
 if exist "tickets\closed\TICKET-0001.md" del /q "tickets\closed\TICKET-0001.md"
@@ -236,12 +246,23 @@ REM Update CHANGELOG
     echo *
 ) > CHANGELOG.md
 
+REM Create initial commit
+git add -A >nul 2>&1
+git commit -m "Initial commit: !PROJECT_NAME!" >nul 2>&1
+if errorlevel 1 (
+    echo NOTE: Git commit skipped. Run manually if needed.
+) else (
+    echo Initial commit created.
+)
+
 echo.
 echo ========================================
 echo   Initialization Complete!
 echo ========================================
 echo.
 echo Your project "!PROJECT_NAME!" is ready.
+echo.
+echo Git repository initialized with initial commit.
 echo.
 echo Next steps:
 echo.
@@ -251,11 +272,7 @@ echo 3. Customize scripts\build.bat if applicable
 echo 4. Customize scripts\run.bat for your stack
 echo 5. Create your first ticket for the initial feature
 echo.
-echo Optional: Commit this initialization
-echo   git add -A
-echo   git commit -m "Initialize project: !PROJECT_NAME!"
-echo.
-echo For GitHub setup, consider:
+echo For GitHub setup:
 echo   gh repo create !PROJECT_NAME! --private --source=. --remote=origin --push
 echo.
 echo Happy coding!

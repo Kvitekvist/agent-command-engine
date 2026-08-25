@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.22] - 2026-08-25
+
+### Added
+- Project template now auto-initializes git repository with initial commit when
+  running "Start New Project". The `init_project.bat` script runs `git init`
+  and creates an initial commit after project setup, so ticket versioning works
+  immediately without manual git setup
+- File-tree context menu actions for files and folders to copy names, full
+  paths, or project-relative paths, plus a tree refresh action (TICKET-0033)
 - Packaging smoke test (`scripts/smoke-package.js`) wired into `release.yml` as
   a post-`package` step. It asserts the tokscale native binary exists under the
   built `app.asar.unpacked`, is executable, and spawns with a trivial arg —
