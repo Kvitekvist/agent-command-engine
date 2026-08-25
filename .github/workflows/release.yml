@@ -36,6 +36,14 @@ jobs:
 
       - run: npm run package
 
+      # Prove the packaged app can actually spawn tokscale's native binary from
+      # app.asar.unpacked before we ship it. This is the only layer that catches
+      # the TICKET-0029/0100 class of bug (asar spawn), which is invisible to the
+      # unit matrix and `npm run dev`. A broken package fails the release here.
+      - name: Smoke-test packaged build
+        shell: bash
+        run: node scripts/smoke-package.js
+
       - name: Upload artifacts to release
         shell: bash
         env:
