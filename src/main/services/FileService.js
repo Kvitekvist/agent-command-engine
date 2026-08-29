@@ -79,6 +79,30 @@ class FileService {
     return { ok: true }
   }
 
+  // TICKET-0033 follow-up: rename in place. newName is a bare filename, not
+  // a path -- a separator would let a "rename" move the entry out of its
+  // folder (still within the root, but surprising), so reject it.
+  rename(root, filePath, newName) {
+    const target = resolveWithinRoot(root, filePath)
+    if (!newName || /[\\/]/.test(newName) || newName === '.' || newName === '..') {
+      return { ok: false, error: 'Not a valid file name' }
+    }
+    const dest = resolveWithinRoot(root, path.join(path.dirname(target), newName))
+    if (fs.existsSync(dest)) return { ok: false, error: 'A file with that name already exists' }
+    fs.renameSync(target, dest)
+    return { ok: true, path: dest }
+  }
+
+  // Moves to the OS trash (recoverable) rather than a permanent unlink.
+  async trash(root, filePath) {
+    const target = resolveWithinRoot(root, filePath)
+    if (path.resolve(target) === path.resolve(root)) {
+      return { ok: false, error: "Can't delete the project root" }
+    }
+    await shell.trashItem(target)
+    return { ok: true }
+  }
+
   // TICKET-0033/0037: runs a file the same way double-clicking it in the
   // OS file manager would. Platform-specific spawn logic since the
   // conventions differ completely between Windows and macOS.

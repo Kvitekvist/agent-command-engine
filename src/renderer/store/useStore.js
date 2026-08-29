@@ -105,8 +105,8 @@ const useStore = create((set, get) => ({
   // full UsageCard pair both read the same data without each spawning their
   // own tokscale subprocess call on its own timer.
   liveUsage: {
-    claude: { plan: null, quota: [], models: [], projects: [], totalTokens: 0 },
-    codex: { plan: null, quota: [], models: [], projects: [], totalTokens: 0 },
+    claude: { plan: null, quota: [], models: [], projects: [], totalTokens: 0, totalCost: 0 },
+    codex: { plan: null, quota: [], models: [], projects: [], totalTokens: 0, totalCost: 0 },
   },
   liveUsageLoading: true,
   loadLiveUsage: async () => {

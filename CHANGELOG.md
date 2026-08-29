@@ -8,6 +8,18 @@
 
 ### Fixed
 
+## [0.1.23] - 2026-08-29
+
+### Added
+- File-tree context menu: **Rename…** (in-place, rejects path separators and
+  name collisions) and **Delete** (moves to the OS Recycle Bin / Trash via
+  `shell.trashItem`, refuses the project root). Backed by new `fs:rename` /
+  `fs:trash` IPC handlers and `FileService.rename` / `FileService.trash`
+  (TICKET-0033)
+- Usage cards and the compact usage bar now show today's token count and
+  cost for providers on an unlimited/enterprise plan, where tokscale reports
+  no quota percentages. `getTodayBreakdown` sums a `totalCost` per client
+
 ## [0.1.22] - 2026-08-25
 
 ### Added

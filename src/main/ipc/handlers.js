@@ -286,7 +286,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   ipcMain.handle('tokens:getLiveUsage', async () => {
     const clients = ['claude', 'codex']
     const result = {}
-    for (const c of clients) result[c] = { plan: null, quota: [], models: [], projects: [], totalTokens: 0 }
+    for (const c of clients) result[c] = { plan: null, quota: [], models: [], projects: [], totalTokens: 0, totalCost: 0 }
 
     try {
       const quota = await TokscaleService.getQuota()
@@ -308,6 +308,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
           result[c].models = breakdown[c].models
           result[c].projects = breakdown[c].projects
           result[c].totalTokens = breakdown[c].totalTokens
+          result[c].totalCost = breakdown[c].totalCost
         }
       }
     } catch (error) {
@@ -366,6 +367,22 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   ipcMain.handle('fs:runFile', (_, { root, filePath }) => {
     try {
       return FileService.runFile(root, filePath)
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('fs:rename', (_, { root, filePath, newName }) => {
+    try {
+      return FileService.rename(root, filePath, newName)
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('fs:trash', async (_, { root, filePath }) => {
+    try {
+      return await FileService.trash(root, filePath)
     } catch (error) {
       return { ok: false, error: error.message }
     }

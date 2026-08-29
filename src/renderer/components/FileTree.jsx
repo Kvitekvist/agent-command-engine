@@ -63,11 +63,39 @@ function FileTreeNode({ root, entry, depth, onOpenFile, onContextMenu }) {
   )
 }
 
+// Electron doesn't implement window.prompt, so rename needs its own tiny input.
+function RenamePrompt({ entry, onCancel, onSubmit }) {
+  const [value, setValue] = useState(entry.name)
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-32" onMouseDown={onCancel}>
+      <form
+        onMouseDown={(e) => e.stopPropagation()}
+        onSubmit={(e) => { e.preventDefault(); onSubmit(value.trim()) }}
+        className="w-72 rounded border border-border bg-panel p-3 shadow-lg"
+      >
+        <label className="mb-1 block text-xs text-muted">Rename “{entry.name}” to</label>
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') onCancel() }}
+          className="w-full rounded border border-border bg-surface px-2 py-1 text-xs text-gray-200 outline-none focus:border-accent"
+        />
+        <div className="mt-3 flex justify-end gap-2 text-xs">
+          <button type="button" onClick={onCancel} className="px-2 py-1 text-muted hover:text-gray-200">Cancel</button>
+          <button type="submit" className="rounded bg-accent px-2 py-1 text-white hover:bg-accent-hover">Rename</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 export default function FileTree({ project }) {
   const { openFile, setActiveView } = useStore()
   const [rootEntries, setRootEntries] = useState(null)
   const [error, setError] = useState(null)
   const [contextMenu, setContextMenu] = useState(null) // { x, y, entry }
+  const [renaming, setRenaming] = useState(null) // { entry }
   const [refreshVersion, setRefreshVersion] = useState(0)
 
   useEffect(() => {
@@ -105,6 +133,22 @@ export default function FileTree({ project }) {
     if (!result.ok) window.alert(`Couldn't run "${entry.name}": ${result.error}`)
   }
 
+  async function handleRename(entry, newName) {
+    setRenaming(null)
+    if (!newName || newName === entry.name) return
+    const result = await window.ace.fs.rename(project.path, entry.path, newName)
+    if (!result.ok) window.alert(`Couldn't rename "${entry.name}": ${result.error}`)
+    else setRefreshVersion((version) => version + 1)
+  }
+
+  async function handleDelete(entry) {
+    const kind = entry.isDirectory ? 'folder' : 'file'
+    if (!window.confirm(`Move ${kind} "${entry.name}" to the Recycle Bin?`)) return
+    const result = await window.ace.fs.trash(project.path, entry.path)
+    if (!result.ok) window.alert(`Couldn't delete "${entry.name}": ${result.error}`)
+    else setRefreshVersion((version) => version + 1)
+  }
+
   if (error) return <div className="px-3 py-2 text-xs text-danger">Couldn't load files: {error}</div>
   if (!rootEntries) return <div className="px-3 py-2 text-xs text-muted">Loading…</div>
   if (rootEntries.length === 0) return <div className="px-3 py-2 text-xs text-muted">Empty folder.</div>
@@ -139,9 +183,19 @@ export default function FileTree({ project }) {
             { label: 'Copy Full Path', onClick: () => navigator.clipboard.writeText(contextMenu.entry.path) },
             { label: 'Copy Relative Path', onClick: () => navigator.clipboard.writeText(contextMenu.entry.path.slice(project.path.length).replace(/^[\\/]/, '')) },
             { divider: true },
+            { label: 'Rename…', onClick: () => setRenaming({ entry: contextMenu.entry }) },
+            { label: 'Delete', onClick: () => handleDelete(contextMenu.entry) },
+            { divider: true },
             // ponytail: whole-tree refresh collapses folders; preserve expansion state if users need it.
             { label: 'Refresh Explorer', onClick: () => setRefreshVersion((version) => version + 1) },
           ]}
+        />
+      )}
+      {renaming && (
+        <RenamePrompt
+          entry={renaming.entry}
+          onCancel={() => setRenaming(null)}
+          onSubmit={(name) => handleRename(renaming.entry, name)}
         />
       )}
     </div>

@@ -2,7 +2,7 @@ import React from 'react'
 
 // TICKET-0022: compact "384K" / "99.2M" style, matching the reference
 // design (token-monitor) rather than a raw digit count.
-function formatTokens(n) {
+export function formatTokens(n) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
   if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
   return String(Math.round(n))
@@ -27,7 +27,11 @@ export function formatReset(resetsAt) {
 export const METRIC_LABELS = { Session: '5-hour rolling', Weekly: 'Weekly' }
 
 export default function UsageCard({ name, iconSvg, color, data }) {
-  const { plan, quota = [], models = [], projects = [], totalTokens = 0, quotaError, breakdownError } = data || {}
+  const { plan, quota = [], models = [], projects = [], totalTokens = 0, totalCost = 0, quotaError, breakdownError } = data || {}
+
+  // Enterprise/unlimited plan detection: no quota metrics or all metrics lack percentages
+  const hasValidQuota = quota.length > 0 && quota.some(m => m.used_percent != null)
+  const isUnlimited = !quotaError && !hasValidQuota
 
   return (
     <div className="card">
@@ -45,8 +49,21 @@ export default function UsageCard({ name, iconSvg, color, data }) {
 
       {quotaError ? (
         <div className="text-xs text-muted mb-4">Quota unavailable — {quotaError}</div>
-      ) : quota.length === 0 ? (
-        <div className="text-xs text-muted mb-4">No quota data.</div>
+      ) : isUnlimited ? (
+        <div className="space-y-2 mb-4">
+          <div className="text-xs font-medium text-gray-300">Usage today</div>
+          <div className="flex items-baseline gap-3">
+            <div>
+              <div className="text-2xl font-bold text-gray-100">{formatTokens(totalTokens)}</div>
+              <div className="text-xs text-muted">tokens</div>
+            </div>
+            <div className="text-muted">·</div>
+            <div>
+              <div className="text-2xl font-bold text-warning">${totalCost.toFixed(2)}</div>
+              <div className="text-xs text-muted">cost</div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="space-y-3 mb-4">
           {quota.map((m) => {

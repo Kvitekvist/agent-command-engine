@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('ace', {
     // TICKET-0033: file-tree right-click actions
     openInExplorer: (root, filePath) => ipcRenderer.invoke('fs:openInExplorer', { root, filePath }),
     runFile: (root, filePath) => ipcRenderer.invoke('fs:runFile', { root, filePath }),
+    rename: (root, filePath, newName) => ipcRenderer.invoke('fs:rename', { root, filePath, newName }),
+    trash: (root, filePath) => ipcRenderer.invoke('fs:trash', { root, filePath }),
   },
 
   // Screenshots (TICKET-0034, reworked from TICKET-0032)

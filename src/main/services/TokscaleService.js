@@ -227,13 +227,15 @@ const TokscaleService = {
     const entries = Array.isArray(json?.entries) ? json.entries : []
 
     const result = {}
-    for (const client of clients) result[client] = { models: new Map(), projects: new Map(), totalTokens: 0 }
+    for (const client of clients) result[client] = { models: new Map(), projects: new Map(), totalTokens: 0, totalCost: 0 }
 
     for (const entry of entries) {
       const bucket = result[entry.client]
       if (!bucket) continue
       const tokens = rowTokenTotal(entry)
+      const cost = Number(entry.cost) || 0
       bucket.totalTokens += tokens
+      bucket.totalCost += cost
       bucket.models.set(entry.model, (bucket.models.get(entry.model) || 0) + tokens)
       // Key by the full workspace label so two distinct paths never merge, but
       // keep it around so the UI can show the leaf folder name and still expose
@@ -245,6 +247,7 @@ const TokscaleService = {
     for (const client of clients) {
       result[client] = {
         totalTokens: result[client].totalTokens,
+        totalCost: result[client].totalCost,
         models: [...result[client].models].map(([name, tokens]) => ({ name, tokens })).sort((a, b) => b.tokens - a.tokens),
         projects: [...result[client].projects]
           .map(([fullName, tokens]) => ({ name: shortenWorkspace(fullName), fullName, tokens }))
