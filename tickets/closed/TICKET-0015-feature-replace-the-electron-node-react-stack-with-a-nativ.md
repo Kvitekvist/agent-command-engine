@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Deferred
 
 **Type**
 
@@ -78,6 +78,10 @@ Walking skeleton in place: solution builds, WPF shell launches, DbService
 creates/reads the SQLite schema, AgentService/LoadBalancer ported. Full UI
 parity is out of scope for this ticket and will continue under follow-up
 tickets.
+
+**Deferred indefinitely**: Product direction commits to Electron/React stack.
+The .NET prototype remains in the codebase as reference but is not actively
+developed.
 
 ---
 

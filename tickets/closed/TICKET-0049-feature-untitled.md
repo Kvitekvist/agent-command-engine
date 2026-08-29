@@ -47,3 +47,8 @@ Added "Prompts" column to the `ModelCostTable` component:
 ## Notes
 
 The quick action buttons provide one-click access to frequently used operations without typing. The prompt count addition makes the model breakdown table consistent with the agent breakdown table and provides useful per-model usage metrics.
+
+## Closed
+
+2026-08-29
+

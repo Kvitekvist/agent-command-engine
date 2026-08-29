@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -170,4 +170,6 @@ being introduced.
 ---
 
 ## Closed
+
+2026-08-29
 

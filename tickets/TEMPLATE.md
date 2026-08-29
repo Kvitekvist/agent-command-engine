@@ -1,5 +1,6 @@
 # TICKET-XXXX — Short title
 
+**File naming:** `TICKET-XXXX-[bug|feature]-[title-slug].md`  
 Keep the title on the H1 line. `grep -h '^# TICKET' tickets/open/*.md` is the
 queue index, so a ticket without one is invisible to it.
 
@@ -9,7 +10,7 @@ Open / Awaiting verification / Blocked / Closed
 
 **Type**
 
-Feature / Bug / Enhancement / Refactor / Documentation
+Bug / Feature
 
 **Priority**
 

@@ -2,6 +2,8 @@
 
 **Status**
 
+Closed
+
 In Progress
 
 **Type**
@@ -109,4 +111,6 @@ adjustment.
 ---
 
 ## Closed
+
+2026-08-29
 

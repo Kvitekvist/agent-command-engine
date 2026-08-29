@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -102,3 +102,5 @@ with the terminal's right-click-paste. Reuses the existing `ContextMenu.jsx`.
 ---
 
 ## Closed
+
+2026-08-29

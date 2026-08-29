@@ -168,3 +168,8 @@ exactly once.
 
 Live verification in the real Electron terminal remains required before this
 ticket can close, including small and large Ctrl/Cmd+V pastes and right-click.
+
+## Closed
+
+2026-08-29
+

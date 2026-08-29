@@ -2,7 +2,9 @@
 
 **Status**
 
-Open
+Closed
+
+Closed
 
 **Type**
 
@@ -78,4 +80,6 @@ above.
 ---
 
 ## Closed
+
+2026-08-29
 

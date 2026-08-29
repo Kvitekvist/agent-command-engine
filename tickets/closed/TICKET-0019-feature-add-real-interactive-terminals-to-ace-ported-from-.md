@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -308,4 +308,6 @@ next, not solved here.
 ---
 
 ## Closed
+
+2026-08-29
 

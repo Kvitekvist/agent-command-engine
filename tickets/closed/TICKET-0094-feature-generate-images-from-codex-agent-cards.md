@@ -2,7 +2,9 @@
 
 **Status**
 
-Open
+Closed
+
+Closed
 
 **Type**
 
@@ -83,3 +85,5 @@ and enabled, and `%USERPROFILE%/.codex/skills/.system/imagegen` is present.
 ---
 
 ## Closed
+
+2026-08-29

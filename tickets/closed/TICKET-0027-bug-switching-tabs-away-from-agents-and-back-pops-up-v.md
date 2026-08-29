@@ -2,7 +2,9 @@
 
 **Status**
 
-Open
+Closed
+
+Closed
 
 **Type**
 
@@ -137,4 +139,6 @@ behavior actually being asked for here.
 ---
 
 ## Closed
+
+2026-08-29
 

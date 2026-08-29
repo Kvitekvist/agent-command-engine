@@ -2,7 +2,9 @@
 
 **Status**
 
-Open
+Closed
+
+Closed
 
 **Type**
 
@@ -71,4 +73,6 @@ this environment).
 ---
 
 ## Closed
+
+2026-08-29
 
