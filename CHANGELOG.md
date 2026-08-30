@@ -10,6 +10,9 @@
 ### Changed
 
 ### Removed
+- Dead `agents:changeModel` scaffolding (unfinished, never wired to any UI).
+  TICKET-0031 (change a running agent's model in place) is closed as won't
+  solve — each card is a live PTY, not a swappable headless session
 - The **Audit Log** view and **Token Optimization Advisor**, plus the
   Load Balancing settings section. All three read ACE's `prompts` table,
   which interactive PTY terminals stopped populating in TICKET-0019, so they

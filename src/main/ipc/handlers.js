@@ -97,35 +97,6 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return result
   })
 
-  // TICKET-0031: Change model on a running agent by stopping and restarting
-  // with the new model while preserving identity
-  ipcMain.handle('agents:changeModel', async (_, { agentId, projectPath, newModel }) => {
-    const allProjects = DB.getProjects()
-    const agents = allProjects.flatMap(p => DB.getAgentsByProject(p.id))
-    const agent = agents.find(a => a.id === agentId)
-    if (!agent) throw new Error('Agent not found')
-
-    // Stop the current session
-    await AgentSvc.stop(agentId)
-
-    // Update model in DB
-    DB.updateAgentModel(agentId, newModel)
-
-    // Restart with new model using existing agent ID
-    const result = AgentSvc.start({
-      projectId: agent.project_id,
-      projectPath,
-      label: agent.label,
-      provider: agent.provider,
-      model: newModel,
-      permissionMode: agent.permission_mode,
-      agentId,
-    })
-
-    DB.updateAgentStatus(agentId, 'running')
-    return result
-  })
-
   // Re-register agents persisted from a previous run (app reopened, or the
   // project was reselected) so their history + session can be resumed.
   ipcMain.handle('agents:restore', (_, { id, project_id, projectPath, label, provider, model, permission_mode, session_id }) => {

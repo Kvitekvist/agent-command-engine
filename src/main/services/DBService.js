@@ -184,8 +184,6 @@ const DBService = {
   // agent_sessions' own snapshotted label (see its comment above), by design.
   updateAgentLabel: (id, label) =>
     prepare('UPDATE agents SET label = ?, title_set = 1 WHERE id = ?').run(label, id),
-  updateAgentModel: (id, model) =>
-    prepare('UPDATE agents SET model = ? WHERE id = ?').run(model, id),
   // Removes the agent row only. Per-session token history lives in
   // `agent_sessions` (TICKET-0044), keyed by project, and is kept.
   deleteAgent: (id) =>

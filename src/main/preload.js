@@ -22,8 +22,6 @@ contextBridge.exposeInMainWorld('ace', {
   // TICKET-0070: auto-title -- renames the card label from the user's first
   // submitted terminal line.
   updateAgentLabel: (agentId, label) => ipcRenderer.invoke('agents:updateLabel', agentId, label),
-  // TICKET-0031: change model on a running agent
-  changeAgentModel: (agentId, projectPath, newModel) => ipcRenderer.invoke('agents:changeModel', { agentId, projectPath, newModel }),
   // TICKET-0070 (follow-up): headless call that turns a raw first line into
   // a short, meaningful title. Resolves { title: null } on any failure --
   // never rejects -- so callers can just keep their fallback title.
