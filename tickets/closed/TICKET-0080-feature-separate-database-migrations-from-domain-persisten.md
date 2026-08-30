@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -53,5 +53,7 @@ DBService combines schema lifecycle, migrations, and all repository operations, 
 ---
 
 ## Closed
+
+2026-08-30 — Won't do. Speculative split of a 333-line DBService. FK enforcement + backups are worth a small dedicated ticket if wanted, not this refactor. (Backlog triage 2026-08-30.)
 
 ---

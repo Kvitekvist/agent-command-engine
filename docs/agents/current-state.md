@@ -10,13 +10,20 @@
 - Runtime: Electron main process, React renderer, preload IPC bridge, and a
   forked PTY host.
 - Test/build: from `src/`, `npm test` and `npm run build`. CI runs
-  `bash scripts/run_tests.sh`. Last full run: 69 passed, 1 skipped
+  `bash scripts/run_tests.sh`. Last full run: 58 passed, 1 skipped
   (POSIX-only), 0 failed.
 
 ## Active priorities
 
-1. Complete the modularity and agent-guidance work tracked by TICKET-0072
-   through TICKET-0081, and the routing work in TICKET-0093.
+1. The 2026-08-30 backlog triage closed the pure-decomposition refactors
+   (TICKET-0074, 0076, 0077, 0078, 0080) and two speculative features
+   (TICKET-0087, 0090) as won't-do — they added files without behaviour for
+   an app this size. Remaining structural work is TICKET-0075 (only its
+   security half: validate IPC senders, resolve project paths in main) and
+   TICKET-0079 (main-owned session lifecycle). Do not reopen the closed
+   refactors without a concrete pain point. TICKET-0083 closed by removing
+   the dead `prompts`-table analytics (Audit Log, Optimization Advisor, Load
+   Balancing heuristic) rather than rebuilding them.
 2. Preserve the existing manual-verification backlog while making changes.
    Several tickets are implemented and committed but await a live check;
    consult the relevant open ticket before changing terminal, screenshot,

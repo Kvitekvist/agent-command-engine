@@ -220,10 +220,13 @@ export default function AgentView() {
 // terminal) handles all of that.
 
 function AgentPane({ agent, onClose }) {
+  const { activeProject } = useStore()
   const [screenshotMsg, setScreenshotMsg] = useState(null)
   const screenshotMsgTimer = useRef(null)
 
   const [capturing, setCapturing] = useState(false)
+  const [changingModel, setChangingModel] = useState(false)
+  const [showModelSelector, setShowModelSelector] = useState(false)
 
   // TICKET-0034 (reworked from TICKET-0032's clipboard-paste model): hides
   // the app, lets the user drag-select a region of the primary display, and

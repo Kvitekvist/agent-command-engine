@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -58,5 +58,7 @@ Depends on the session model in TICKET-0079 and benefits from worktree isolation
 in TICKET-0082.
 
 ## Closed
+
+2026-08-30 — Won't do. Large speculative feature (global command center) stacked on 0079 + 0082. No demand; revisit only if multi-project coordination becomes a real pain point. (Backlog triage 2026-08-30.)
 
 ---

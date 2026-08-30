@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -50,5 +50,7 @@ Split the monolithic Electron IPC registration module into domain-specific handl
 ---
 
 ## Closed
+
+2026-08-30 — Won't do. Speculative decomposition of a 717-line working IPC module. No behavioural gain for an app this size; adds files and indirection. (Backlog triage 2026-08-30.)
 
 ---

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import useStore from './store/useStore'
 import Sidebar from './components/Sidebar'
 import AgentView from './views/AgentView'
-import AuditView from './views/AuditView'
 import TokenView from './views/TokenView'
 import SettingsView from './views/SettingsView'
 import EditorView from './views/EditorView'
@@ -111,7 +110,7 @@ export default function App() {
       if (dismissed === 'true') { setSetupChecked(true); return }
       try {
         const result = await window.ace.prereqs.check()
-        setShowSetup(!result.claude?.present || !result.codex?.present)
+        setShowSetup(!result.claude?.present || !result.codex?.present || !result.git?.present)
       } finally {
         setSetupChecked(true)
       }
@@ -146,7 +145,6 @@ export default function App() {
         <div className={activeView === 'agents' ? 'h-full' : 'hidden'}>
           <AgentView />
         </div>
-        {activeView === 'audit'     && <AuditView />}
         {activeView === 'processes' && <ProcessesView />}
         {activeView === 'tokens'    && <TokenView />}
         {activeView === 'settings'  && <SettingsView />}

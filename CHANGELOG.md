@@ -6,6 +6,15 @@
 
 ### Changed
 
+### Removed
+- The **Audit Log** view and **Token Optimization Advisor**, plus the
+  Load Balancing settings section. All three read ACE's `prompts` table,
+  which interactive PTY terminals stopped populating in TICKET-0019, so they
+  only ever showed stale or empty data. The `prompts` table is dropped on
+  next launch; the headless `agents:sendPrompt` / `agents:clearContext` IPC
+  and `AgentService.sendPrompt` engine that fed it are gone. "Auto" provider
+  routing now always resolves to Claude (TICKET-0083)
+
 ### Fixed
 
 ## [0.1.23] - 2026-08-29

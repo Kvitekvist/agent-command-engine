@@ -5,7 +5,7 @@ const useStore = create((set, get) => ({
   // Default is 'tokens' (TICKET-0022) -- the live usage dashboard is
   // project-independent and useful the instant the app opens, unlike
   // 'agents' which needs a project selected first.
-  activeView: 'tokens', // 'agents' | 'audit' | 'processes' | 'tokens' | 'settings' | 'editor'
+  activeView: 'tokens', // 'agents' | 'processes' | 'tokens' | 'settings' | 'editor'
   setActiveView: (view) => set({ activeView: view }),
 
   // ── Projects ───────────────────────────────────────────────────────────────
@@ -90,10 +90,6 @@ const useStore = create((set, get) => ({
       agents: s.agents.map((a) => a.agentId === agentId ? { ...a, label } : a),
     })),
 
-  // ── Audit log ──────────────────────────────────────────────────────────────
-  auditPrompts: [],
-  setAuditPrompts: (prompts) => set({ auditPrompts: prompts }),
-
   // ── Token stats ────────────────────────────────────────────────────────────
   tokenStats: [],
   setTokenStats: (stats) => set({ tokenStats: stats }),
@@ -113,10 +109,6 @@ const useStore = create((set, get) => ({
     const usage = await window.ace.getLiveTokenUsage()
     set({ liveUsage: usage, liveUsageLoading: false })
   },
-
-  // ── Optimization advisor ───────────────────────────────────────────────────
-  optimizationResult: null,
-  setOptimizationResult: (result) => set({ optimizationResult: result }),
 
   // ── Settings ───────────────────────────────────────────────────────────────
   defaultModel: 'claude-sonnet-5',

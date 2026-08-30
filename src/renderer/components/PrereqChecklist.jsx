@@ -35,6 +35,7 @@ export default function PrereqChecklist() {
   }
 
   const nodeReady = !!(status?.node?.present && status?.npm?.present)
+  const gitReady = !!status?.git?.present
 
   return (
     <div>
@@ -53,6 +54,26 @@ export default function PrereqChecklist() {
           ) : (
             <button className="btn-ghost text-xs" onClick={() => window.ace.prereqs.openNodeDownload()}>
               Download Node.js ↗
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 py-2 border-b border-border">
+        <div>
+          <div className="text-sm text-gray-200">Git</div>
+          <div className="text-xs text-muted">
+            {gitReady
+              ? status.git.version
+              : 'Not found — used for project git-init and the ticket → branch → PR workflow'}
+          </div>
+        </div>
+        <div className="shrink-0">
+          {gitReady ? (
+            <span className="badge-green">✓ Installed</span>
+          ) : (
+            <button className="btn-ghost text-xs" onClick={() => window.ace.prereqs.openGitDownload()}>
+              Download Git ↗
             </button>
           )}
         </div>

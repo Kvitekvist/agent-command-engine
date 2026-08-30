@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -51,5 +51,7 @@ The component currently owns PTY setup, clipboard access, titles, build capabili
 ---
 
 ## Closed
+
+2026-08-30 — Won't do. Speculative extraction from a 466-line working component. No behavioural gain. (Backlog triage 2026-08-30.)
 
 ---

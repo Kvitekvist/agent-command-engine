@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -50,5 +50,7 @@ Agent lifecycle coordination is coupled to four independently testable responsib
 ---
 
 ## Closed
+
+2026-08-30 — Won't do. Speculative decomposition of a 560-line working service. No behavioural gain; coordinator size is manageable. (Backlog triage 2026-08-30.)
 
 ---

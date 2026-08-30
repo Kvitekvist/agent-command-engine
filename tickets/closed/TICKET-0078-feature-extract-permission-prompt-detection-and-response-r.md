@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -47,5 +47,7 @@ PTY session transport and provider-specific approval interaction have separate r
 ---
 
 ## Closed
+
+2026-08-30 — Won't do. Speculative extraction from ptyHost. The permission-response logic is small and has one caller; splitting it earns nothing. (Backlog triage 2026-08-30.)
 
 ---

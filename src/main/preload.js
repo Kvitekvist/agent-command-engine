@@ -22,12 +22,12 @@ contextBridge.exposeInMainWorld('ace', {
   // TICKET-0070: auto-title -- renames the card label from the user's first
   // submitted terminal line.
   updateAgentLabel: (agentId, label) => ipcRenderer.invoke('agents:updateLabel', agentId, label),
+  // TICKET-0031: change model on a running agent
+  changeAgentModel: (agentId, projectPath, newModel) => ipcRenderer.invoke('agents:changeModel', { agentId, projectPath, newModel }),
   // TICKET-0070 (follow-up): headless call that turns a raw first line into
   // a short, meaningful title. Resolves { title: null } on any failure --
   // never rejects -- so callers can just keep their fallback title.
   generateTitle: (prompt, cwd, provider) => ipcRenderer.invoke('agents:generateTitle', { prompt, cwd, provider }),
-  clearContext: (agentId) => ipcRenderer.invoke('agents:clearContext', agentId),
-  sendPrompt: (agentId, prompt) => ipcRenderer.invoke('agents:sendPrompt', agentId, prompt),
   // TICKET-0044: record which CLI session id an agent launched with, so the
   // Token Usage "By Agent" breakdown can map tokscale sessions to agent names.
   recordAgentSession: (payload) => ipcRenderer.invoke('agents:recordSession', payload),
@@ -35,21 +35,13 @@ contextBridge.exposeInMainWorld('ace', {
   // Processes
   getProcesses: () => ipcRenderer.invoke('processes:list'),
 
-  // Audit log
-  getPrompts: (filters) => ipcRenderer.invoke('prompts:get', filters),
-  getPromptById: (id) => ipcRenderer.invoke('prompts:getById', id),
-
   // Token stats
-  getTokenStats: (filters) => ipcRenderer.invoke('tokens:getStats', filters),
   getProjectHistory: (projectId, projectPath) => ipcRenderer.invoke('tokens:getProjectHistory', { projectId, projectPath }),
   getLiveTokenUsage: () => ipcRenderer.invoke('tokens:getLiveUsage'),
 
   // Settings
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
-
-  // Optimization advisor
-  getOptimizationAdvice: (projectId) => ipcRenderer.invoke('optimize:analyze', projectId),
 
   // File explorer / editor (TICKET-0021)
   fs: {
@@ -87,6 +79,7 @@ contextBridge.exposeInMainWorld('ace', {
     check: () => ipcRenderer.invoke('prereqs:check'),
     install: (name) => ipcRenderer.invoke('prereqs:install', name),
     openNodeDownload: () => ipcRenderer.invoke('prereqs:openNodeDownload'),
+    openGitDownload: () => ipcRenderer.invoke('prereqs:openGitDownload'),
   },
 
   // Terminal
@@ -112,14 +105,9 @@ contextBridge.exposeInMainWorld('ace', {
     },
   },
 
-  // Events from main -> renderer
-  onAgentOutput:            (cb) => ipcRenderer.on('agent:output',             (_, d) => cb(d)),
+  // Events from main -> renderer. AgentService emits 'agent:status' on
+  // start/stop so the renderer can add or update the agent's card; the live
+  // conversation itself runs in the PTY terminal (AgentTerminal.jsx), not here.
   onAgentStatus:            (cb) => ipcRenderer.on('agent:status',             (_, d) => cb(d)),
-  onAgentPromptDone:        (cb) => ipcRenderer.on('agent:prompt-done',        (_, d) => cb(d)),
-  onAgentToolUse:           (cb) => ipcRenderer.on('agent:tool-use',           (_, d) => cb(d)),
-
-  offAgentOutput:            () => ipcRenderer.removeAllListeners('agent:output'),
   offAgentStatus:            () => ipcRenderer.removeAllListeners('agent:status'),
-  offAgentPromptDone:        () => ipcRenderer.removeAllListeners('agent:prompt-done'),
-  offAgentToolUse:           () => ipcRenderer.removeAllListeners('agent:tool-use'),
 })

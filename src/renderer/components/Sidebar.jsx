@@ -6,7 +6,6 @@ import Modal from './Modal'
 const NAV = [
   { id: 'agents',    icon: '⚡', label: 'Agents' },
   { id: 'processes', icon: '🔧', label: 'Processes' },
-  { id: 'audit',     icon: '📋', label: 'Audit Log' },
   { id: 'tokens',    icon: '📊', label: 'Token Usage' },
   { id: 'settings',  icon: '⚙️',  label: 'Settings' },
 ]

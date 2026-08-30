@@ -24,7 +24,8 @@ export default function TokenView() {
 
   // TICKET-0044: "History (this project)" now reads real per-session usage
   // from tokscale (via getProjectHistory), scoped to the active project's
-  // workspace, instead of ACE's own `prompts` table (dead since TICKET-0019).
+  // workspace, instead of ACE's own `prompts` table (dead since TICKET-0019,
+  // removed in TICKET-0083).
   // `tokenStats` holds the normalized row list the main process returns.
   async function load() {
     if (!activeProject) { setTokenStats([]); return }
@@ -88,8 +89,7 @@ export default function TokenView() {
     <div className="p-5 space-y-6 overflow-y-auto h-full">
       {/* Live usage (TICKET-0022) -- real subscription quota + today's
           usage straight from tokscale, independent of ACE's own project
-          selection or `prompts` DB table (see architecture.md Token
-          Tracking for why that table no longer fills in on its own). */}
+          selection (the old `prompts` DB table was removed in TICKET-0083). */}
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold">Usage</h2>
         <button onClick={loadLiveUsage} className="btn-ghost text-xs">↻ Refresh</button>
@@ -103,7 +103,7 @@ export default function TokenView() {
         </div>
       )}
 
-      {/* Historical (this project, from ACE's own audit log) */}
+      {/* Historical (this project, from tokscale's session records) */}
       <div className="flex items-center justify-between pt-2 border-t border-border">
         <div>
           <h2 className="text-base font-semibold mt-4">History (this project)</h2>

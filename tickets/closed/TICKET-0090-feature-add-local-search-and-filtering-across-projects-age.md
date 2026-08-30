@@ -2,7 +2,7 @@
 
 **Status**
 
-Open
+Closed
 
 **Type**
 
@@ -55,5 +55,7 @@ are insufficient for locating prior decisions, failures, or completed work.
 Depends on TICKET-0083 and TICKET-0080.
 
 ## Closed
+
+2026-08-30 — Won't do. YAGNI. No corpus to search yet; stacked on 0083 + 0080. Revisit when history volume actually makes card-scanning insufficient. (Backlog triage 2026-08-30.)
 
 ---

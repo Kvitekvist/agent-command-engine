@@ -1,95 +1,6 @@
 const { spawn } = require('child_process')
 const { randomUUID } = require('crypto')
 const { EventEmitter } = require('events')
-const { TokscaleService } = require('./TokscaleService')
-
-// Parses token counts from Claude CLI JSON output lines. Only the final
-// 'result' event's usage is read — it's the authoritative total for the
-// whole turn. Intermediate 'assistant' events carry their own partial usage
-// too, so counting both would double (or triple, with multi-step tool use)
-// count the same tokens.
-function parseTokens(line) {
-  try {
-    const obj = JSON.parse(line)
-    if (obj.type === 'result' && obj.usage) {
-      return { input: obj.usage.input_tokens || 0, output: obj.usage.output_tokens || 0 }
-    }
-  } catch (_) {}
-  return null
-}
-
-// Diffs tokscale's cumulative session usage against the last-seen baseline
-// to get this turn's actual delta (cache tokens + real cost included),
-// clamped to 0 in case tokscale's own numbers ever settle backwards between
-// calls (e.g. a cache/index rebuild) rather than surfacing a negative delta.
-function computeTokscaleDelta(usage, baseline) {
-  return {
-    input: Math.max(0, usage.inputTokens - baseline.inputTokens),
-    output: Math.max(0, usage.outputTokens - baseline.outputTokens),
-    cacheRead: Math.max(0, usage.cacheReadTokens - baseline.cacheReadTokens),
-    cacheCreation: Math.max(0, usage.cacheCreationTokens - baseline.cacheCreationTokens),
-    cost: Math.max(0, usage.costUsd - baseline.costUsd),
-  }
-}
-
-// Extracts the Claude CLI session id (present on every stream-json event) so
-// we can pass --resume on the next turn and keep conversation context.
-function parseSessionId(line) {
-  try {
-    const obj = JSON.parse(line)
-    return obj.session_id || null
-  } catch (_) {}
-  return null
-}
-
-// Extracts human-readable text from stream-json lines
-function parseText(line) {
-  try {
-    const obj = JSON.parse(line)
-    if (obj.type === 'content_block_delta' && obj.delta?.type === 'text_delta') {
-      return obj.delta.text
-    }
-    if (obj.type === 'result' && obj.result) {
-      return obj.result
-    }
-  } catch (_) {}
-  return null
-}
-
-// Extracts tool use info from stream-json lines (for displaying what Claude is doing)
-function parseToolUse(line) {
-  try {
-    const obj = JSON.parse(line)
-    // Tool use appears in assistant messages
-    if (obj.type === 'assistant' && obj.message?.content) {
-      for (const block of obj.message.content) {
-        if (block.type === 'tool_use') {
-          return { tool: block.name, input: block.input }
-        }
-      }
-    }
-    // Also appears as content_block_start with tool_use type
-    if (obj.type === 'content_block_start' && obj.content_block?.type === 'tool_use') {
-      return { tool: obj.content_block.name, input: null }
-    }
-  } catch (_) {}
-  return null
-}
-
-// Claude CLI's --print mode is fully headless: it can't pause mid-turn to ask
-// a human for approval, so risky tool calls are just denied outright. The
-// final 'result' event lists exactly what got denied — surface those to the
-// renderer as clear, unambiguous messages instead of leaving the model to
-// (sometimes vaguely) narrate that it's "stuck".
-function parsePermissionDenials(line) {
-  try {
-    const obj = JSON.parse(line)
-    if (obj.type === 'result' && Array.isArray(obj.permission_denials)) {
-      return obj.permission_denials
-    }
-  } catch (_) {}
-  return null
-}
 
 // Per-mode static tool policy. Claude CLI's headless mode has no live
 // approval flow, so "asking" isn't possible — these are fixed allow/deny
@@ -143,10 +54,6 @@ function buildChildEnv() {
     if (/^CLAUDE/i.test(key)) delete env[key]
   }
   return env
-}
-
-function createExecutionId() {
-  return randomUUID()
 }
 
 // TICKET-0070 (follow-up): title generation is a short, high-volume task, so
@@ -217,15 +124,15 @@ class AgentService extends EventEmitter {
   start({ projectId, projectPath, label, provider = 'claude', model = 'claude-sonnet-5', permissionMode = 'safe' }) {
     const agentId = randomUUID()
     const meta = { agentId, projectId, projectPath, label, provider, model, permissionMode, startedAt: Date.now() }
-    this.agents.set(agentId, { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: null, tokscaleBaseline: null })
+    this.agents.set(agentId, { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: null })
     this._emit('agent:status', { agentId, status: 'running', meta })
     return { agentId, meta }
   }
 
   // Re-register an agent that was persisted in a previous run (app reopened,
-  // or the project was reselected) so it can keep accepting prompts. No
-  // process is spawned here — sendPrompt spawns one per turn as usual,
-  // resuming the stored session id so conversation context carries over.
+  // or the project was reselected) so the lifecycle handlers (stop, delete,
+  // getRunning) recognise it again. The live conversation runs in the
+  // renderer's PTY-backed terminal (AgentTerminal.jsx), not here.
   //
   // Deliberately does NOT emit 'agent:status' — the caller (the project
   // selection flow) adds it to the UI directly from the returned meta, since
@@ -235,210 +142,8 @@ class AgentService extends EventEmitter {
   restore({ agentId, projectId, projectPath, label, provider, model, permissionMode, sessionId }) {
     if (this.agents.has(agentId)) return { agentId, meta: this.agents.get(agentId).meta }
     const meta = { agentId, projectId, projectPath, label, provider, model, permissionMode, startedAt: Date.now() }
-    const agent = { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: sessionId || null, tokscaleBaseline: null }
-    this.agents.set(agentId, agent)
-    // Best-effort, non-blocking: without this, the first turn after a restore
-    // would diff against a null baseline and see the *entire* session's
-    // pre-restore usage as if it all belonged to that one turn.
-    if (sessionId && provider === 'claude') {
-      this._seedTokscaleBaseline(agent).catch(() => {})
-    }
+    this.agents.set(agentId, { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: sessionId || null })
     return { agentId, meta }
-  }
-
-  async _seedTokscaleBaseline(agent) {
-    const usageMap = await TokscaleService.getUsageMap([agent.meta.provider])
-    const usage = usageMap.get(`${agent.meta.provider}:${agent.sessionId}`)
-    if (usage && !agent.tokscaleBaseline) agent.tokscaleBaseline = usage
-  }
-
-  sendPrompt(agentId, prompt) {
-    const agent = this.agents.get(agentId)
-    if (!agent) return { error: 'Agent not found' }
-
-    if (agent.activeProc) {
-      return { error: 'This agent is already processing a prompt' }
-    }
-
-    const { meta } = agent
-    const executionId = createExecutionId()
-
-    let args
-    if (meta.provider === 'claude') {
-      args = ['--print', '--output-format', 'stream-json', '--verbose', '--model', meta.model]
-      args.push(...buildPermissionArgs(meta.permissionMode))
-
-      // Each turn spawns a new process, so resume the prior turn's session
-      // (by id) to keep conversation context — otherwise every message
-      // starts from a blank slate.
-      if (agent.sessionId) {
-        args.push('--resume', agent.sessionId)
-      }
-    } else {
-      // TICKET-0020: `codex exec` is the real Codex CLI's non-interactive
-      // subcommand (analogous to Claude's --print); --json is its JSONL
-      // event-stream equivalent of --output-format stream-json. Note: the
-      // stdout parsers below (parseTokens/parseText/parseToolUse/etc.) are
-      // shaped for Claude's stream-json schema and won't correctly
-      // interpret Codex's own event schema yet — this fixes the process
-      // actually starting, not full response/token parsing for it.
-      args = ['exec', '--model', meta.model, '--json', ...buildCodexArgs(meta.permissionMode)]
-    }
-
-    const proc = spawn(meta.provider === 'claude' ? 'claude' : 'codex', args, {
-      cwd: meta.projectPath,
-      // Windows CLI installations are commonly .cmd shims and require a shell.
-      // Arguments are selected by the application; prompt text is sent over stdin.
-      shell: process.platform === 'win32',
-      env: buildChildEnv(),
-      windowsHide: true,
-    })
-
-    agent.activeProc = proc
-
-    // agent.inputTokens/outputTokens are lifetime totals (surfaced in the
-    // "Tokens — in/out" summary shown when the agent is stopped). Snapshot
-    // them here so the DB row for *this* prompt only gets this turn's delta,
-    // not the running lifetime total.
-    const turnStartInput = agent.inputTokens
-    const turnStartOutput = agent.outputTokens
-
-    proc.stdin.write(prompt)
-    proc.stdin.end()
-
-    let textBuffer = ''
-
-    // stdout arrives as arbitrary-sized chunks, not one-line-per-chunk — a
-    // single JSON line (especially the final 'result' line, which carries
-    // the whole response text + token usage and is often the largest line
-    // in the stream) can be split across two 'data' events. Without
-    // buffering the trailing partial line across chunks, JSON.parse fails
-    // silently on both fragments and that line's data is lost entirely.
-    let lineBuffer = ''
-
-    const processLine = (trimmed) => {
-      if (!trimmed) return
-
-      const sessionId = parseSessionId(trimmed)
-      if (sessionId) {
-        agent.sessionId = sessionId
-      }
-
-      const tokens = parseTokens(trimmed)
-      if (tokens) {
-        agent.inputTokens += tokens.input
-        agent.outputTokens += tokens.output
-      }
-
-      const toolUse = parseToolUse(trimmed)
-      if (toolUse) {
-        this._emit('agent:tool-use', { agentId, tool: toolUse.tool, input: toolUse.input })
-      }
-
-      const denials = parsePermissionDenials(trimmed)
-      if (denials && denials.length) {
-        for (const d of denials) {
-          const cmd = d.tool_input?.command || d.tool_input?.file_path || ''
-          const text = `⛔ Blocked by permission policy: ${d.tool_name}${cmd ? ' — ' + cmd : ''}`
-          this._emit('agent:output', { agentId, text: '\n' + text, stream: 'permission-denied' })
-        }
-      }
-
-      const text = parseText(trimmed)
-      if (text) {
-        textBuffer += text
-        this._emit('agent:output', { agentId, text, stream: 'text' })
-      }
-    }
-
-    proc.stdout.on('data', (data) => {
-      lineBuffer += data.toString()
-      const lines = lineBuffer.split('\n')
-      lineBuffer = lines.pop() // keep the last (possibly incomplete) line for the next chunk
-      for (const line of lines) processLine(line.trim())
-    })
-
-    proc.stderr.on('data', (data) => {
-      const msg = data.toString()
-      if (msg.includes('Warning:') || msg.includes('API key') || !msg.trim()) return
-      this._emit('agent:output', { agentId, text: `⚠ ${msg}`, stream: 'stderr' })
-    })
-
-    let finished = false
-    const finish = (code, error = null) => {
-      if (finished) return
-      finished = true
-      if (lineBuffer.trim()) {
-        processLine(lineBuffer.trim())
-        lineBuffer = ''
-      }
-      if (agent.activeProc === proc) {
-        agent.activeProc = null
-      }
-      const stdoutDelta = {
-        input: agent.inputTokens - turnStartInput,
-        output: agent.outputTokens - turnStartOutput,
-      }
-      this._emit('agent:prompt-done', {
-        agentId,
-        executionId,
-        exitCode: code,
-        error: error ? error.message : null,
-        response: textBuffer,
-        tokens: stdoutDelta,
-        sessionId: agent.sessionId,
-      })
-      // Fire-and-forget: corrects the numbers above (adds cache tokens + real
-      // cost, sourced from tokscale reading Claude's own session transcript)
-      // once it resolves a moment later, instead of delaying the response
-      // the user is waiting on. Claude only — see class doc on sessionId.
-      this._reconcileTokens(agent, agentId, executionId, stdoutDelta).catch(() => {})
-    }
-
-    proc.on('error', (error) => {
-      this._emit('agent:output', {
-        agentId,
-        text: `Unable to start ${meta.provider}: ${error.message}`,
-        stream: 'stderr',
-      })
-      finish(null, error)
-    })
-
-    proc.on('close', (code) => finish(code))
-
-    return { ok: true, executionId }
-  }
-
-  // Reconciles one turn's stdout-parsed token estimate against tokscale's
-  // authoritative reading of the CLI's own session transcript. Only possible
-  // for providers where a stable session id is captured (Claude, via
-  // --resume/session_id) — codex is spawned stateless with no equivalent id
-  // to match a tokscale row against, so it's skipped rather than guessed at.
-  async _reconcileTokens(agent, agentId, executionId, stdoutDelta) {
-    if (!agent.sessionId || agent.meta.provider !== 'claude') return
-
-    const usageMap = await TokscaleService.getUsageMap([agent.meta.provider])
-    const usage = usageMap.get(`${agent.meta.provider}:${agent.sessionId}`)
-    if (!usage) return
-
-    const baseline = agent.tokscaleBaseline || {
-      inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0,
-    }
-    const delta = computeTokscaleDelta(usage, baseline)
-    agent.tokscaleBaseline = usage
-
-    // The lifetime counters already absorbed stdoutDelta when this turn's
-    // stdout lines were parsed — correct them to the accurate figure instead
-    // of double-counting.
-    agent.inputTokens += delta.input - stdoutDelta.input
-    agent.outputTokens += delta.output - stdoutDelta.output
-
-    this._emit('agent:tokens-reconciled', {
-      agentId,
-      executionId,
-      tokens: { input: delta.input, output: delta.output, cacheRead: delta.cacheRead, cacheCreation: delta.cacheCreation },
-      costUsd: delta.cost,
-    })
   }
 
   // TICKET-0070 (follow-up): turns the user's raw first-submitted line into a
@@ -499,24 +204,6 @@ class AgentService extends EventEmitter {
     })
   }
 
-  // Drop the resumed session so the next prompt starts a brand-new conversation
-  clearContext(agentId) {
-    const agent = this.agents.get(agentId)
-    if (!agent) return { error: 'Agent not found' }
-
-    if (agent.activeProc) {
-      try { agent.activeProc.kill('SIGTERM') } catch (_) {}
-      agent.activeProc = null
-    }
-    agent.sessionId = null
-    agent.inputTokens = 0
-    agent.outputTokens = 0
-    agent.tokscaleBaseline = null
-
-    this._emit('agent:context-cleared', { agentId })
-    return { ok: true }
-  }
-
   stop(agentId) {
     const agent = this.agents.get(agentId)
     if (!agent) return
@@ -547,14 +234,8 @@ class AgentService extends EventEmitter {
 module.exports = {
   AgentService: new AgentService(),
   AgentServiceClass: AgentService,
-  computeTokscaleDelta,
   buildPermissionArgs,
   buildCodexArgs,
   buildTitleCommand,
-  parsePermissionDenials,
-  parseSessionId,
-  parseText,
-  parseTokens,
-  parseToolUse,
   sanitizeTitle,
 }

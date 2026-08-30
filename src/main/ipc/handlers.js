@@ -1,6 +1,5 @@
 const { app, dialog, shell } = require('electron')
 const { resolveLaunchPolicy } = require('../services/LaunchPolicy')
-const { OptimizationAdvisor } = require('../services/OptimizationAdvisor')
 const { FileService } = require('../services/FileService')
 const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
 const { ScreenshotService } = require('../services/ScreenshotService')
@@ -98,6 +97,35 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return result
   })
 
+  // TICKET-0031: Change model on a running agent by stopping and restarting
+  // with the new model while preserving identity
+  ipcMain.handle('agents:changeModel', async (_, { agentId, projectPath, newModel }) => {
+    const allProjects = DB.getProjects()
+    const agents = allProjects.flatMap(p => DB.getAgentsByProject(p.id))
+    const agent = agents.find(a => a.id === agentId)
+    if (!agent) throw new Error('Agent not found')
+
+    // Stop the current session
+    await AgentSvc.stop(agentId)
+
+    // Update model in DB
+    DB.updateAgentModel(agentId, newModel)
+
+    // Restart with new model using existing agent ID
+    const result = AgentSvc.start({
+      projectId: agent.project_id,
+      projectPath,
+      label: agent.label,
+      provider: agent.provider,
+      model: newModel,
+      permissionMode: agent.permission_mode,
+      agentId,
+    })
+
+    DB.updateAgentStatus(agentId, 'running')
+    return result
+  })
+
   // Re-register agents persisted from a previous run (app reopened, or the
   // project was reselected) so their history + session can be resumed.
   ipcMain.handle('agents:restore', (_, { id, project_id, projectPath, label, provider, model, permission_mode, session_id }) => {
@@ -151,94 +179,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return { ok: true }
   })
 
-  // Only this action may wipe a persisted conversation.
-  ipcMain.handle('agents:clearContext', (_, agentId) => {
-    const result = AgentSvc.clearContext(agentId)
-    DB.clearAgentHistory(agentId)
-    return result
-  })
-
-  // Track each process invocation independently. Keying by execution rather
-  // than agent prevents an old close event from completing a newer prompt.
-  const inFlight = new Map()
-
-  ipcMain.handle('agents:sendPrompt', async (_, agentId, prompt) => {
-    const agent = AgentSvc.agents.get(agentId)
-    if (!agent) return { error: 'Agent not found' }
-
-    const startedAt = Date.now()
-
-    // Log prompt row immediately with zero tokens — updated on completion
-    const promptId = DB.logPrompt({
-      agent_id: agentId,
-      project_id: agent.meta.projectId,
-      task_label: agent.meta.label,
-      prompt_text: prompt,
-      response_text: null,
-      provider: agent.meta.provider,
-      model: agent.meta.model,
-      input_tokens: 0,
-      output_tokens: 0,
-      duration_ms: 0,
-    })
-    const result = AgentSvc.sendPrompt(agentId, prompt)
-    if (result.error) {
-      DB.updatePromptTokens(promptId, {
-        response_text: result.error,
-        input_tokens: 0,
-        output_tokens: 0,
-        duration_ms: Date.now() - startedAt,
-      })
-      return result
-    }
-    inFlight.set(result.executionId, { promptId, startedAt })
-    return result
-  })
-
-  // When a prompt completes, update the DB row with the fast stdout-parsed
-  // token counts + response. Kept in `inFlight` a while longer (instead of
-  // deleting here) so the async 'agent:tokens-reconciled' correction below
-  // — which lands a moment later, once tokscale resolves — still has the
-  // promptId to apply itself to.
-  AgentSvc.on('agent:prompt-done', (data) => {
-    if (data.sessionId) {
-      DB.updateAgentSession(data.agentId, data.sessionId)
-    }
-    const flight = inFlight.get(data.executionId)
-    if (!flight || flight.promptId == null) return
-    DB.updatePromptTokens(flight.promptId, {
-      response_text: data.response || data.error || null,
-      input_tokens: data.tokens?.input || 0,
-      output_tokens: data.tokens?.output || 0,
-      duration_ms: Date.now() - flight.startedAt,
-    })
-    // Reconciliation either lands or is skipped (e.g. codex, tokscale
-    // unavailable) well within this window; whichever happens first, the
-    // entry must not leak for the lifetime of the app.
-    setTimeout(() => inFlight.delete(data.executionId), 30_000)
-  })
-
-  // Corrects a prompt row's token/cost columns once TokscaleService's
-  // reconciliation resolves (see AgentService._reconcileTokens). Never fires
-  // for codex — it has no stable session id to reconcile against.
-  AgentSvc.on('agent:tokens-reconciled', (data) => {
-    const flight = inFlight.get(data.executionId)
-    if (!flight || flight.promptId == null) return
-    DB.updatePromptUsage(flight.promptId, {
-      input_tokens: data.tokens.input,
-      output_tokens: data.tokens.output,
-      cache_read_tokens: data.tokens.cacheRead,
-      cache_creation_tokens: data.tokens.cacheCreation,
-      cost_usd: data.costUsd,
-    })
-  })
-
-  // ── Audit log ───────────────────────────────────────────────────────────────
-  ipcMain.handle('prompts:get', (_, filters) => DB.getPrompts(filters || {}))
-  ipcMain.handle('prompts:getById', (_, id) => DB.getPromptById(id))
-
   // ── Token stats ─────────────────────────────────────────────────────────────
-  ipcMain.handle('tokens:getStats', (_, filters) => DB.getTokenStats(filters || {}))
 
   // TICKET-0044: "History (this project)" — real per-session usage for the
   // active project, straight from tokscale (the `prompts` table this used to
@@ -324,9 +265,6 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     DB.setSetting(key, value)
     return { ok: true }
   })
-
-  // ── Optimization advisor ────────────────────────────────────────────────────
-  ipcMain.handle('optimize:analyze', (_, projectId) => OptimizationAdvisor.analyze(projectId))
 
   // ── File explorer / editor (TICKET-0021) ────────────────────────────────────
   // `root` is always the requesting project's path (as the renderer already
@@ -579,6 +517,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     const checks = [
       { name: 'node', cmd: 'node', args: ['--version'], shell: false },
       { name: 'npm', cmd: 'npm', args: ['--version'], shell: true },
+      { name: 'git', cmd: 'git', args: ['--version'], shell: false },
       { name: 'claude', cmd: 'claude', args: ['--version'], shell: process.platform === 'win32' },
       { name: 'codex', cmd: 'codex', args: ['--version'], shell: process.platform === 'win32' },
     ]
@@ -627,6 +566,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   ipcMain.handle('prereqs:openNodeDownload', () => {
     shell.openExternal('https://nodejs.org')
+    return { ok: true }
+  })
+
+  ipcMain.handle('prereqs:openGitDownload', () => {
+    shell.openExternal('https://git-scm.com/downloads')
     return { ok: true }
   })
 
