@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- The left sidebar can be dragged wider (or narrower) by its right edge,
+  clamped to 180–600px; double-click the handle to reset. The chosen width
+  is remembered per machine (TICKET-0104)
 
 ### Changed
 

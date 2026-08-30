@@ -10,9 +10,37 @@ const NAV = [
   { id: 'settings',  icon: '⚙️',  label: 'Settings' },
 ]
 
+// TICKET-0104: draggable width, persisted per machine. 224px == the old w-56.
+const SIDEBAR_MIN = 180
+const SIDEBAR_MAX = 600
+const SIDEBAR_DEFAULT = 224
+const clampWidth = (n) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n))
+
 export default function Sidebar() {
   const { projects, activeProject, setProjects, setActiveProject, activeView, setActiveView, openFiles } = useStore()
   const [adding, setAdding] = useState(false)
+
+  const [width, setWidth] = useState(() => {
+    try {
+      const saved = parseInt(localStorage.getItem('ace:sidebarWidth'), 10)
+      return Number.isFinite(saved) ? clampWidth(saved) : SIDEBAR_DEFAULT
+    } catch (_) { return SIDEBAR_DEFAULT }
+  })
+
+  // The sidebar's left edge sits at viewport x=0, so clientX is the width.
+  function startResize(e) {
+    e.preventDefault()
+    const onMove = (ev) => setWidth(clampWidth(ev.clientX))
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      setWidth((w) => { try { localStorage.setItem('ace:sidebarWidth', String(w)) } catch (_) {} ; return w })
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'col-resize'
+  }
 
   // TICKET-0057: name comes from a real popup (Electron doesn't implement
   // window.prompt()), then the location comes from the native OS folder
@@ -90,7 +118,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-56 flex flex-col bg-panel border-r border-border h-full shrink-0">
+    <aside style={{ width }} className="relative flex flex-col bg-panel border-r border-border h-full shrink-0">
       {/* App title */}
       <div className="px-4 py-4 border-b border-border shrink-0">
         <div className="text-xs font-semibold tracking-widest text-muted uppercase">ACE</div>
@@ -205,6 +233,14 @@ export default function Sidebar() {
           </button>
         ))}
       </nav>
+
+      {/* TICKET-0104: drag the right edge to resize; double-click to reset. */}
+      <div
+        onMouseDown={startResize}
+        onDoubleClick={() => { setWidth(SIDEBAR_DEFAULT); try { localStorage.setItem('ace:sidebarWidth', String(SIDEBAR_DEFAULT)) } catch (_) {} }}
+        title="Drag to resize · double-click to reset"
+        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-accent/40 active:bg-accent/60"
+      />
     </aside>
   )
 }
