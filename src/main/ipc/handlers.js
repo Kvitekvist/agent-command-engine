@@ -5,20 +5,61 @@ const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleSer
 const { ScreenshotService } = require('../services/ScreenshotService')
 const { createProjectFromScaffold } = require('../services/ProjectScaffoldService')
 
+// TICKET-0075: the renderer hands main a filesystem path for every fs / git /
+// build / screenshot / agent-spawn call. Trusting that string verbatim lets a
+// compromised renderer aim those operations anywhere on disk. Resolve it
+// against main's own project records instead, and hand callers back the
+// canonical stored path rather than the renderer-supplied one.
+function resolveProjectRoot(DB, candidate) {
+  const path = require('path')
+  if (typeof candidate !== 'string' || !candidate.trim()) {
+    throw new Error('A project path is required')
+  }
+  const norm = (p) => {
+    const resolved = path.resolve(p)
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+  }
+  const wanted = norm(candidate)
+  const match = DB.getProjects().find((p) => norm(p.path) === wanted)
+  if (!match) throw new Error('Path is not a registered project')
+  return match.path
+}
+
+// TICKET-0075: these channels exist only for ACE's own top-level renderer.
+// The screenshot overlay uses its own per-window IPC; nothing else should
+// reach them. Reject any other sender (an injected iframe/webview) before a
+// handler runs.
+function assertAppSender(event) {
+  const frame = event.senderFrame
+  if (!frame || frame.parent) throw new Error('IPC sender not permitted')
+}
+
 function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keep window ref updated
   AgentSvc.setWindow(mainWindow)
   if (TerminalSvc) TerminalSvc.setWindow(mainWindow)
 
-  // ── Projects ────────────────────────────────────────────────────────────────
-  ipcMain.handle('projects:getAll', () => DB.getProjects())
+  // TICKET-0075: every invoke/send below goes through a sender check.
+  const handle = (channel, fn) =>
+    ipcMain.handle(channel, (event, ...args) => {
+      assertAppSender(event)
+      return fn(event, ...args)
+    })
+  const on = (channel, fn) =>
+    ipcMain.on(channel, (event, ...args) => {
+      try { assertAppSender(event) } catch (_) { return }
+      fn(event, ...args)
+    })
 
-  ipcMain.handle('projects:add', (_, name, folderPath) => {
+  // ── Projects ────────────────────────────────────────────────────────────────
+  handle('projects:getAll', () => DB.getProjects())
+
+  handle('projects:add', (_, name, folderPath) => {
     DB.addProject(name, folderPath)
     return DB.getProjects()
   })
 
-  ipcMain.handle('projects:remove', (_, id) => {
+  handle('projects:remove', (_, id) => {
     DB.removeProject(id)
     return DB.getProjects()
   })
@@ -28,7 +69,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // "Existing" flow calls this with no arg and gets the OS's own default.
   // createDirectory lets the user make a new subfolder from inside the
   // native dialog itself, standard on both Windows and Mac.
-  ipcMain.handle('projects:pickFolder', async (_, defaultPath) => {
+  handle('projects:pickFolder', async (_, defaultPath) => {
     const opts = { properties: ['openDirectory', 'createDirectory'] }
     if (defaultPath) opts.defaultPath = defaultPath
     const result = await dialog.showOpenDialog(opts)
@@ -47,7 +88,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // was placed) is the real on-disk "ACE folder" there instead. Cross-
   // platform by construction: path.dirname/app.getAppPath/app.getPath are
   // all already OS-agnostic, no separate Windows/Mac branches needed.
-  ipcMain.handle('projects:getDefaultParentDir', () => {
+  handle('projects:getDefaultParentDir', () => {
     try {
       const path = require('path')
       const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
@@ -63,7 +104,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // The scaffold lives inside ACE in development and is shipped as an
   // unpacked application resource, so project creation never depends on an
   // external machine-specific Template folder.
-  ipcMain.handle('projects:createNew', (_, { name, parentDir } = {}) => {
+  handle('projects:createNew', (_, { name, parentDir } = {}) => {
     const path = require('path')
     const scaffoldDir = app.isPackaged
       ? path.join(process.resourcesPath, 'project-template')
@@ -72,15 +113,16 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
 
   // ── Agents ──────────────────────────────────────────────────────────────────
-  ipcMain.handle('agents:getByProject', (_, projectId) => {
+  handle('agents:getByProject', (_, projectId) => {
     return DB.getAgentsByProject(projectId)
   })
 
-  ipcMain.handle('agents:start', (_, { projectId, projectPath, label, provider, model, permissionMode }) => {
+  handle('agents:start', (_, { projectId, projectPath, label, provider, model, permissionMode }) => {
+    const projectRoot = resolveProjectRoot(DB, projectPath)
     const launch = resolveLaunchPolicy({ provider, model, projectId })
     const resolvedMode = permissionMode || 'safe'
     const result = AgentSvc.start({
-      projectId, projectPath, label,
+      projectId, projectPath: projectRoot, label,
       provider: launch.provider,
       model: launch.model,
       permissionMode: resolvedMode,
@@ -99,11 +141,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // Re-register agents persisted from a previous run (app reopened, or the
   // project was reselected) so their history + session can be resumed.
-  ipcMain.handle('agents:restore', (_, { id, project_id, projectPath, label, provider, model, permission_mode, session_id }) => {
+  handle('agents:restore', (_, { id, project_id, projectPath, label, provider, model, permission_mode, session_id }) => {
     return AgentSvc.restore({
       agentId: id,
       projectId: project_id,
-      projectPath,
+      projectPath: resolveProjectRoot(DB, projectPath),
       label,
       provider,
       model,
@@ -114,7 +156,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // TICKET-0070: renames an agent's card label -- fired once, client-side,
   // from the first line the user submits into its terminal (auto-title).
-  ipcMain.handle('agents:updateLabel', (_, agentId, label) => {
+  handle('agents:updateLabel', (_, agentId, label) => {
     DB.updateAgentLabel(agentId, label)
     return { ok: true }
   })
@@ -122,12 +164,15 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // TICKET-0070 (follow-up): one-off headless call that turns the user's
   // first submitted line into a short, meaningful title. Best-effort --
   // AgentSvc.generateTitle never rejects, it resolves null on any failure.
-  ipcMain.handle('agents:generateTitle', async (_, { prompt, cwd, provider }) => {
-    const title = await AgentSvc.generateTitle(prompt, cwd, provider)
+  handle('agents:generateTitle', async (_, { prompt, cwd, provider }) => {
+    let projectRoot
+    try { projectRoot = resolveProjectRoot(DB, cwd) }
+    catch (_) { return { title: null } }
+    const title = await AgentSvc.generateTitle(prompt, projectRoot, provider)
     return { title }
   })
 
-  ipcMain.handle('agents:stop', (_, agentId) => {
+  handle('agents:stop', (_, agentId) => {
     AgentSvc.stop(agentId)
     DB.updateAgentStatus(agentId, 'stopped')
     return { ok: true }
@@ -135,7 +180,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // Removes an agent from the interface entirely. Stops the process first
   // (no-op if it's already stopped) so a delete can never orphan a subprocess.
-  ipcMain.handle('agents:delete', (_, agentId) => {
+  handle('agents:delete', (_, agentId) => {
     AgentSvc.stop(agentId)
     DB.deleteAgent(agentId)
     return { ok: true }
@@ -145,7 +190,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // launch (`claude --session-id <uuid>`) and reports it here so the Token
   // Usage tab's "By Agent" breakdown can join tokscale's per-session rows
   // back to real agent names. Fire-and-forget from the renderer's side.
-  ipcMain.handle('agents:recordSession', (_, payload) => {
+  handle('agents:recordSession', (_, payload) => {
     DB.recordAgentSession(payload || {})
     return { ok: true }
   })
@@ -160,9 +205,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // By Agent without any per-model or per-day tokscale calls. Sessions with no
   // recorded owner (Codex, or anything from before this shipped) are labelled
   // "Untracked". Returns a normalized, flat row list; the renderer aggregates.
-  ipcMain.handle('tokens:getProjectHistory', async (_, { projectId, projectPath } = {}) => {
-    if (!projectPath) return { rows: [] }
-    const workspaceKey = pathToWorkspaceKey(projectPath)
+  handle('tokens:getProjectHistory', async (_, { projectId, projectPath } = {}) => {
+    let projectRoot
+    try { projectRoot = resolveProjectRoot(DB, projectPath) }
+    catch (_) { return { rows: [] } }
+    const workspaceKey = pathToWorkspaceKey(projectRoot)
     const sessionRows = await TokscaleService.getWorkspaceReport(workspaceKey, ['claude', 'codex'])
     const ownerMap = projectId ? DB.getAgentSessionMap(projectId) : {}
 
@@ -195,7 +242,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // no longer populates. Quota and today's breakdown are fetched
   // independently so one provider being logged out, or one call failing,
   // doesn't blank out the other.
-  ipcMain.handle('tokens:getLiveUsage', async () => {
+  handle('tokens:getLiveUsage', async () => {
     const clients = ['claude', 'codex']
     const result = {}
     for (const c of clients) result[c] = { plan: null, quota: [], models: [], projects: [], totalTokens: 0, totalCost: 0 }
@@ -231,67 +278,68 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
 
   // ── Settings ────────────────────────────────────────────────────────────────
-  ipcMain.handle('settings:get', (_, key) => DB.getSetting(key))
-  ipcMain.handle('settings:set', (_, key, value) => {
+  handle('settings:get', (_, key) => DB.getSetting(key))
+  handle('settings:set', (_, key, value) => {
     DB.setSetting(key, value)
     return { ok: true }
   })
 
   // ── File explorer / editor (TICKET-0021) ────────────────────────────────────
-  // `root` is always the requesting project's path (as the renderer already
-  // knows it) -- FileService refuses any resolved path that falls outside it.
-  ipcMain.handle('fs:readDir', (_, { root, dirPath }) => {
+  // `root` comes from the renderer but is only honoured if it matches one of
+  // main's registered project paths (TICKET-0075); FileService then refuses
+  // any resolved file path that falls outside it.
+  handle('fs:readDir', (_, { root, dirPath }) => {
     try {
-      return { ok: true, entries: FileService.readDir(root, dirPath) }
+      return { ok: true, entries: FileService.readDir(resolveProjectRoot(DB, root), dirPath) }
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('fs:readFile', (_, { root, filePath }) => {
+  handle('fs:readFile', (_, { root, filePath }) => {
     try {
-      return FileService.readFile(root, filePath)
+      return FileService.readFile(resolveProjectRoot(DB, root), filePath)
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('fs:writeFile', (_, { root, filePath, content }) => {
+  handle('fs:writeFile', (_, { root, filePath, content }) => {
     try {
-      return FileService.writeFile(root, filePath, content)
+      return FileService.writeFile(resolveProjectRoot(DB, root), filePath, content)
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
   // TICKET-0033: file-tree right-click actions
-  ipcMain.handle('fs:openInExplorer', (_, { root, filePath }) => {
+  handle('fs:openInExplorer', (_, { root, filePath }) => {
     try {
-      return FileService.openInExplorer(root, filePath)
+      return FileService.openInExplorer(resolveProjectRoot(DB, root), filePath)
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('fs:runFile', (_, { root, filePath }) => {
+  handle('fs:runFile', (_, { root, filePath }) => {
     try {
-      return FileService.runFile(root, filePath)
+      return FileService.runFile(resolveProjectRoot(DB, root), filePath)
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('fs:rename', (_, { root, filePath, newName }) => {
+  handle('fs:rename', (_, { root, filePath, newName }) => {
     try {
-      return FileService.rename(root, filePath, newName)
+      return FileService.rename(resolveProjectRoot(DB, root), filePath, newName)
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
-  ipcMain.handle('fs:trash', async (_, { root, filePath }) => {
+  handle('fs:trash', async (_, { root, filePath }) => {
     try {
-      return await FileService.trash(root, filePath)
+      return await FileService.trash(resolveProjectRoot(DB, root), filePath)
     } catch (error) {
       return { ok: false, error: error.message }
     }
@@ -301,17 +349,19 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Drag-to-select screen capture, saved into the requesting project's own
   // .ace/screenshots/ folder -- see ScreenshotService for the capture-overlay
   // flow and the clipboard-path handoff.
-  ipcMain.handle('screenshots:captureRegion', async (_, projectPath) => {
+  handle('screenshots:captureRegion', async (_, projectPath) => {
     try {
-      return await ScreenshotService.captureRegion(projectPath)
+      return await ScreenshotService.captureRegion(resolveProjectRoot(DB, projectPath))
     } catch (error) {
       return { ok: false, error: error.message }
     }
   })
 
   // ── Git operations ──────────────────────────────────────────────────────────
-  ipcMain.handle('git:commitAndPush', async (_, { projectPath } = {}) => {
-    if (!projectPath) return { ok: false, error: 'No project path' }
+  handle('git:commitAndPush', async (_, { projectPath } = {}) => {
+    let projectRoot
+    try { projectRoot = resolveProjectRoot(DB, projectPath) }
+    catch (error) { return { ok: false, error: error.message } }
     const { spawn } = require('child_process')
     const path = require('path')
 
@@ -324,7 +374,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
       // shell:false both works and keeps each argv element intact.
       const runGit = (args) => new Promise((resolve, reject) => {
         const proc = spawn('git', args, {
-          cwd: projectPath,
+          cwd: projectRoot,
           windowsHide: true,
         })
         let stdout = ''
@@ -379,14 +429,16 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     }
   })
 
-  ipcMain.handle('git:pull', async (_, { projectPath } = {}) => {
-    if (!projectPath) return { ok: false, error: 'No project path' }
+  handle('git:pull', async (_, { projectPath } = {}) => {
+    let projectRoot
+    try { projectRoot = resolveProjectRoot(DB, projectPath) }
+    catch (error) { return { ok: false, error: error.message } }
     const { spawn } = require('child_process')
 
     try {
       // No `shell: true` -- see the note in git:commitAndPush above.
       const proc = spawn('git', ['pull'], {
-        cwd: projectPath,
+        cwd: projectRoot,
         windowsHide: true,
       })
 
@@ -418,8 +470,10 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // one settled result the renderer turns into a success/fail line; the last few
   // lines of npm output are surfaced on failure so the error is actionable
   // without opening a terminal.
-  ipcMain.handle('project:build', async (_, { projectPath } = {}) => {
-    if (!projectPath) return { ok: false, error: 'No project path' }
+  handle('project:build', async (_, { projectPath } = {}) => {
+    let projectRoot
+    try { projectRoot = resolveProjectRoot(DB, projectPath) }
+    catch (error) { return { ok: false, error: error.message } }
     const { spawn } = require('child_process')
     const fs = require('fs')
     const path = require('path')
@@ -427,7 +481,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     // src/ first (ACE's own layout), then the project root.
     let cwd = null
     let script = null
-    for (const dir of [path.join(projectPath, 'src'), projectPath]) {
+    for (const dir of [path.join(projectRoot, 'src'), projectRoot]) {
       const pkgPath = path.join(dir, 'package.json')
       if (!fs.existsSync(pkgPath)) continue
       try {
@@ -479,7 +533,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     codex: '@openai/codex',
   }
 
-  ipcMain.handle('prereqs:check', async () => {
+  handle('prereqs:check', async () => {
     const { spawn } = require('child_process')
     // node/git resolve to real .exe's on Windows (shell:false, same reasoning
     // as git:commitAndPush above); npm/claude/codex are .cmd shims there and
@@ -508,7 +562,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return results
   })
 
-  ipcMain.handle('prereqs:install', async (_, name) => {
+  handle('prereqs:install', async (_, name) => {
     const pkg = PREREQ_PACKAGES[name]
     if (!pkg) return { ok: false, error: `Unknown prerequisite "${name}"` }
     const { spawn } = require('child_process')
@@ -535,12 +589,12 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     })
   })
 
-  ipcMain.handle('prereqs:openNodeDownload', () => {
+  handle('prereqs:openNodeDownload', () => {
     shell.openExternal('https://nodejs.org')
     return { ok: true }
   })
 
-  ipcMain.handle('prereqs:openGitDownload', () => {
+  handle('prereqs:openGitDownload', () => {
     shell.openExternal('https://git-scm.com/downloads')
     return { ok: true }
   })
@@ -549,11 +603,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keystrokes/resize/dispose are fire-and-forget (ipcMain.on) -- there's no
   // meaningful single response to a keystroke. Spawn is the one call with a
   // real result (did it start, what's its id/pid), so it's the one invoke().
-  ipcMain.handle('terminal:spawn', (_, opts) => TerminalSvc.spawn(opts))
-  ipcMain.on('terminal:write', (_, { id, data } = {}) => TerminalSvc.write(id, data))
-  ipcMain.on('terminal:resize', (_, { id, cols, rows } = {}) => TerminalSvc.resize(id, cols, rows))
-  ipcMain.on('terminal:dispose', (_, { id } = {}) => TerminalSvc.dispose(id))
-  ipcMain.on('terminal:setAutoAnswer', (_, { id, enabled } = {}) => TerminalSvc.setAutoAnswer(id, enabled))
+  handle('terminal:spawn', (_, opts) => TerminalSvc.spawn(opts))
+  on('terminal:write', (_, { id, data } = {}) => TerminalSvc.write(id, data))
+  on('terminal:resize', (_, { id, cols, rows } = {}) => TerminalSvc.resize(id, cols, rows))
+  on('terminal:dispose', (_, { id } = {}) => TerminalSvc.dispose(id))
+  on('terminal:setAutoAnswer', (_, { id, enabled } = {}) => TerminalSvc.setAutoAnswer(id, enabled))
 
   // ── Processes panel ─────────────────────────────────────────────────────────
   const ELECTRON_TYPE_LABELS = {
@@ -564,7 +618,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     Zygote: 'Zygote',
   }
 
-  ipcMain.handle('processes:list', () => {
+  handle('processes:list', () => {
     const metrics = app.getAppMetrics()
     const ptyHostPid = TerminalSvc?.host?.pid || null
 
@@ -594,4 +648,4 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
 }
 
-module.exports = { registerHandlers }
+module.exports = { registerHandlers, resolveProjectRoot, assertAppSender }

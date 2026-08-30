@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Security
+- Main process no longer trusts renderer-supplied filesystem paths. Every
+  `fs:*`, `git:*`, `project:build`, `screenshots:captureRegion`, and
+  agent-spawn call now resolves its path against ACE's own registered
+  project list and operates on that canonical value — a compromised
+  renderer can't aim those operations outside a project directory. All IPC
+  handlers also reject callers that aren't ACE's top-level window
+  (TICKET-0075)
+
 ### Added
 - The left sidebar can be dragged wider (or narrower) by its right edge,
   clamped to 180–600px; double-click the handle to reset. The chosen width

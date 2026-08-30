@@ -4,11 +4,11 @@ const { spawn } = require('child_process')
 const { shell } = require('electron')
 
 // TICKET-0021: backs the Sidebar file tree + Monaco editor. Every method
-// takes the project root the request is scoped to (as reported by the
-// renderer's own activeProject.path -- the same value already trusted
-// elsewhere, e.g. as a spawned agent/terminal's cwd) and refuses to touch
-// anything outside it, so a malformed or path-traversal-crafted request
-// can't reach the filesystem beyond the project the user actually opened.
+// takes the project root the request is scoped to. As of TICKET-0075 the
+// IPC layer only passes a root that matches one of main's registered
+// project paths; this class then refuses to touch anything outside that
+// root, so a malformed or path-traversal-crafted request can't reach the
+// filesystem beyond the project the user actually opened.
 function resolveWithinRoot(root, target) {
   const resolvedRoot = path.resolve(root)
   const resolvedTarget = path.resolve(target ?? root)
