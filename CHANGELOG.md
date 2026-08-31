@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.23] - 2026-08-31
 
 ### Security
 - Main process no longer trusts renderer-supplied filesystem paths. Every
