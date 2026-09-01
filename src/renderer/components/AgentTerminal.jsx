@@ -29,13 +29,18 @@ const XTERM_THEME = {
 // agent, not just a genuine first launch. There's no CLI flag to suppress
 // it (checked `claude --help`/`codex --help` and the bundled CLI's own
 // known env vars). Hidden behind a loading overlay for a fixed delay, then
-// wiped with a local xterm.js clear() (display-only -- doesn't touch the
-// real process), so the card reveals straight into the live, already-clean
-// session. Timing-based rather than content-matched on purpose: the splash
-// text differs between Claude and Codex and across CLI versions, and a
-// fixed delay degrades gracefully (worst case: a brief flash) instead of
-// silently hanging forever if a future CLI version changes its output.
-const LAUNCH_BANNER_HIDE_MS = 1200
+// revealed. TICKET-0102: the reveal used to also wipe the screen with a
+// local xterm.js clear(); that discarded the CLI's Welcome box (cwd, model,
+// tips) on macOS, where a login shell and slower rendering put the box above
+// the current line at wipe time. Per user decision the Welcome box is kept,
+// so the overlay alone masks boot churn. Timing-based rather than
+// content-matched on purpose: the splash text differs between Claude and
+// Codex and across CLI versions, and a fixed delay degrades gracefully
+// (worst case: a brief flash) instead of silently hanging forever if a
+// future CLI version changes its output. macOS needs longer because it
+// spawns the CLI through a login shell.
+const IS_MAC = window.ace?.platform === 'darwin'
+const LAUNCH_BANNER_HIDE_MS = IS_MAC ? 2000 : 1200
 
 // Mounted only while the agent is 'running' (see AgentView.jsx) -- unmount
 // (Stop, or Delete) disposes the PTY session in this effect's cleanup,
@@ -237,12 +242,15 @@ export default function AgentTerminal({ agent }) {
         }
       })
 
-      // Enable clipboard support - Ctrl+C to copy, Ctrl+V to paste
+      // Enable clipboard support - Cmd/Ctrl+C to copy, Cmd/Ctrl+V to paste
       term.attachCustomKeyEventHandler((event) => {
-        // Ctrl+C - copy selected text
-        if (event.ctrlKey && event.key === 'c' && term.hasSelection()) {
-          const selection = term.getSelection()
-          navigator.clipboard.writeText(selection)
+        // Copy the selection. TICKET-0102: the modifier is platform-selected,
+        // not OR-ed -- on macOS copy is Cmd+C and Ctrl+C must still reach the
+        // CLI as SIGINT, so accepting either would break interrupt there.
+        // Keydown only, so one keypress doesn't write the clipboard twice.
+        const copyModifier = IS_MAC ? event.metaKey : event.ctrlKey
+        if (event.type === 'keydown' && copyModifier && event.key.toLowerCase() === 'c' && term.hasSelection()) {
+          navigator.clipboard.writeText(term.getSelection())
           return false // Prevent default
         }
         // Ctrl/Cmd+V stays on the browser's normal paste-event path. The
@@ -303,11 +311,11 @@ export default function AgentTerminal({ agent }) {
       // Boot straight into the real CLI instead of leaving an empty shell.
       window.ace.terminal.write(sessionIdRef.current, buildLaunchCommand(agent, cliSessionId) + '\r')
 
-      // See LAUNCH_BANNER_HIDE_MS above -- wipe the CLI's own splash once
-      // it's had time to render, then reveal the already-clean session.
+      // See LAUNCH_BANNER_HIDE_MS above -- lift the overlay once the CLI has
+      // had time to render its Welcome box. No term.clear() here: that wiped
+      // the box itself on macOS (TICKET-0102).
       hideBannerTimer = setTimeout(() => {
         if (disposed) return
-        term.clear()
         setShowBanner(false)
       }, LAUNCH_BANNER_HIDE_MS)
     }
