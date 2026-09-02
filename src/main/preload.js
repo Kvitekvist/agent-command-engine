@@ -67,9 +67,10 @@ contextBridge.exposeInMainWorld('ace', {
     captureRegion: (projectPath) => ipcRenderer.invoke('screenshots:captureRegion', projectPath),
   },
 
-  // Git operations
+  // Git operations. The richer "Push update" flow (ticket → branch → local
+  // commit → PR) is driven by the agent through the /push-update skill, not
+  // main; only the no-AI pull button lives here.
   git: {
-    commitAndPush: (projectPath) => ipcRenderer.invoke('git:commitAndPush', { projectPath }),
     pull: (projectPath) => ipcRenderer.invoke('git:pull', { projectPath }),
   },
 

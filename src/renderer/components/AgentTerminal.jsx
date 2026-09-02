@@ -74,7 +74,6 @@ export default function AgentTerminal({ agent, onStatusChange }) {
   const [autoAnswer, setAutoAnswer] = useState(false)
   const [canBuild, setCanBuild] = useState(false)
   // Operation feedback state
-  const [commitPushStatus, setCommitPushStatus] = useState(null) // { type: 'loading' | 'success' | 'error', message: string }
   const [pullStatus, setPullStatus] = useState(null)
   const [buildStatus, setBuildStatus] = useState(null)
   const [pasteStatus, setPasteStatus] = useState(null) // For large paste feedback
@@ -394,14 +393,14 @@ export default function AgentTerminal({ agent, onStatusChange }) {
             {autoAnswer ? '🛡️ Auto-approve: On' : '🛡️ Auto-approve: Off'}
           </button>
           <button
-            disabled={commitPushStatus?.type === 'loading'}
-            onClick={() => runOperation(
-              commitPushStatus, setCommitPushStatus, 'Commit & Push',
-              () => window.ace.git.commitAndPush(agent.projectPath),
-            )}
-            title="Commit and push changes directly (no AI)"
-            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            ⬆️ Commit & Push
+            onClick={() => {
+              if (sessionIdRef.current) {
+                window.ace.terminal.write(sessionIdRef.current, '/push-update\r')
+              }
+            }}
+            title="Run /push-update: open a ticket for the current change, branch, commit it locally, and raise a PR with a written-up title and description — one branch and PR per fix"
+            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
+            ⬆️ Push update
           </button>
           <button
             disabled={pullStatus?.type === 'loading'}
@@ -456,7 +455,6 @@ export default function AgentTerminal({ agent, onStatusChange }) {
         </div>
       )}
       {/* TICKET-0050: progress + success/fail feedback for the direct git/build actions */}
-      <OperationFeedback label="Commit & Push" status={commitPushStatus} />
       <OperationFeedback label="Pull" status={pullStatus} />
       <OperationFeedback label="Build" status={buildStatus} />
       {/* TICKET-0052: feedback for large paste operations */}
@@ -473,7 +471,7 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       {showBanner && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface text-muted text-xs gap-1">
           <div className="text-lg">⚡</div>
-          <div>Launching {agent.label}…</div>
+          <div>Launching {agent.agentName}…</div>
         </div>
       )}
     </div>

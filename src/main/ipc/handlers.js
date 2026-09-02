@@ -385,77 +385,10 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
 
   // ── Git operations ──────────────────────────────────────────────────────────
-  handle('git:commitAndPush', async (_, { projectPath } = {}) => {
-    let projectRoot
-    try { projectRoot = resolveProjectRoot(DB, projectPath) }
-    catch (error) { return { ok: false, error: error.message } }
-    const { spawn } = require('child_process')
-    const path = require('path')
-
-    try {
-      // Helper to run git command. NOTE: no `shell: true` -- with a shell,
-      // spawn re-joins argv into one string and cmd.exe re-splits it on spaces,
-      // so a multi-word arg like the commit message ("Quick commit from ACE")
-      // fragments and git reads "commit"/"from"/"ACE" as pathspecs. git is
-      // git.exe (found on PATH without a shell; libuv auto-appends .exe), so
-      // shell:false both works and keeps each argv element intact.
-      const runGit = (args) => new Promise((resolve, reject) => {
-        const proc = spawn('git', args, {
-          cwd: projectRoot,
-          windowsHide: true,
-        })
-        let stdout = ''
-        let stderr = ''
-        proc.stdout?.on('data', d => stdout += d)
-        proc.stderr?.on('data', d => stderr += d)
-        proc.on('error', err => reject(err))
-        proc.on('close', code => {
-          if (code === 0) resolve(stdout)
-          else reject(new Error(stderr || `git exited with code ${code}`))
-        })
-      })
-
-      // Check status
-      const status = await runGit(['status', '--porcelain'])
-      if (!status.trim()) {
-        return { ok: true, message: 'No changes to commit' }
-      }
-
-      // Stage all changes
-      try {
-        await runGit(['add', '-A'])
-      } catch (error) {
-        return { ok: false, error: `Stage failed: ${error.message}` }
-      }
-
-      // Commit
-      const commitMsg = 'Quick commit from ACE\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>'
-      try {
-        await runGit(['commit', '-m', commitMsg])
-      } catch (error) {
-        return { ok: false, error: `Commit failed: ${error.message}` }
-      }
-
-      // Push - explicitly verify it succeeds
-      try {
-        await runGit(['push'])
-      } catch (error) {
-        return { ok: false, error: `Push failed: ${error.message}` }
-      }
-
-      // Verify push succeeded by checking remote tracking
-      const verifyResult = await runGit(['rev-list', '@{u}..HEAD', '--count'])
-      const unpushedCount = parseInt(verifyResult.trim(), 10)
-      if (unpushedCount > 0) {
-        return { ok: false, error: `Verification failed - ${unpushedCount} commit(s) still unpushed` }
-      }
-
-      return { ok: true, message: 'Committed and pushed successfully ✓' }
-    } catch (error) {
-      return { ok: false, error: error.message }
-    }
-  })
-
+  // The "Push update" button no longer commits from main. Its richer flow
+  // (ticket → branch → local commit → PR, one branch/PR per fix) is driven by
+  // the agent through the /push-update skill -- see .claude/skills/push-update/.
+  // Only the no-AI pull button is handled here.
   handle('git:pull', async (_, { projectPath } = {}) => {
     let projectRoot
     try { projectRoot = resolveProjectRoot(DB, projectPath) }
@@ -463,7 +396,10 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     const { spawn } = require('child_process')
 
     try {
-      // No `shell: true` -- see the note in git:commitAndPush above.
+      // No `shell: true` -- with a shell, spawn re-joins argv into one string
+      // and cmd.exe re-splits it on spaces, fragmenting multi-word args. git is
+      // git.exe (found on PATH without a shell; libuv auto-appends .exe), so
+      // shell:false both works and keeps each argv element intact.
       const proc = spawn('git', ['pull'], {
         cwd: projectRoot,
         windowsHide: true,
@@ -563,7 +499,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   handle('prereqs:check', async () => {
     const { spawn } = require('child_process')
     // node/git resolve to real .exe's on Windows (shell:false, same reasoning
-    // as git:commitAndPush above); npm/claude/codex are .cmd shims there and
+    // as git:pull above); npm/claude/codex are .cmd shims there and
     // need a shell to run at all (same convention as project:build's `npm run`
     // and AgentService.js's `spawn(provider, args, {shell: win32})`).
     const checks = [
