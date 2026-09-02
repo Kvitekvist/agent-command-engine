@@ -46,7 +46,7 @@ class ScreenshotService {
   // Captures the primary display exactly as it currently appears --
   // including ACE's own window, if it's on screen -- lets the user
   // drag-select a region over it, crops to that region, and saves the
-  // result under <projectRoot>/.ace/screenshots/. Resolves { ok:false,
+  // result under <projectRoot>/assets/images/screenshots/. Resolves { ok:false,
   // reason:'cancelled' } if the user backs out (Esc/right-click/too-small
   // a selection) rather than throwing, since backing out isn't an error.
   //
@@ -95,7 +95,7 @@ class ScreenshotService {
 
     const cropped = fullImage.crop(cropRect)
     migrateLegacyFolder(projectRoot)
-    const folder = path.join(projectRoot, '.ace', 'screenshots')
+    const folder = path.join(projectRoot, 'assets', 'images', 'screenshots')
     fs.mkdirSync(folder, { recursive: true })
     const filename = timestampedFilename()
     const filePath = path.join(folder, filename)

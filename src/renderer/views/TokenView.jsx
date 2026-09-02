@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+﻿import React, { useEffect, useState } from 'react'
 import {
   BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -20,7 +20,7 @@ export default function TokenView() {
   // tokscale subprocess call on its own timer.
   const { activeProject, tokenStats, setTokenStats, liveUsage, liveUsageLoading, loadLiveUsage } = useStore()
   const [loading, setLoading] = useState(false)
-  const [view, setView]       = useState('daily') // 'daily' | 'model' | 'agent'
+  const [view, setView]       = useState('daily') // 'daily' | 'model' | 'agent' | 'session'
 
   // TICKET-0044: "History (this project)" now reads real per-session usage
   // from tokscale (via getProjectHistory), scoped to the active project's
@@ -64,16 +64,30 @@ export default function TokenView() {
     }, {})
   ).sort((a, b) => (b.input + b.output) - (a.input + a.output))
 
-  // Aggregate by agent (TICKET-0044) -- sessions whose id ACE recorded at
-  // launch resolve to their agent's name; everything else is "Untracked".
+  // Aggregate by agent name (TICKET-0044) -- sessions whose id ACE recorded
+  // at launch resolve to their agent's name; everything else is "Untracked".
   const byAgent = Object.values(
     tokenStats.reduce((acc, row) => {
-      const t = row.agentLabel || 'Untracked'
-      if (!acc[t]) acc[t] = { agent: t, input: 0, output: 0, cost: 0, prompts: 0 }
-      acc[t].input   += row.input   || 0
-      acc[t].output  += row.output  || 0
-      acc[t].cost    += row.cost    || 0
-      acc[t].prompts += row.prompts || 0
+      const name = row.agentName || 'Untracked'
+      if (!acc[name]) acc[name] = { agent: name, input: 0, output: 0, cost: 0, prompts: 0 }
+      acc[name].input   += row.input   || 0
+      acc[name].output  += row.output  || 0
+      acc[name].cost    += row.cost    || 0
+      acc[name].prompts += row.prompts || 0
+      return acc
+    }, {})
+  ).sort((a, b) => (b.input + b.output) - (a.input + a.output))
+
+  // Aggregate by session title -- sessions with a title are grouped together;
+  // untitled and untracked sessions appear as "Untitled".
+  const bySession = Object.values(
+    tokenStats.reduce((acc, row) => {
+      const title = row.sessionTitle || 'Untitled'
+      if (!acc[title]) acc[title] = { session: title, input: 0, output: 0, cost: 0, prompts: 0 }
+      acc[title].input   += row.input   || 0
+      acc[title].output  += row.output  || 0
+      acc[title].cost    += row.cost    || 0
+      acc[title].prompts += row.prompts || 0
       return acc
     }, {})
   ).sort((a, b) => (b.input + b.output) - (a.input + a.output))
@@ -108,7 +122,7 @@ export default function TokenView() {
         <div>
           <h2 className="text-base font-semibold mt-4">History (this project)</h2>
           <p className="text-xs text-muted mt-0.5">
-            All-time usage for this project, from tokscale's own session records. By Agent shows ACE agent names for sessions ACE launched; other sessions (and Codex) appear as “Untracked”.
+            All-time usage for this project, from tokscale's own session records. By Agent shows ACE agent names; By Session shows session titles (auto-generated or user-set); other sessions (and Codex) appear as "Untracked" or "Untitled".
           </p>
         </div>
         <button onClick={load} className="btn-ghost text-xs mt-4">↻ Refresh</button>
@@ -131,7 +145,7 @@ export default function TokenView() {
 
       {/* View tabs */}
       <div className="flex gap-2">
-        {[['daily', 'By Day'], ['model', 'By Model'], ['agent', 'By Agent']].map(([id, label]) => (
+        {[['daily', 'By Day'], ['model', 'By Model'], ['agent', 'By Agent'], ['session', 'By Session']].map(([id, label]) => (
           <button
             key={id}
             onClick={() => setView(id)}
@@ -215,6 +229,25 @@ export default function TokenView() {
           <AgentCostTable data={byAgent} />
         </div>
       )}
+
+      {!loading && view === 'session' && (
+        <div className="space-y-4">
+          <ChartCard title="Token Usage by Session">
+            <ResponsiveContainer width="100%" height={Math.max(200, bySession.length * 40)}>
+              <BarChart data={bySession} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" />
+                <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <YAxis type="category" dataKey="session" tick={{ fill: '#6b7280', fontSize: 10 }} width={180} />
+                <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2a2d3a', fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="input"  name="Input"  fill={chartColors.input}  />
+                <Bar dataKey="output" name="Output" fill={chartColors.output} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+          <SessionCostTable data={bySession} />
+        </div>
+      )}
     </div>
   )
 }
@@ -286,6 +319,36 @@ function AgentCostTable({ data }) {
           {data.map((row) => (
             <tr key={row.agent}>
               <td className="py-1.5 text-gray-300">{row.agent}</td>
+              <td className="text-right text-gray-400">{row.prompts.toLocaleString()}</td>
+              <td className="text-right text-gray-400">{row.input.toLocaleString()}</td>
+              <td className="text-right text-gray-400">{row.output.toLocaleString()}</td>
+              <td className="text-right text-warning">${row.cost.toFixed(4)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function SessionCostTable({ data }) {
+  return (
+    <div className="card">
+      <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Cost Breakdown by Session</div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-muted border-b border-border">
+            <th className="text-left pb-2">Session Title</th>
+            <th className="text-right pb-2">Prompts</th>
+            <th className="text-right pb-2">Input</th>
+            <th className="text-right pb-2">Output</th>
+            <th className="text-right pb-2">Cost</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {data.map((row) => (
+            <tr key={row.session}>
+              <td className="py-1.5 text-gray-300">{row.session}</td>
               <td className="text-right text-gray-400">{row.prompts.toLocaleString()}</td>
               <td className="text-right text-gray-400">{row.input.toLocaleString()}</td>
               <td className="text-right text-gray-400">{row.output.toLocaleString()}</td>

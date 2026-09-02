@@ -35,6 +35,7 @@ obj/
 
 # Logs
 *.log
+hook-execution.log
 
 # Environment / secrets
 .env
@@ -42,6 +43,7 @@ obj/
 
 # Claude Code runtime state
 .claude/scheduled_tasks.lock
+.claude/.notification-muted
 
 # Stray nested git internals (not part of the project)
 .git.tmp/

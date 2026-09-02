@@ -17,6 +17,13 @@
   is remembered per machine (TICKET-0104)
 
 ### Changed
+- The agent terminal's "Commit & Push" quick action is now **"Push update"**.
+  Instead of an unattended `git add -A` + commit + push onto the current
+  branch, it runs the new `/push-update` skill: file one ticket, cut one
+  `feature/`|`bugfix/` branch, make one local commit, and open one PR with a
+  written-up title and description — one branch and PR per fix, never a
+  direct commit to `main`. The old `git:commitAndPush` IPC path is removed
+  (TICKET-0106)
 
 ### Removed
 - Dead `agents:changeModel` scaffolding (unfinished, never wired to any UI).

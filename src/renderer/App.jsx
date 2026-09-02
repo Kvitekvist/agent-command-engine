@@ -87,7 +87,16 @@ export default function App() {
   useEffect(() => {
     window.ace.onAgentStatus((data) => {
       if (data.status === 'running') {
-        addAgent({ agentId: data.agentId, ...data.meta, status: 'running' })
+        // AgentService emits meta with 'label' field; map to agentName for UI.
+        const { label, ...rest } = data.meta
+        addAgent({
+          agentId: data.agentId,
+          ...rest,
+          agentName: label,
+          sessionTitle: null,
+          status: 'running',
+          hasSessionTitle: false,
+        })
       } else {
         updateAgentStatus(data.agentId, data.status, { tokenSummary: data.tokenSummary })
       }

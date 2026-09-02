@@ -16,7 +16,7 @@ import { DEFAULT_MODEL_BY_PROVIDER, MODEL_GROUPS_BY_PROVIDER } from '../utils/mo
 const PERMISSION_MODE = 'safe'
 
 export default function AgentView() {
-  const { activeProject, agents, removeAgent } = useStore()
+  const { activeProject, agents, removeAgent, soundsMuted, loadSoundsMuted, toggleSoundsMuted } = useStore()
   const [label, setLabel]         = useState(() => generateAgentName())
   const [provider, setProvider]   = useState('claude')
   const [model, setModel]         = useState(DEFAULT_MODEL_BY_PROVIDER.claude)
@@ -32,6 +32,7 @@ export default function AgentView() {
       const [savedProvider, savedModel] = await Promise.all([
         window.ace.getSetting('default_provider'),
         window.ace.getSetting('default_model'),
+        loadSoundsMuted(),
       ])
       if (cancelled) return
       const nextProvider = ['auto', 'claude', 'codex'].includes(savedProvider)
@@ -67,10 +68,10 @@ export default function AgentView() {
         model: provider === 'auto' ? null : model,
         permissionMode: PERMISSION_MODE,
       })
-      const existingLabels = useStore.getState().agents
+      const existingNames = useStore.getState().agents
         .filter((a) => a.projectId === activeProject.id)
-        .map((a) => a.label)
-      setLabel(generateAgentName(existingLabels))
+        .map((a) => a.agentName)
+      setLabel(generateAgentName(existingNames))
     } catch (error) {
       setLaunchError(error.message || 'Agent launch failed')
     } finally { setLaunching(false) }
@@ -113,24 +114,29 @@ export default function AgentView() {
           // Re-register with AgentService so it can accept new prompts.
           const restored = await window.ace.restoreAgent({ ...row, projectPath: activeProject.path })
           if (cancelled) return
-          meta = restored.meta
+          // AgentService.restore() returns meta with 'label' field; map it to
+          // agentName/sessionTitle for consistency with the rest of the UI.
+          meta = {
+            ...restored.meta,
+            agentName: row.agent_name,
+            sessionTitle: row.session_title,
+          }
+          delete meta.label
         } else {
           meta = {
             agentId: row.id,
             projectId: row.project_id,
             projectPath: activeProject.path,
-            label: row.label,
+            agentName: row.agent_name,
+            sessionTitle: row.session_title,
             provider: row.provider,
             model: row.model,
             permissionMode: row.permission_mode,
           }
         }
-        // TICKET-0070: carry forward whether this agent's label was already
-        // auto-titled -- a restored agent gets a brand-new terminal session
-        // (see the effect comment above), so without this its next typed
-        // line would look like a fresh "initial request" and clobber a real
-        // title that was already set in a previous session.
-        useStore.getState().addAgent({ ...meta, agentId: row.id, status: row.status, titleSet: !!row.title_set })
+        // Restored agents: if they already have a session_title set, don't
+        // re-capture from the next line.
+        useStore.getState().addAgent({ ...meta, agentId: row.id, status: row.status, hasSessionTitle: !!row.session_title })
       }
     })()
     return () => { cancelled = true }
@@ -172,6 +178,13 @@ export default function AgentView() {
         ) : (
           <span className="text-xs text-muted">Provider and compatible model selected at launch</span>
         )}
+        <button
+          onClick={toggleSoundsMuted}
+          className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
+          title={soundsMuted ? 'Notification sounds muted' : 'Notification sounds enabled'}
+        >
+          {soundsMuted ? '🔇' : '🔔'}
+        </button>
         <button onClick={launchAgent} disabled={launching} className="btn-primary ml-auto text-xs">
           {launching ? 'Launching…' : '+ New Agent'}
         </button>
@@ -224,10 +237,20 @@ function AgentPane({ agent, onClose }) {
   const screenshotMsgTimer = useRef(null)
 
   const [capturing, setCapturing] = useState(false)
+  const [terminalStatus, setTerminalStatus] = useState('connecting')
+  // 'working' | 'waiting' | null -- pushed from Claude's lifecycle hooks via
+  // the main process (HookService.js). null until the first hook fires.
+  const [activity, setActivity] = useState(null)
+
+  useEffect(() => {
+    return window.ace.onAgentActivity(({ agentId, state }) => {
+      if (agentId === agent.agentId) setActivity(state)
+    })
+  }, [agent.agentId])
 
   // TICKET-0034 (reworked from TICKET-0032's clipboard-paste model): hides
   // the app, lets the user drag-select a region of the primary display, and
-  // saves it into this project's own .ace/screenshots/ folder. Overwrites
+  // saves it into this project's own assets/images/screenshots/ folder. Overwrites
   // the clipboard with the saved file's path (relative to the project
   // root, since that's the agent's own cwd) so the natural next step
   // (pasting into this card's terminal to reference it in a prompt) yields
@@ -251,23 +274,41 @@ function AgentPane({ agent, onClose }) {
   }
 
   const permIcon    = ({ safe: '🔒', ask: '🛡️', auto: '⚡' })[agent.permissionMode] || '🔒'
-  const statusBadge = agent.status === 'running'
-    ? <span className="badge-green">● Running</span>
-    : <span className="badge-gray">○ Stopped</span>
+
+  // PTY lifecycle (error/exited) wins; otherwise the Claude-hook activity
+  // signal decides Running vs Waiting. Codex agents get no hooks, so they
+  // sit at Waiting while running -- they never had a finer signal anyway.
+  let statusBadge
+  if (agent.status !== 'running') {
+    statusBadge = <span className="badge-gray">○ Stopped</span>
+  } else if (terminalStatus === 'error') {
+    statusBadge = <span className="badge-red">● Error</span>
+  } else if (terminalStatus === 'exited') {
+    statusBadge = <span className="badge-blue">● Done</span>
+  } else if (activity === 'working') {
+    statusBadge = <span className="badge-green">● Running</span>
+  } else {
+    statusBadge = <span className="badge-yellow">● Waiting</span>
+  }
 
   return (
     <div className="card flex flex-col" style={{ height: '32rem' }}>
       <div className="flex items-center justify-between mb-2 shrink-0">
         <div className="flex items-center gap-2">
           {statusBadge}
-          <span className="text-sm font-medium text-gray-200">{agent.label}</span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent/20 text-accent border border-accent/30">
+            {agent.agentName}
+          </span>
+          {agent.sessionTitle && (
+            <span className="text-sm font-medium text-gray-200">{agent.sessionTitle}</span>
+          )}
           <span className="text-xs text-muted">{agent.model}</span>
           <span className="text-xs" title={'Permission: ' + agent.permissionMode}>{permIcon}</span>
         </div>
         <div className="flex items-center gap-1.5">
           {agent.status === 'running' && (
             <button onClick={captureScreenshot} disabled={capturing}
-              title="Drag-select a screen region to save into this project's .ace/screenshots/ folder"
+              title="Drag-select a screen region to save into this project's assets/images/screenshots/ folder"
               className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50">
               {capturing ? '…' : '📸'}
             </button>
@@ -281,7 +322,7 @@ function AgentPane({ agent, onClose }) {
       )}
 
       {agent.status === 'running' && (
-        <AgentTerminal agent={agent} />
+        <AgentTerminal agent={agent} onStatusChange={setTerminalStatus} />
       )}
     </div>
   )

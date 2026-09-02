@@ -19,9 +19,8 @@ contextBridge.exposeInMainWorld('ace', {
   restoreAgent: (row) => ipcRenderer.invoke('agents:restore', row),
   stopAgent: (agentId) => ipcRenderer.invoke('agents:stop', agentId),
   deleteAgent: (agentId) => ipcRenderer.invoke('agents:delete', agentId),
-  // TICKET-0070: auto-title -- renames the card label from the user's first
-  // submitted terminal line.
-  updateAgentLabel: (agentId, label) => ipcRenderer.invoke('agents:updateLabel', agentId, label),
+  // Updates the session title from the user's first submitted terminal line.
+  updateAgentSessionTitle: (agentId, title) => ipcRenderer.invoke('agents:updateSessionTitle', agentId, title),
   // TICKET-0070 (follow-up): headless call that turns a raw first line into
   // a short, meaningful title. Resolves { title: null } on any failure --
   // never rejects -- so callers can just keep their fallback title.
@@ -29,6 +28,16 @@ contextBridge.exposeInMainWorld('ace', {
   // TICKET-0044: record which CLI session id an agent launched with, so the
   // Token Usage "By Agent" breakdown can map tokscale sessions to agent names.
   recordAgentSession: (payload) => ipcRenderer.invoke('agents:recordSession', payload),
+  // Claude-hook activity badge: path passed to `claude --settings` at launch,
+  // and a subscription to the resulting 'working' | 'waiting' updates. Kept on
+  // its own channel -- 'agent:status' below is AgentService's running/stopped
+  // lifecycle, a different payload shape.
+  getHookSettingsPath: () => ipcRenderer.invoke('hooks:settingsPath'),
+  onAgentActivity: (cb) => {
+    const l = (_e, data) => cb(data)
+    ipcRenderer.on('agent:activity', l)
+    return () => ipcRenderer.removeListener('agent:activity', l)
+  },
 
   // Processes
   getProcesses: () => ipcRenderer.invoke('processes:list'),
@@ -58,9 +67,10 @@ contextBridge.exposeInMainWorld('ace', {
     captureRegion: (projectPath) => ipcRenderer.invoke('screenshots:captureRegion', projectPath),
   },
 
-  // Git operations
+  // Git operations. The richer "Push update" flow (ticket → branch → local
+  // commit → PR) is driven by the agent through the /push-update skill, not
+  // main; only the no-AI pull button lives here.
   git: {
-    commitAndPush: (projectPath) => ipcRenderer.invoke('git:commitAndPush', { projectPath }),
     pull: (projectPath) => ipcRenderer.invoke('git:pull', { projectPath }),
   },
 

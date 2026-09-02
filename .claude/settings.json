@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/play-notification.js\"",
+            "statusMessage": "Playing notification sound"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/play-notification.js\"",
+            "async": true,
+            "statusMessage": "Playing notification sound"
+          }
+        ]
+      }
+    ]
+  }
+}
