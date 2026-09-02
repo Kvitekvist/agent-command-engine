@@ -139,11 +139,12 @@ should not read as machine-generated. Self-edit before sending:
   "powerful", "comprehensive").
 - Vary sentence length; cut filler transitions ("Moreover", "Furthermore",
   "It's worth noting that").
+- When writing repository prose, replace em and en dashes with commas,
+  periods, colons, or parentheses.
 
-For a deliberate audit or rewrite of a specific text, the
-[`avoid-ai-writing`](https://github.com/conorbronsdon/avoid-ai-writing) skill
-(installed per-user under `~/.claude/skills/`, not vendored here) has the full
-pattern catalogue.
+For a deliberate audit or rewrite of specific text,
+[Humanizer](https://github.com/blader/humanizer) has a fuller pattern
+checklist. It is not vendored here.
 
 ## Validation
 

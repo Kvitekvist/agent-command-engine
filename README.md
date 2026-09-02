@@ -17,16 +17,16 @@ ACE runs Claude Code and Codex agents in separate terminals for each project. It
 
 ## Features
 
-- **Projects** — Open and switch between project folders.
-- **Files** — Browse a project in a VS Code-style sidebar. Edit files in Monaco and save them to disk. The context menu can open files in Explorer or run executable files.
-- **Agents** — Start several Claude Code or Codex agents in one project. Each has its own interactive terminal and remains available when you switch tabs or projects.
-- **Names and status** — Agents receive a generated name and a title from their first prompt. Their badges reflect Claude Code lifecycle events: **Running**, **Waiting**, **Done**, or **Error**. A project can play a sound when an agent finishes.
-- **Screenshots** — Capture a selected screen area from an agent card. ACE writes the image to `.ace/screenshots/`, adds that directory to `.gitignore`, and copies its path.
-- **Usage** — The default dashboard reads Claude and Codex quota and usage data from `tokscale`. It shows reset times and today's use by model, project, and session.
-- **Usage bar** — The Agents tab shows each provider's used and available percentage, plus its reset time.
-- **Models** — Choose the Claude or Codex model for an agent.
-- **Push update** — This terminal action creates a ticket and a `feature/` or `bugfix/` branch, makes a local commit, then opens a pull request through `/push-update`.
-- **One window** — A second launch focuses the existing window instead of starting another copy of ACE.
+- **Projects:** Open and switch between project folders.
+- **Files:** Browse a project in a VS Code-style sidebar. Edit files in Monaco and save them to disk. The context menu can open files in Explorer or run executable files.
+- **Agents:** Start several Claude Code or Codex agents in one project. Each has its own interactive terminal and remains available when you switch tabs or projects.
+- **Names and status:** Agents receive a generated name and a title from their first prompt. Their badges reflect Claude Code lifecycle events: **Running**, **Waiting**, **Done**, or **Error**. A project can play a sound when an agent finishes.
+- **Screenshots:** Capture a selected screen area from an agent card. ACE writes the image to `.ace/screenshots/`, adds that directory to `.gitignore`, and copies its path.
+- **Usage:** The default dashboard reads Claude and Codex quota and usage data from `tokscale`. It shows reset times and today's use by model, project, and session.
+- **Usage bar:** The Agents tab shows each provider's used and available percentage, plus its reset time.
+- **Models:** Choose the Claude or Codex model for an agent.
+- **Push update:** This terminal action creates a ticket and a `feature/` or `bugfix/` branch, makes a local commit, then opens a pull request through `/push-update`.
+- **One window:** A second launch focuses the existing window instead of starting another copy of ACE.
 
 ---
 

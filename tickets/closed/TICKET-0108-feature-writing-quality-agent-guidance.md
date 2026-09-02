@@ -2,7 +2,7 @@
 
 **Status**
 
-Awaiting verification
+Closed
 
 **Type**
 
@@ -48,9 +48,13 @@ this once for every agent instead of per-session.
 
 * [x] No repo dependency on the per-user skill install
 
+* [x] Add the Humanizer-based rule against em and en dashes in repository prose.
+
 ---
 
 ## Files Modified
+
+* `AGENTS.md` updates the writing guidance with the Humanizer dash rule.
 
 - `AGENTS.md` — new `## Writing` section
 
@@ -69,6 +73,9 @@ Markdown; section placement verified between `## Working rules` and
 `AGENTS.md` now carries writing-quality guidance that ships with the repo and
 applies to every agent without setup.
 
+It now prohibits em and en dashes in repository prose and links to Humanizer
+for deliberate audits.
+
 ---
 
 ## Notes
@@ -80,4 +87,4 @@ vendoring the full `avoid-ai-writing` skill folder into `.claude/skills/`.
 
 ## Closed
 
-YYYY-MM-DD
+2026-09-02
