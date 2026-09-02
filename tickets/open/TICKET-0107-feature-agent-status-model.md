@@ -85,12 +85,15 @@ the guesswork without touching any project or global Claude config.
 * [x] `TokenView`: **By Session** tab + `SessionCostTable`.
 * [x] `useStore`: `updateAgentSessionTitle`, `soundsMuted` state + toggle.
 * [x] `App`: map `label` → `agentName` in the `agents:status` running payload.
-* [x] `settings:set` writes/removes a `.notification-muted` marker per project
-      for `notification_sounds_muted`.
+* [x] `settings:set` writes/removes a `.claude/.notification-muted` marker per
+      project for `notification_sounds_muted`; `play-notification.js` reads the
+      marker at that same path.
 * [x] `ScreenshotService`: save under `assets/images/screenshots/`.
 * [x] Tailwind `info` colour + `.badge-blue`; `.badge` gets `whitespace-nowrap
       shrink-0`.
-* [x] `.gitignore`: `hook-execution.log`, `.claude/.notification-muted`.
+* [x] `.gitignore`: `hook-execution.log`, `.claude/.notification-muted`,
+      `.claude/settings.json`, `.claude/settings.local.json`; `.claude/hooks/`
+      keeps a `README.md` with the opt-in hook block.
 
 ---
 
@@ -108,9 +111,11 @@ the guesswork without touching any project or global Claude config.
 - `src/renderer/utils/agentLaunch.js`
 - `src/renderer/App.jsx`
 - `src/renderer/styles/globals.css`, `src/tailwind.config.js`
-- `.claude/hooks/` (new), `.claude/settings.json` (new),
-  `assets/notification.mp3` (new)
-- `.gitignore`
+- `.claude/hooks/` (new: `play-notification.js`, `play-seatbelt*.ps1`,
+  `README.md`), `assets/notification.mp3` (new)
+- `.gitignore` — `hook-execution.log`, `.claude/.notification-muted`, and
+  `.claude/settings.json` / `.claude/settings.local.json` (kept per-machine so
+  the sound hook is opt-in)
 
 ---
 
@@ -133,14 +138,15 @@ Implemented and committed; awaiting the live manual check above.
 
 ## Notes
 
-Committing `.claude/settings.json` makes the completion-sound hook active for
-anyone working in this repo with Claude Code. `HookService`'s status hooks are
-separate — generated per-run into userData, no repo config touched.
+`.claude/settings.json` is **not** committed — it's gitignored so the
+completion-sound hook is opt-in rather than forced on everyone who opens this
+repo. `.claude/hooks/README.md` has the block to paste in to enable it.
+`HookService`'s status hooks are separate — generated per-run into userData,
+no repo config touched.
 
-`play-notification.js` looks for its mute marker at
-`.claude/hooks/.notification-muted` while `settings:set` writes it at
-`.claude/.notification-muted` — the toggle won't actually mute until those
-agree. Follow-up.
+`play-notification.js`'s mute marker is now `.claude/.notification-muted`
+(`__dirname/../.notification-muted`), matching where `settings:set` writes it
+and the `.gitignore` entry, so the 🔔/🔇 toggle actually mutes.
 
 ---
 

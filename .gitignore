@@ -44,6 +44,10 @@ hook-execution.log
 # Claude Code runtime state
 .claude/scheduled_tasks.lock
 .claude/.notification-muted
+# Per-machine Claude Code config -- the notification-sound hook lives here so it
+# is opt-in, not forced on everyone who opens this repo. See .claude/hooks/.
+.claude/settings.json
+.claude/settings.local.json
 
 # Stray nested git internals (not part of the project)
 .git.tmp/
