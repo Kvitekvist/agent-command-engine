@@ -31,6 +31,14 @@
   routing now always resolves to Claude (TICKET-0083)
 
 ### Fixed
+- Copying agent output on macOS. Selecting text in an agent terminal and
+  pressing **Cmd+C** now copies it — the copy shortcut was hard-coded to
+  Ctrl+C, which macOS never sends for copy. Ctrl+C still interrupts the CLI
+  on macOS, and Ctrl+C keeps copying on Windows/Linux (TICKET-0102)
+- The CLI's "Welcome to Claude Code" box no longer disappears on macOS. The
+  launch reveal cleared the screen, which on macOS landed after the box had
+  rendered and wiped it; the loading overlay alone now masks boot churn
+  (TICKET-0102)
 
 ## [0.1.23] - 2026-08-29
 
