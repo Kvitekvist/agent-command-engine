@@ -35,12 +35,13 @@
            focus:outline-none focus:border-accent placeholder-muted w-full;
   }
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center whitespace-nowrap shrink-0 px-2 py-0.5 rounded-full text-xs font-medium;
   }
   .badge-green  { @apply badge bg-success/20 text-success; }
   .badge-yellow { @apply badge bg-warning/20 text-warning; }
   .badge-red    { @apply badge bg-danger/20  text-danger; }
   .badge-purple { @apply badge bg-accent/20  text-accent; }
+  .badge-blue   { @apply badge bg-info/20    text-info; }
   .badge-gray   { @apply badge bg-border     text-muted; }
 }
 

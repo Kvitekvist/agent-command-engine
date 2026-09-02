@@ -48,18 +48,23 @@ const LAUNCH_BANNER_HIDE_MS = 1200
 // used for tab switches. So an in-progress interactive session now
 // survives a project switch the same way it already survived a tab
 // switch; only Stop/Delete/app quit end it.
-export default function AgentTerminal({ agent }) {
+export default function AgentTerminal({ agent, onStatusChange }) {
   const containerRef = useRef(null)
   const terminalRef = useRef(null)
   const sessionIdRef = useRef(null)
-  // TICKET-0070: auto-title -- captures the first non-empty line the user
-  // submits into this terminal and turns it into the card's label. Skipped
-  // entirely (ref starts true) for an agent restored with an already-set
-  // title, so a follow-up line typed after a restore doesn't clobber it --
-  // see AgentView.jsx's restore effect for where `titleSet` comes from.
-  const titleCapturedRef = useRef(!!agent.titleSet)
+  // Auto-title -- captures the first non-empty line the user submits into
+  // this terminal and turns it into the card's session title. Skipped entirely
+  // (ref starts true) for an agent restored with an already-set title, so a
+  // follow-up line typed after a restore doesn't clobber it.
+  const titleCapturedRef = useRef(!!agent.hasSessionTitle)
   const titleBufferRef = useRef('')
   const [status, setStatus] = useState('connecting') // connecting | ready | exited | error
+  // PTY lifecycle only. What the agent is *doing* (Running / Waiting) is driven
+  // separately by Claude's lifecycle hooks -- see HookService.js and AgentView.
+  const updateStatus = (newStatus) => {
+    setStatus(newStatus)
+    onStatusChange?.(newStatus)
+  }
   const [showBanner, setShowBanner] = useState(true)
   // TICKET-0039: per-agent only, no global setting -- defaults off (silently
   // auto-confirming every permission prompt shouldn't be on without an
@@ -190,25 +195,25 @@ export default function AgentTerminal({ agent }) {
       })
       if (disposed) return
       if (!result.success) {
-        setStatus('error')
+        updateStatus('error')
         term.write(`\r\n\x1b[31mFailed to start terminal: ${result.error || 'unknown error'}\x1b[0m\r\n`)
         revealImmediately()
         return
       }
       sessionIdRef.current = result.id
-      setStatus('ready')
+      updateStatus('ready')
 
       unsubData = window.ace.terminal.onData(({ id, chunk }) => {
         if (id === sessionIdRef.current) term.write(chunk)
       })
       unsubExit = window.ace.terminal.onExit(({ id, exitCode }) => {
         if (id !== sessionIdRef.current) return
-        setStatus('exited')
+        updateStatus('exited')
         term.write(`\r\n\x1b[90m[process exited with code ${exitCode}]\x1b[0m\r\n`)
         revealImmediately()
       })
       unsubHostRestarted = window.ace.terminal.onHostRestarted(() => {
-        setStatus('exited')
+        updateStatus('exited')
         term.write('\r\n\x1b[31m[terminal process was lost -- stop and relaunch this agent to start a new session]\x1b[0m\r\n')
         revealImmediately()
       })
@@ -226,12 +231,12 @@ export default function AgentTerminal({ agent }) {
             // call resolves a moment later. Any failure there (CLI missing,
             // timeout, empty reply) just leaves the fallback title in place.
             const fallbackTitle = deriveTitle(line)
-            useStore.getState().updateAgentLabel(agent.agentId, fallbackTitle)
-            window.ace.updateAgentLabel(agent.agentId, fallbackTitle)
+            useStore.getState().updateAgentSessionTitle(agent.agentId, fallbackTitle)
+            window.ace.updateAgentSessionTitle(agent.agentId, fallbackTitle)
             window.ace.generateTitle(line, agent.projectPath, agent.provider).then(({ title } = {}) => {
               if (!title || title === fallbackTitle) return
-              useStore.getState().updateAgentLabel(agent.agentId, title)
-              window.ace.updateAgentLabel(agent.agentId, title)
+              useStore.getState().updateAgentSessionTitle(agent.agentId, title)
+              window.ace.updateAgentSessionTitle(agent.agentId, title)
             }).catch(() => {})
           }
         }
@@ -287,21 +292,31 @@ export default function AgentTerminal({ agent }) {
       containerRef.current.addEventListener('paste', handlePaste, true)
 
       // TICKET-0044: force a known CLI session id for Claude agents so their
-      // tokscale usage can be attributed to this agent's name in the Token
-      // Usage "By Agent" breakdown. Codex has no equivalent flag, so it keeps
-      // its own auto-generated session and stays "Untracked" there.
+      // tokscale usage can be attributed to this agent's name and session title
+      // in the Token Usage "By Agent" and "By Session" breakdowns. Codex has no
+      // equivalent flag, so it keeps its own auto-generated session and stays
+      // "Untracked" there.
       const cliSessionId = agent.provider === 'codex' ? null : crypto.randomUUID()
       if (cliSessionId) {
         window.ace.recordAgentSession({
           session_id: cliSessionId,
           agent_id: agent.agentId,
           project_id: agent.projectId,
-          label: agent.label,
+          agent_name: agent.agentName,
+          session_title: agent.sessionTitle,
         })
       }
 
       // Boot straight into the real CLI instead of leaving an empty shell.
-      window.ace.terminal.write(sessionIdRef.current, buildLaunchCommand(agent, cliSessionId) + '\r')
+      // The hook settings file drives the status badge (HookService.js); a
+      // failed lookup just means no live Running/Waiting for this agent.
+      const hookSettingsPath = cliSessionId
+        ? await window.ace.getHookSettingsPath().catch(() => null)
+        : null
+      window.ace.terminal.write(
+        sessionIdRef.current,
+        buildLaunchCommand(agent, cliSessionId, hookSettingsPath) + '\r',
+      )
 
       // See LAUNCH_BANNER_HIDE_MS above -- wipe the CLI's own splash once
       // it's had time to render, then reveal the already-clean session.

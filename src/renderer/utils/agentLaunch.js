@@ -49,12 +49,17 @@ function quoteArg(arg) {
 // Behaviour-neutral: each terminal mount already started a brand-new session
 // (no --resume), so forcing a fresh UUID per launch changes nothing the user
 // sees. Codex has no equivalent flag (and isn't reconciled), so it's skipped.
-export function buildLaunchCommand({ provider, model, permissionMode }, sessionId) {
+// `settingsPath`, when given, is injected as `claude --settings <path>` -- it
+// points at the ACE-generated JSON that wires Claude's lifecycle hooks to the
+// per-agent status badge (see HookService.js). Additive to the project's own
+// Claude settings; Codex has no equivalent, so it's skipped there.
+export function buildLaunchCommand({ provider, model, permissionMode }, sessionId, settingsPath) {
   const args = provider === 'codex'
     ? ['codex', '--model', model, ...buildCodexArgs(permissionMode)]
     : [
         'claude', '--model', model,
         ...(sessionId ? ['--session-id', sessionId] : []),
+        ...(settingsPath ? ['--settings', settingsPath] : []),
         ...buildClaudePermissionArgs(permissionMode),
       ]
   return args.map(quoteArg).join(' ')

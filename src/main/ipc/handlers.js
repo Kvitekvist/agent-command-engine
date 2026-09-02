@@ -4,6 +4,7 @@ const { FileService } = require('../services/FileService')
 const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
 const { ScreenshotService } = require('../services/ScreenshotService')
 const { createProjectFromScaffold } = require('../services/ProjectScaffoldService')
+const { ensureHookFiles, watchAgentStatus } = require('../services/HookService')
 
 // TICKET-0075: the renderer hands main a filesystem path for every fs / git /
 // build / screenshot / agent-spawn call. Trusting that string verbatim lets a
@@ -38,6 +39,12 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keep window ref updated
   AgentSvc.setWindow(mainWindow)
   if (TerminalSvc) TerminalSvc.setWindow(mainWindow)
+
+  // Claude-hook-driven agent status badge (see HookService). Agents launch
+  // with `--settings <this file>`; the hooks write per-session status files
+  // this watcher forwards to the renderer as 'agent:status'.
+  const { settingsPath: hookSettingsPath } = ensureHookFiles()
+  watchAgentStatus(DB, () => mainWindow)
 
   // TICKET-0075: every invoke/send below goes through a sender check.
   const handle = (channel, fn) =>
@@ -130,7 +137,8 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     DB.upsertAgent({
       id: result.agentId,
       project_id: projectId,
-      label,
+      agent_name: label,
+      session_title: null,
       provider: launch.provider,
       model: launch.model,
       status: 'running',
@@ -141,12 +149,12 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // Re-register agents persisted from a previous run (app reopened, or the
   // project was reselected) so their history + session can be resumed.
-  handle('agents:restore', (_, { id, project_id, projectPath, label, provider, model, permission_mode, session_id }) => {
+  handle('agents:restore', (_, { id, project_id, projectPath, agent_name, session_title, provider, model, permission_mode, session_id }) => {
     return AgentSvc.restore({
       agentId: id,
       projectId: project_id,
       projectPath: resolveProjectRoot(DB, projectPath),
-      label,
+      label: agent_name,
       provider,
       model,
       permissionMode: permission_mode,
@@ -154,10 +162,10 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     })
   })
 
-  // TICKET-0070: renames an agent's card label -- fired once, client-side,
-  // from the first line the user submits into its terminal (auto-title).
-  handle('agents:updateLabel', (_, agentId, label) => {
-    DB.updateAgentLabel(agentId, label)
+  // Updates an agent's session title -- fired once, client-side, from the
+  // first line the user submits into its terminal (auto-title).
+  handle('agents:updateSessionTitle', (_, agentId, title) => {
+    DB.updateAgentSessionTitle(agentId, title)
     return { ok: true }
   })
 
@@ -202,9 +210,9 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // read has been dead since TICKET-0019). Rows are scoped to the project's
   // workspace key, then annotated with the ACE agent that owns each session
   // (via agent_sessions) so the renderer can build Totals / By Day / By Model /
-  // By Agent without any per-model or per-day tokscale calls. Sessions with no
-  // recorded owner (Codex, or anything from before this shipped) are labelled
-  // "Untracked". Returns a normalized, flat row list; the renderer aggregates.
+  // By Agent / By Session without any per-model or per-day tokscale calls.
+  // Sessions with no recorded owner (Codex, or anything from before this shipped)
+  // are labelled "Untracked". Returns a normalized, flat row list; the renderer aggregates.
   handle('tokens:getProjectHistory', async (_, { projectId, projectPath } = {}) => {
     let projectRoot
     try { projectRoot = resolveProjectRoot(DB, projectPath) }
@@ -230,7 +238,8 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
         cacheRead: Number(r.total_cache_read) || 0,
         cost: Number(r.total_cost) || 0,
         prompts: Number(r.message_count) || 0,
-        agentLabel: owner?.label || 'Untracked',
+        agentName: owner?.agent_name || 'Untracked',
+        sessionTitle: owner?.session_title || null,
       }
     })
     return { rows }
@@ -278,9 +287,27 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
 
   // ── Settings ────────────────────────────────────────────────────────────────
+  // Path to the generated Claude settings JSON that wires the agent-status
+  // hooks; the renderer passes it to `claude --settings` at launch.
+  handle('hooks:settingsPath', () => hookSettingsPath)
+
   handle('settings:get', (_, key) => DB.getSetting(key))
   handle('settings:set', (_, key, value) => {
     DB.setSetting(key, value)
+    // Notification mute marker for hook scripts
+    if (key === 'notification_sounds_muted') {
+      const fs = require('fs')
+      const path = require('path')
+      const projects = DB.getProjects()
+      for (const project of projects) {
+        const markerPath = path.join(project.path, '.claude', '.notification-muted')
+        if (value) {
+          try { fs.writeFileSync(markerPath, '') } catch (_) {}
+        } else {
+          try { fs.unlinkSync(markerPath) } catch (_) {}
+        }
+      }
+    }
     return { ok: true }
   })
 
@@ -347,7 +374,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // ── Screenshots (TICKET-0034, reworked from TICKET-0032) ───────────────────
   // Drag-to-select screen capture, saved into the requesting project's own
-  // .ace/screenshots/ folder -- see ScreenshotService for the capture-overlay
+  // assets/images/screenshots/ folder -- see ScreenshotService for the capture-overlay
   // flow and the clipboard-path handoff.
   handle('screenshots:captureRegion', async (_, projectPath) => {
     try {

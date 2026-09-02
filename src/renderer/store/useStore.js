@@ -82,12 +82,11 @@ const useStore = create((set, get) => ({
       agents: s.agents.filter((a) => a.agentId !== agentId),
     })),
 
-  // TICKET-0070: auto-title -- updates just the label in place so the
-  // card's badge and every other `agent.label` read (delete confirm,
-  // launch-bar uniqueness check) pick it up without a full agent reload.
-  updateAgentLabel: (agentId, label) =>
+  // Updates session title in place so the card's display and every other
+  // read picks it up without a full agent reload.
+  updateAgentSessionTitle: (agentId, sessionTitle) =>
     set((s) => ({
-      agents: s.agents.map((a) => a.agentId === agentId ? { ...a, label } : a),
+      agents: s.agents.map((a) => a.agentId === agentId ? { ...a, sessionTitle } : a),
     })),
 
   // ── Token stats ────────────────────────────────────────────────────────────
@@ -115,6 +114,19 @@ const useStore = create((set, get) => ({
   defaultProvider: 'claude',
   setDefaultModel: (m) => set({ defaultModel: m }),
   setDefaultProvider: (p) => set({ defaultProvider: p }),
+
+  // ── Notification sounds ────────────────────────────────────────────────────
+  soundsMuted: false,
+  setSoundsMuted: (muted) => set({ soundsMuted: muted }),
+  loadSoundsMuted: async () => {
+    const muted = await window.ace.getSetting('notification_sounds_muted')
+    set({ soundsMuted: muted === true })
+  },
+  toggleSoundsMuted: async () => {
+    const newMuted = !get().soundsMuted
+    await window.ace.setSetting('notification_sounds_muted', newMuted)
+    set({ soundsMuted: newMuted })
+  },
 }))
 
 export default useStore
