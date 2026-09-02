@@ -18,7 +18,9 @@ const os = require('os');
 const DEBUG = process.env.CLAUDE_HOOK_DEBUG === '1' || process.argv.includes('--log');
 const LOG_FILE = path.join(__dirname, '..', '..', 'hook-execution.log');
 let AUDIO_FILE = path.join(__dirname, '..', '..', 'assets', 'notification.mp3');
-const MUTE_MARKER = path.join(__dirname, '.notification-muted');
+// <project>/.claude/.notification-muted -- written by the app's settings:set
+// handler for `notification_sounds_muted` (and .gitignored under that name).
+const MUTE_MARKER = path.join(__dirname, '..', '.notification-muted');
 const VOLUME = 0.7;
 
 // Built-in OS sound, used only if the bundled file is missing (fail-loud, not silent)
