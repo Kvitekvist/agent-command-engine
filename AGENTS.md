@@ -124,6 +124,27 @@ If any check fails, do not commit.
   headless prompt path without an explicit product decision.
 - Never leave dead code or unused imports behind.
 
+## Writing
+
+Prose you produce for the user — PR descriptions, commit bodies, ticket
+Result sections, doc changes, chat replies longer than a couple of sentences —
+should not read as machine-generated. Self-edit before sending:
+
+- No significance inflation ("marks a watershed", "plays a key role").
+- Use `is`, not `serves as` / `acts as` / `stands as`.
+- No rule-of-three padding or "it's not X, it's Y" contrasts as a reflex.
+- No vague attributions ("experts say", "it's widely regarded"); name the
+  source or drop the claim.
+- No promotional adjectives on neutral facts ("robust", "seamless",
+  "powerful", "comprehensive").
+- Vary sentence length; cut filler transitions ("Moreover", "Furthermore",
+  "It's worth noting that").
+
+For a deliberate audit or rewrite of a specific text, the
+[`avoid-ai-writing`](https://github.com/conorbronsdon/avoid-ai-writing) skill
+(installed per-user under `~/.claude/skills/`, not vendored here) has the full
+pattern catalogue.
+
 ## Validation
 
 From `src/`:
