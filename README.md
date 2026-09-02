@@ -1,6 +1,6 @@
 # Agent Command Engine (ACE)
 
-ACE is a desktop app for running and managing AI coding agents in a controlled workspace. Start agent sessions, work with them in interactive terminals, and keep tasks and projects organized in one place.
+ACE runs Claude Code and Codex agents in separate terminals for each project. It keeps their tasks, status, and usage data together.
 ---
 
 ## Screenshots
@@ -17,16 +17,16 @@ ACE is a desktop app for running and managing AI coding agents in a controlled w
 
 ## Features
 
-- **Project switcher** — Add and switch between project folders.
-- **File explorer** — Browse each project's files in a VS Code-style sidebar. Open and edit files in Monaco, save directly to disk, or right-click to open in Explorer or run executable files.
-- **Multi-agent runner** — Run several Claude CLI or OpenAI Codex agents in the same project. Each agent has its own interactive terminal, starts in that project's folder, and stays available when you switch tabs or projects.
-- **Agent identity and status** — Each agent has a generated name and a title based on its first prompt. Status badges show **Running**, **Waiting**, **Done**, or **Error** using Claude Code lifecycle hooks. You can enable a completion sound for each project.
-- **Screenshot capture** — Select any screen region, including ACE, from a running agent card. ACE saves it to `.ace/screenshots/`, adds the directory to `.gitignore`, and copies the path so you can paste it into the agent terminal.
-- **Live token usage dashboard** — The default tab shows Claude and Codex subscription quotas, reset countdowns, and today's usage by model, project, and session from `tokscale` account data.
-- **Agents tab usage bar** — See each provider's percentage used, percentage available, and reset time above the Agents toolbar.
-- **Model selector** — Choose a Claude or Codex model for each agent.
-- **Push update** — From an agent terminal, create a ticket, make a `feature/` or `bugfix/` branch, commit the change locally, and open a pull request through the `/push-update` skill.
-- **Single window** — Opening ACE again focuses the existing window, keeping keyboard input and the local database with one app instance.
+- **Projects** — Open and switch between project folders.
+- **Files** — Browse a project in a VS Code-style sidebar. Edit files in Monaco and save them to disk. The context menu can open files in Explorer or run executable files.
+- **Agents** — Start several Claude Code or Codex agents in one project. Each has its own interactive terminal and remains available when you switch tabs or projects.
+- **Names and status** — Agents receive a generated name and a title from their first prompt. Their badges reflect Claude Code lifecycle events: **Running**, **Waiting**, **Done**, or **Error**. A project can play a sound when an agent finishes.
+- **Screenshots** — Capture a selected screen area from an agent card. ACE writes the image to `.ace/screenshots/`, adds that directory to `.gitignore`, and copies its path.
+- **Usage** — The default dashboard reads Claude and Codex quota and usage data from `tokscale`. It shows reset times and today's use by model, project, and session.
+- **Usage bar** — The Agents tab shows each provider's used and available percentage, plus its reset time.
+- **Models** — Choose the Claude or Codex model for an agent.
+- **Push update** — This terminal action creates a ticket and a `feature/` or `bugfix/` branch, makes a local commit, then opens a pull request through `/push-update`.
+- **One window** — A second launch focuses the existing window instead of starting another copy of ACE.
 
 ---
 
