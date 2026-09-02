@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.23] - 2026-08-31
+## [0.1.28] - 2026-09-02
 
 ### Security
 - Main process no longer trusts renderer-supplied filesystem paths. Every
@@ -12,6 +12,13 @@
   (TICKET-0075)
 
 ### Added
+- Live agent status. Each card's badge now shows **Running / Waiting / Done /
+  Error**, driven by Claude Code's own lifecycle hooks rather than guessing
+  from terminal output. Adds a completion sound on stop, opt-in with a
+  per-project mute toggle (TICKET-0107)
+- Agent identity split: a card carries a stable generated name plus a separate
+  per-task session title, auto-generated from its first prompt. Token Usage
+  gains a **By Session** breakdown alongside By Agent (TICKET-0107)
 - The left sidebar can be dragged wider (or narrower) by its right edge,
   clamped to 180–600px; double-click the handle to reset. The chosen width
   is remembered per machine (TICKET-0104)
@@ -46,6 +53,10 @@
   launch reveal cleared the screen, which on macOS landed after the box had
   rendered and wiped it; the loading overlay alone now masks boot churn
   (TICKET-0102)
+- The notification-sound mute toggle now takes effect. The hook read its mute
+  marker from a different path than the app wrote it to, and `.claude/settings.json`
+  is no longer committed, so the sound is opt-in rather than forced on everyone
+  working in the repo (TICKET-0107)
 
 ## [0.1.23] - 2026-08-29
 
