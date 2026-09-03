@@ -1,7 +1,7 @@
 {
   "name": "agent-command-engine",
   "version": "0.1.30",
-  "description": "A specialized Electron interface for managing Claude & OpenAI Codex agents across multiple projects",
+  "description": "A specialized Electron interface for managing Claude and OpenAI Codex agents across multiple projects",
   "main": "dist/main/index.js",
   "author": "Jens",
   "scripts": {
@@ -83,6 +83,17 @@
             "x64"
           ]
         }
+      ]
+    },
+    "appx": {
+      "identityName": "JensR.AgnetCommandEngine",
+      "publisher": "CN=7F30662C-5848-43BF-AF74-FD92C644B852",
+      "publisherDisplayName": "JensR",
+      "applicationId": "AgnetCommandEngine",
+      "backgroundColor": "#2b2b2b",
+      "showNameOnTiles": true,
+      "languages": [
+        "en-US"
       ]
     },
     "mac": {

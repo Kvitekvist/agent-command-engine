@@ -2,6 +2,12 @@
 
 ## [0.1.30] - 2026-09-03
 
+### Added
+- MSIX/AppX build for the Microsoft Store: `node scripts/build-msix.js`
+  produces an unsigned `releases/Agent Command Engine <version>.appx` stamped
+  with the reserved Store identity. `build.appx` config and tile assets added
+  (TICKET-0115)
+
 ### Fixed
 - Notification sound now actually plays on Stop / Notification. The hook was
   spawning the audio player detached and exiting immediately, which killed it
