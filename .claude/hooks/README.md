@@ -1,8 +1,11 @@
 # Claude Code hooks
 
-`play-notification.js` plays `assets/notification.mp3` (falling back to an OS
-sound) on `Stop` / `SubagentStop`. It's **opt-in** — `.claude/settings.json`
-is gitignored so it isn't forced on everyone who opens this repo.
+`play-notification.js` plays `assets/notification.wav` (falling back to an OS
+sound) on `Stop` / `SubagentStop` / `Notification`. Playback is synchronous —
+the hook blocks for the ~2s the clip lasts rather than spawning a detached
+player (which never actually made sound on Windows). It's **opt-in** —
+`.claude/settings.json` is gitignored so it isn't forced on everyone who opens
+this repo.
 
 To enable, add to your own `.claude/settings.json` (or `settings.local.json`):
 

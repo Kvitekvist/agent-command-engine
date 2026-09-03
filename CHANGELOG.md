@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.30] - 2026-09-03
+
+### Fixed
+- Notification sound now actually plays on Stop / Notification. The hook was
+  spawning the audio player detached and exiting immediately, which killed it
+  before any sound on Windows. Playback is synchronous now; the Windows path
+  uses `SoundPlayer.PlaySync` and the `play-seatbelt*.ps1` helpers are gone.
+  Adds `assets/notification.wav` (TICKET-0114)
+
 ## [0.1.29] - 2026-09-03
 
 ### Changed
