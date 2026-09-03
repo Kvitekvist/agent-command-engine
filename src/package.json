@@ -86,10 +86,10 @@
       ]
     },
     "appx": {
-      "identityName": "JensR.AgnetCommandEngine",
+      "identityName": "JensR.AgentCommandEngine",
       "publisher": "CN=7F30662C-5848-43BF-AF74-FD92C644B852",
       "publisherDisplayName": "JensR",
-      "applicationId": "AgnetCommandEngine",
+      "applicationId": "AgentCommandEngine",
       "backgroundColor": "#2b2b2b",
       "showNameOnTiles": true,
       "languages": [
