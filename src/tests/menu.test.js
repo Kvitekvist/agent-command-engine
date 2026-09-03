@@ -6,12 +6,19 @@ const { buildMenu } = require('../main/menu')
 
 // buildFromTemplate is stubbed to return { template }, so `.template` is the
 // array passed to Electron.
+const isMac = process.platform === 'darwin'
+
 function labels(menu) {
   return menu.template.map((m) => m.label || m.role)
 }
 function itemLabels(menu, topLabel) {
   const top = menu.template.find((m) => (m.label || m.role) === topLabel)
-  return (top.submenu || []).map((i) => i.label || i.role || i.type)
+  return (top?.submenu || []).map((i) => i.label || i.role || i.type)
+}
+// Every item across every top-level submenu, one level deep -- macOS moves
+// Settings/About into the app menu, so tests search by content, not position.
+function allItems(menu) {
+  return menu.template.flatMap((m) => m.submenu || [])
 }
 
 test('menu has the standard top-level sections', () => {
@@ -26,24 +33,32 @@ test('menu has the standard top-level sections', () => {
 
 test('Settings item carries the CmdOrCtrl+, accelerator and navigates to settings', () => {
   const menu = buildMenu({ webContents: { send: () => {} } })
-  const file = menu.template.find((m) => m.label === 'File')
-  const settings = file.submenu.find((i) => /Settings/.test(i.label || ''))
-  assert.ok(settings, 'File menu has a Settings item')
+  const settings = allItems(menu).find((i) => /Settings/.test(i.label || ''))
+  assert.ok(settings, 'menu has a Settings item')
   assert.equal(settings.accelerator, 'CmdOrCtrl+,')
+
+  // App menu on macOS, File menu elsewhere.
+  const parent = isMac ? 'Agent Command Engine' : 'File'
+  assert.ok(
+    itemLabels(menu, parent).some((l) => /Settings/.test(l)),
+    `Settings lives under ${parent}`,
+  )
 
   let sent
   const menu2 = buildMenu({ webContents: { send: (ch, v) => { sent = [ch, v] } } })
-  menu2.template.find((m) => m.label === 'File').submenu
-    .find((i) => /Settings/.test(i.label || '')).click()
+  allItems(menu2).find((i) => /Settings/.test(i.label || '')).click()
   assert.deepEqual(sent, ['menu:navigate', 'settings'])
 })
 
-test('Help menu exposes About and the external links', () => {
+test('About and the external help links are present', () => {
   const menu = buildMenu(null)
   const help = itemLabels(menu, 'help')
-  assert.ok(help.includes('About Agent Command Engine'))
   assert.ok(help.includes('Report an Issue'))
   assert.ok(help.includes('Documentation'))
+
+  // About is in the app menu on macOS, the Help menu elsewhere.
+  const aboutParent = isMac ? 'Agent Command Engine' : 'help'
+  assert.ok(itemLabels(menu, aboutParent).includes('About Agent Command Engine'))
 })
 
 test('Reload / DevTools appear only in an unpackaged build', () => {
