@@ -71,11 +71,24 @@ class FileService {
     return { ok: true }
   }
 
-  // TICKET-0033: reveals the file in Windows Explorer, highlighted/selected
-  // -- same as its "Open in Explorer" IPC name implies.
+  // TICKET-0033: reveals the file in Windows Explorer, highlighted/selected.
+  // On Windows, explorer.exe /select,<path> is more reliable than
+  // shell.showItemInFolder (which uses SHOpenFolderAndSelectItems and can
+  // silently fail on some Windows 11 configurations).
   openInExplorer(root, filePath) {
     const target = resolveWithinRoot(root, filePath)
-    shell.showItemInFolder(target)
+    if (!fs.existsSync(target)) {
+      return { ok: false, error: 'File not found' }
+    }
+    if (process.platform === 'win32') {
+      // Two-element argv matches VS Code's approach: explorer handles
+      // "/select, <quoted-path>" when Node.js quotes the second arg.
+      const child = spawn('explorer.exe', ['/select,', target], { detached: true, stdio: 'ignore' })
+      child.on('error', () => {})
+      child.unref()
+    } else {
+      shell.showItemInFolder(target)
+    }
     return { ok: true }
   }
 

@@ -63,7 +63,7 @@ def main():
     input_logo = os.path.join(project_root, "assets", "images", "logo.png")
 
     # Output paths
-    build_dir = os.path.join(project_root, "build")
+    build_dir = os.path.join(project_root, "assets", "icons")
     os.makedirs(build_dir, exist_ok=True)
 
     output_ico = os.path.join(build_dir, "icon.ico")

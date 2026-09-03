@@ -4,8 +4,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-ICONSET_DIR="$PROJECT_ROOT/build/icon.iconset"
-OUTPUT_ICNS="$PROJECT_ROOT/build/icon.icns"
+ICONSET_DIR="$PROJECT_ROOT/assets/icons/icon.iconset"
+OUTPUT_ICNS="$PROJECT_ROOT/assets/icons/icon.icns"
 
 if [ ! -d "$ICONSET_DIR" ]; then
     echo "Error: iconset directory not found at $ICONSET_DIR"

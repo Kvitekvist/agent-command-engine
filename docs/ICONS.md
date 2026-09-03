@@ -7,9 +7,9 @@ ACE now has custom icon support for Windows (.ico) and macOS (.icns) builds, as 
 ## Icon Files
 
 - **Source**: `assets/images/logo.png` (1024x1024 purple/white ACE logo)
-- **Windows**: `build/icon.ico` (multi-resolution .ico file)
-- **macOS**: `build/icon.iconset/` (PNG set for .icns creation)
-- **macOS Final**: `build/icon.icns` (created during packaging or manually on Mac)
+- **Windows**: `assets/icons/icon.ico` (multi-resolution .ico file)
+- **macOS**: `assets/icons/icon.iconset/` (PNG set for .icns creation)
+- **macOS Final**: `assets/icons/icon.icns` (created during packaging or manually on Mac)
 
 ## Where Icons Appear
 
@@ -30,8 +30,8 @@ python scripts/create-icons.py
 ```
 
 This creates:
-- `build/icon.ico` ✓
-- `build/icon.iconset/*.png` ✓
+- `assets/icons/icon.ico` ✓
+- `assets/icons/icon.iconset/*.png` ✓
 
 On macOS, to manually create .icns:
 ```bash
@@ -47,10 +47,10 @@ Or let electron-builder create it automatically during packaging.
 ```json
 "build": {
   "win": {
-    "icon": "../build/icon.ico"
+    "icon": "../assets/icons/icon.ico"
   },
   "mac": {
-    "icon": "../build/icon.icns"
+    "icon": "../assets/icons/icon.icns"
   }
 }
 ```
@@ -62,9 +62,9 @@ In `src/main/index.js`:
 ```javascript
 const getIconPath = () => {
   if (process.platform === 'win32') {
-    return path.join(__dirname, '../../build/icon.ico')
+    return path.join(__dirname, '../../assets/icons/icon.ico')
   } else if (process.platform === 'darwin') {
-    return path.join(__dirname, '../../build/icon.icns')
+    return path.join(__dirname, '../../assets/icons/icon.icns')
   }
   return undefined
 }
@@ -89,7 +89,7 @@ mainWindow = new BrowserWindow({
 
 When running `npm run package`:
 
-1. **Windows**: electron-builder uses `build/icon.ico` directly
+1. **Windows**: electron-builder uses `assets/icons/icon.ico` directly
 2. **macOS**: electron-builder creates `.icns` from `icon.iconset/` if `.icns` doesn't exist
 
 The icon is automatically included in both portable and installer builds.
