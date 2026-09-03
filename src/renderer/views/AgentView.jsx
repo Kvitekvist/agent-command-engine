@@ -23,6 +23,20 @@ export default function AgentView() {
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState(null)
 
+  // Agent card layout: '2' is the default responsive grid (1 col, 2 cols at
+  // xl); '1' forces a single full-width column so one card gets the whole
+  // pane. Persisted per machine, same pattern as the sidebar width.
+  const [gridCols, setGridCols] = useState(() => {
+    try { return localStorage.getItem('ace:agentGridCols') === '1' ? '1' : '2' } catch (_) { return '2' }
+  })
+  function toggleGridCols() {
+    setGridCols((c) => {
+      const next = c === '1' ? '2' : '1'
+      try { localStorage.setItem('ace:agentGridCols', next) } catch (_) {}
+      return next
+    })
+  }
+
   // TICKET-0084: Settings are real launch defaults, not Settings-page-only
   // state. Auto has no selected model; main resolves a compatible one after
   // LoadBalancer chooses the provider.
@@ -185,6 +199,13 @@ export default function AgentView() {
         >
           {soundsMuted ? '🔇' : '🔔'}
         </button>
+        <button
+          onClick={toggleGridCols}
+          className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
+          title={gridCols === '1' ? 'Single wide column — click for two columns' : 'Two columns — click for one wide column'}
+        >
+          {gridCols === '1' ? '▤' : '▦'}
+        </button>
         <button onClick={launchAgent} disabled={launching} className="btn-primary ml-auto text-xs">
           {launching ? 'Launching…' : '+ New Agent'}
         </button>
@@ -211,7 +232,7 @@ export default function AgentView() {
             instead of being unmounted, mirroring App.jsx's tab-level
             hide-not-unmount pattern (TICKET-0027). A project switch no
             longer tears any session down -- only Close/app quit do. */}
-        <div className={'grid grid-cols-1 xl:grid-cols-2 gap-4' + (projectAgents.length === 0 ? ' hidden' : '')}>
+        <div className={'grid gap-4 ' + (gridCols === '1' ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-2') + (projectAgents.length === 0 ? ' hidden' : '')}>
           {agents.map((agent) => (
             <div key={agent.agentId} className={agent.projectId === activeProject.id ? '' : 'hidden'}>
               <AgentPane agent={agent}
