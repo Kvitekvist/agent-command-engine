@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.29] - 2026-09-03
+
+### Changed
+- Icon files moved from `build/` to `assets/icons/` to align with project
+  structure where `build/` is for generated outputs and `assets/` is for
+  source assets. All references in documentation, scripts, and source code
+  updated (TICKET-0112)
+
 ## [0.1.28] - 2026-09-02
 
 ### Security
