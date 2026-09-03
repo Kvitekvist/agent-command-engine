@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron')
+const { app, BrowserWindow, Menu, ipcMain, dialog, nativeImage } = require('electron')
 const path = require('path')
 const fs = require('fs')
+const { buildMenu, setAboutPanel } = require('./menu')
 
 // Catch any uncaught exceptions in main process
 process.on('uncaughtException', (err) => {
@@ -127,6 +128,8 @@ app.whenReady().then(async () => {
     await DBService.init()
     console.log('DBService ready. Creating window...')
     createWindow()
+    setAboutPanel()
+    Menu.setApplicationMenu(buildMenu(mainWindow))
     AgentService.init(mainWindow)
     TerminalService.init(mainWindow)
     registerHandlers(ipcMain, mainWindow, DBService, AgentService, TerminalService)
@@ -143,6 +146,7 @@ app.whenReady().then(async () => {
     // window and silently go nowhere (TICKET-0070).
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
+      Menu.setApplicationMenu(buildMenu(mainWindow))
       if (AgentService) AgentService.setWindow(mainWindow)
       if (TerminalService) TerminalService.setWindow(mainWindow)
     }

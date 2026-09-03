@@ -17,7 +17,7 @@ import ContextMenu from './components/ContextMenu'
 const LIVE_USAGE_POLL_MS = 60_000
 
 export default function App() {
-  const { activeView, addAgent, updateAgentStatus, loadLiveUsage } = useStore()
+  const { activeView, addAgent, updateAgentStatus, loadLiveUsage, setActiveView } = useStore()
 
   // TICKET-0051: app-wide right-click Copy / Paste / Select all, so any text in
   // the UI can be highlighted and copied without hunting for Ctrl+C. Rendered
@@ -83,6 +83,9 @@ export default function App() {
     const interval = setInterval(loadLiveUsage, LIVE_USAGE_POLL_MS)
     return () => clearInterval(interval)
   }, [])
+
+  // TICKET-0119: honour the application menu's "Settings…" (Ctrl/Cmd+,) item.
+  useEffect(() => window.ace.onMenuNavigate(setActiveView), [])
 
   useEffect(() => {
     window.ace.onAgentStatus((data) => {
