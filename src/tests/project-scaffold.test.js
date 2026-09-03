@@ -22,6 +22,8 @@ test('new projects copy the bundled scaffold without overwriting existing folder
   assert.equal(fs.existsSync(path.join(result.path, '.claude', '.ace-gitkeep')), false)
   assert.equal(fs.existsSync(path.join(result.path, 'build', '.gitkeep')), true)
   assert.equal(fs.existsSync(path.join(result.path, 'releases', '.gitkeep')), true)
+  // One-shot marker that triggers the guided /project-setup interview.
+  assert.equal(fs.existsSync(path.join(result.path, '.claude', '.needs-setup')), true)
 
   const collision = await createProjectFromScaffold({ name: 'My Project', parentDir: root, scaffoldDir })
   assert.match(collision.error, /already exists/)

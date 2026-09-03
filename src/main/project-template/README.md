@@ -39,12 +39,11 @@ If you prefer to set up manually:
 
 1. Copy this entire folder to a new location and rename it for the new project.
 2. Open the project in Claude Code.
-3. Answer `.claude/prompts/project_questionnaire.md` (project name, stack,
-   git details, quality requirements, etc.).
-4. Let Claude follow `.claude/prompts/project_init.md` to fill in
-   `.claude/project_config.md`, the memory files, scripts, and root
-   documentation for the new project.
-5. Start requesting features and bug fixes — every change is tracked through
+3. Run `/project-setup`. It interviews you about the project, agrees a
+   summary and a tech stack, then rewrites `.claude/project_config.md`, the
+   memory files, and the root documentation to match. (Projects created
+   through ACE's `✨ New` button start this automatically.)
+4. Start requesting features and bug fixes — every change is tracked through
    the ticket system described below.
 
 ---
