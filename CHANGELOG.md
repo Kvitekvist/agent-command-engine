@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.31] - 2026-09-03
+
+### Added
+- Projects created through `✨ New` now start a guided setup: the first Claude
+  agent opened for the project auto-runs `/project-setup`, which interviews
+  you about the project and its requirements, agrees a summary and a tech
+  stack, then rewrites the scaffold's `project_config.md`, memory files, and
+  root docs to describe the real project. Fires once per project. The
+  scaffold's unused `project_init.md` / `project_questionnaire.md` prompts are
+  replaced by the new `project-setup` skill (TICKET-0120)
+- Application menu is now defined explicitly instead of Electron's default.
+  Adds **About Agent Command Engine** (shows the version) and **Settings**
+  (`Ctrl/Cmd+,`, opens the Settings view), plus Help entries for reporting an
+  issue and opening the docs (TICKET-0119)
+- Agents view has a layout toggle (▦ / ▤) next to the sound button: switch the
+  agent cards between two columns and one wide full-width column. The choice
+  is remembered per machine (TICKET-0121)
+
+### Changed
+- Reload, Force Reload, and Toggle DevTools appear in the View menu only when
+  running unpackaged; packaged builds no longer expose them (TICKET-0119)
+
 ## [0.1.30] - 2026-09-03
 
 ### Added
