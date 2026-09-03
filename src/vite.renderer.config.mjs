@@ -25,6 +25,9 @@ export default defineConfig({
     // fighting the plugin's internals.
     outDir: '../dist/renderer',
     emptyOutDir: true,
+    sourcemap: false,
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 5000,
   },
   server: {
     port: 5173,
