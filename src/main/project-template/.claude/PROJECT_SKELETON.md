@@ -19,8 +19,6 @@ Project/
     prompts/
         bugfix.md
         feature.md
-        project_init.md
-        project_questionnaire.md
         refactor.md
         release.md
     templates/

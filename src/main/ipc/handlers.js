@@ -119,6 +119,30 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return createProjectFromScaffold({ name, parentDir, scaffoldDir })
   })
 
+  // One-shot: createProjectFromScaffold drops `.claude/.needs-setup` into every
+  // project made through `✨ New`. The first Claude AgentTerminal opened for
+  // that project calls this once the CLI is up; a truthy return tells the
+  // renderer to auto-send `/project-setup`. Deleting the marker here makes it
+  // fire exactly once, surviving app restarts and whichever agent gets there
+  // first.
+  handle('projects:consumeSetupFlag', (_, projectPath) => {
+    const fs = require('fs')
+    const path = require('path')
+    let root
+    try {
+      root = resolveProjectRoot(DB, projectPath)
+    } catch (_) {
+      return { needsSetup: false }
+    }
+    const marker = path.join(root, '.claude', '.needs-setup')
+    try {
+      fs.unlinkSync(marker)
+      return { needsSetup: true }
+    } catch (_) {
+      return { needsSetup: false }
+    }
+  })
+
   // ── Agents ──────────────────────────────────────────────────────────────────
   handle('agents:getByProject', (_, projectId) => {
     return DB.getAgentsByProject(projectId)

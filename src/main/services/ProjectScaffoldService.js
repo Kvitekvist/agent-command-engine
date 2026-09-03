@@ -45,6 +45,9 @@ async function createProjectFromScaffold({ name, parentDir, scaffoldDir } = {}) 
       await fs.promises.mkdir(dir, { recursive: true })
       await fs.promises.writeFile(path.join(dir, '.gitkeep'), '')
     }
+    // One-shot marker: the first Claude agent ACE opens for this project
+    // consumes it (projects:consumeSetupFlag) and auto-runs /project-setup.
+    await fs.promises.writeFile(path.join(projectPath, '.claude', '.needs-setup'), '')
     return { path: projectPath }
   } catch (error) {
     await fs.promises.rm(projectPath, { recursive: true, force: true })

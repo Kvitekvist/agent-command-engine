@@ -331,6 +331,21 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       hideBannerTimer = setTimeout(() => {
         if (disposed) return
         setShowBanner(false)
+        // Projects made through `✨ New` carry a one-shot `.claude/.needs-setup`
+        // marker. The first Claude agent to reach this point consumes it and
+        // auto-starts the guided setup interview.
+        // ponytail: reuses the banner delay as the "CLI is ready" signal
+        // instead of matching the prompt string -- upgrade to a content match
+        // if a cold start ever races the keystroke.
+        if (agent.provider !== 'codex' && sessionIdRef.current) {
+          window.ace.consumeProjectSetupFlag(agent.projectPath)
+            .then((res) => {
+              if (res?.needsSetup && !disposed && sessionIdRef.current) {
+                window.ace.terminal.write(sessionIdRef.current, '/project-setup\r')
+              }
+            })
+            .catch(() => {})
+        }
       }, LAUNCH_BANNER_HIDE_MS)
     }
     start()

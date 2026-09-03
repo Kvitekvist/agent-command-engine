@@ -39,3 +39,4 @@ obj/
 # Claude Code runtime state
 .claude/scheduled_tasks.lock
 .claude/temp_nodedata.json
+.claude/.needs-setup
