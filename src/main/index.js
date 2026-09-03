@@ -38,10 +38,10 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 // Icon path - works for both dev and packaged builds
 const getIconPath = () => {
   if (process.platform === 'win32') {
-    return path.join(__dirname, '../../build/icon.ico')
+    return path.join(__dirname, '../../assets/icons/icon.ico')
   } else if (process.platform === 'darwin') {
     // macOS uses .icns, but Electron sets it automatically from the app bundle
-    return path.join(__dirname, '../../build/icon.icns')
+    return path.join(__dirname, '../../assets/icons/icon.icns')
   }
   return undefined
 }
@@ -49,14 +49,14 @@ const getIconPath = () => {
 // macOS ignores BrowserWindow's `icon` option, and an unpackaged dev run has
 // no .app bundle for the OS to read an icon from, so `npm run dev` always
 // shows the default Electron dock icon. A packaged build is fine (its bundle
-// carries build/icon.icns via electron-builder's mac.icon). Set the dock icon
+// carries assets/icons/icon.icns via electron-builder's mac.icon). Set the dock icon
 // explicitly in dev so it matches the packaged app. No-op when packaged (the
 // bundle icon is correct) or off macOS (no app.dock). (TICKET-0069)
 const setDevDockIcon = () => {
   if (process.platform !== 'darwin' || app.isPackaged || !app.dock) return
   // app.getAppPath() is the dir holding package.json (src/) in dev; the icon
-  // assets live in the repo-root build/ folder one level up.
-  const pngPath = path.join(app.getAppPath(), '..', 'build', 'icon.iconset', 'icon_512x512.png')
+  // assets live in the repo-root assets/icons/ folder one level up.
+  const pngPath = path.join(app.getAppPath(), '..', 'assets', 'icons', 'icon.iconset', 'icon_512x512.png')
   try {
     if (!fs.existsSync(pngPath)) return
     const image = nativeImage.createFromPath(pngPath)

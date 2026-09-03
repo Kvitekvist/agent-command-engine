@@ -8,15 +8,8 @@ Thumbs.db
 .idea/
 
 # Build & release output
-/build/*
-!/build/.gitkeep
-!/build/icon.ico
-!/build/icon.icns
-!/build/icon.iconset/
-!/build/README.md
 /releases/*
 !/releases/.gitkeep
-/dist/
 /src/dist/
 
 # Python

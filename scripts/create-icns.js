@@ -38,8 +38,8 @@ try {
 const png2icons = require('png2icons');
 
 const projectRoot = path.join(__dirname, '..');
-const iconsetDir = path.join(projectRoot, 'build', 'icon.iconset');
-const outputIcns = path.join(projectRoot, 'build', 'icon.icns');
+const iconsetDir = path.join(projectRoot, 'assets', 'icons', 'icon.iconset');
+const outputIcns = path.join(projectRoot, 'assets', 'icons', 'icon.icns');
 
 // Check iconset exists
 if (!fs.existsSync(iconsetDir)) {

@@ -39,6 +39,9 @@ function FileTreeNode({ root, entry, depth, onOpenFile, onContextMenu }) {
 
   function handleContextMenu(e) {
     e.preventDefault()
+    // Stop App.jsx's app-wide Copy/Paste context menu from also firing over
+    // this one (same reason AgentTerminal.jsx stopPropagation()s its own).
+    e.stopPropagation()
     onContextMenu(e, entry)
   }
 
@@ -124,8 +127,12 @@ export default function FileTree({ project }) {
   }
 
   async function handleOpenInExplorer(entry) {
-    const result = await window.ace.fs.openInExplorer(project.path, entry.path)
-    if (!result.ok) window.alert(`Couldn't reveal "${entry.name}": ${result.error}`)
+    try {
+      const result = await window.ace.fs.openInExplorer(project.path, entry.path)
+      if (!result.ok) window.alert(`Couldn't reveal "${entry.name}": ${result.error}`)
+    } catch (err) {
+      window.alert(`Couldn't reveal "${entry.name}": ${err.message}`)
+    }
   }
 
   async function handleRun(entry) {

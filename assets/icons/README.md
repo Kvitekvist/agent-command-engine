@@ -1,4 +1,4 @@
-# Icon Build Files
+# Icon Files
 
 This directory contains the icon files for ACE (Agent Command Engine).
 
@@ -25,7 +25,7 @@ This creates:
 
 On a Mac, run:
 ```bash
-iconutil -c icns build/icon.iconset -o build/icon.icns
+iconutil -c icns assets/icons/icon.iconset -o assets/icons/icon.icns
 ```
 
 Or use the helper script:
@@ -37,7 +37,7 @@ Or use the helper script:
 
 When you run `npm run package`:
 
-- **Windows**: Uses `build/icon.ico` automatically
+- **Windows**: Uses `assets/icons/icon.ico` automatically
 - **macOS**: Creates `.icns` from the PNG set if `icon.icns` doesn't exist
 
 electron-builder will automatically generate the .icns file during packaging if it's missing, so you don't strictly need to create it manually. However, having it pre-created ensures consistency.
@@ -49,8 +49,8 @@ electron-builder will automatically generate the .icns file during packaging if 
 Icon is set in `src/package.json`:
 ```json
 "build": {
-  "win": { "icon": "../build/icon.ico" },
-  "mac": { "icon": "../build/icon.icns" }
+  "win": { "icon": "../assets/icons/icon.ico" },
+  "mac": { "icon": "../assets/icons/icon.icns" }
 }
 ```
 

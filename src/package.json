@@ -1,6 +1,6 @@
 {
   "name": "agent-command-engine",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "description": "A specialized Electron interface for managing Claude & OpenAI Codex agents across multiple projects",
   "main": "dist/main/index.js",
   "author": "Jens",
@@ -69,7 +69,7 @@
       "node_modules/node-pty/**/*"
     ],
     "win": {
-      "icon": "../build/icon.ico",
+      "icon": "../assets/icons/icon.ico",
       "target": [
         {
           "target": "portable",
@@ -86,7 +86,7 @@
       ]
     },
     "mac": {
-      "icon": "../build/icon.icns",
+      "icon": "../assets/icons/icon.icns",
       "target": [
         {
           "target": "dmg",
