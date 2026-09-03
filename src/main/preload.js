@@ -118,4 +118,12 @@ contextBridge.exposeInMainWorld('ace', {
   // conversation itself runs in the PTY terminal (AgentTerminal.jsx), not here.
   onAgentStatus:            (cb) => ipcRenderer.on('agent:status',             (_, d) => cb(d)),
   offAgentStatus:            () => ipcRenderer.removeAllListeners('agent:status'),
+
+  // TICKET-0119: application-menu items that just switch the active view
+  // (Settings, …) send this instead of reaching into the store from main.
+  onMenuNavigate: (cb) => {
+    const l = (_e, view) => cb(view)
+    ipcRenderer.on('menu:navigate', l)
+    return () => ipcRenderer.removeListener('menu:navigate', l)
+  },
 })
