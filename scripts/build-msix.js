@@ -9,7 +9,7 @@
 // You upload this UNSIGNED. The Store re-signs it with your publisher cert on
 // ingestion, so there is no code-signing step here. Identity (identityName /
 // publisher / publisherDisplayName) lives in src/package.json build.appx and
-// must match Partner Center > Product identity for product 9N4TSNZGST6N.
+// must match Partner Center > Product identity for the ACE product you submit.
 //
 // Requires the Windows 10/11 SDK (makeappx.exe). electron-builder finds it
 // under "C:\Program Files (x86)\Windows Kits\10\bin\<ver>\x64" automatically.
@@ -37,4 +37,4 @@ if (!fs.existsSync(out)) {
 }
 const mb = (fs.statSync(out).size / 1e6).toFixed(0)
 console.log(`\nBuilt ${out} (${mb} MB, unsigned).`)
-console.log('Upload it at Partner Center > product 9N4TSNZGST6N > Packages.')
+console.log('Upload it at Partner Center > your Agent Command Engine product > Packages.')
