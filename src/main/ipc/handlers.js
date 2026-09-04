@@ -43,7 +43,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Claude-hook-driven agent status badge (see HookService). Agents launch
   // with `--settings <this file>`; the hooks write per-session status files
   // this watcher forwards to the renderer as 'agent:status'.
-  const { settingsPath: hookSettingsPath } = ensureHookFiles()
+  const { dir: hookDir, settingsPath: hookSettingsPath } = ensureHookFiles()
   watchAgentStatus(DB, () => mainWindow)
 
   // TICKET-0075: every invoke/send below goes through a sender check.
@@ -318,18 +318,17 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   handle('settings:get', (_, key) => DB.getSetting(key))
   handle('settings:set', (_, key, value) => {
     DB.setSetting(key, value)
-    // Notification mute marker for hook scripts
+    // One global mute marker beside the generated sound hook (HookService).
+    // The hook is shared across every project ACE launches an agent in, so a
+    // single marker -- not a per-project file -- is what it checks.
     if (key === 'notification_sounds_muted') {
       const fs = require('fs')
       const path = require('path')
-      const projects = DB.getProjects()
-      for (const project of projects) {
-        const markerPath = path.join(project.path, '.claude', '.notification-muted')
-        if (value) {
-          try { fs.writeFileSync(markerPath, '') } catch (_) {}
-        } else {
-          try { fs.unlinkSync(markerPath) } catch (_) {}
-        }
+      const marker = path.join(hookDir, '.muted')
+      if (value) {
+        try { fs.writeFileSync(marker, '') } catch (_) {}
+      } else {
+        try { fs.rmSync(marker, { force: true }) } catch (_) {}
       }
     }
     return { ok: true }

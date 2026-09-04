@@ -3,12 +3,16 @@
 // Ink-based TUI repaints on a timer even while idle, so "has the PTY gone
 // quiet" flickers once a second. Hooks fire only on real events.
 //
-// ensureHookFiles() writes, into userData, a tiny node hook script plus a
-// settings JSON that wires the relevant hook events to it. ACE launches every
-// Claude agent with `--settings <that file>` (see agentLaunch.js), so no
-// project or global Claude config is touched. Each hook run writes
+// ensureHookFiles() writes, into userData, two tiny node hook scripts plus a
+// settings JSON that wires the relevant hook events to them, and copies in the
+// bundled notification sound. ACE launches every Claude agent with
+// `--settings <that file>` (see agentLaunch.js), so no project or global
+// Claude config is touched and everything works on a clean install in any
+// project. Each status hook run writes
 //   <statusDir>/<session_id>.json  ->  { state: 'working' | 'waiting' }
-// which watchAgentStatus() tails and forwards to the renderer.
+// which watchAgentStatus() tails and forwards to the renderer; Stop /
+// Notification additionally play <dir>/notification.wav unless <dir>/.muted
+// exists (toggled from Settings -> settings:set in handlers.js).
 
 const { app } = require('electron')
 const fs = require('fs')
@@ -35,6 +39,34 @@ process.stdin.on('end', () => {
 })
 `
 
+// Plays argv[2] unless argv[3] (the mute marker) exists. Synchronous on
+// purpose: a detached player is torn down when this process exits before it
+// makes a sound (that was the long-standing Windows bug). A Stop hook can
+// afford to block for the ~2s the clip lasts.
+const SOUND_SCRIPT = `const { spawnSync } = require('child_process')
+const { existsSync } = require('fs')
+const os = require('os')
+const [, , audioFile, muteMarker] = process.argv
+if (muteMarker && existsSync(muteMarker)) process.exit(0)
+if (!audioFile || !existsSync(audioFile)) process.exit(0)
+const opt = { stdio: 'ignore', timeout: 15000 }
+try {
+  if (os.platform() === 'darwin') {
+    spawnSync('afplay', [audioFile], opt)
+  } else if (os.platform() === 'win32') {
+    const f = audioFile.replace(/'/g, "''")
+    spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+      "(New-Object System.Media.SoundPlayer '" + f + "').PlaySync()"], opt)
+  } else {
+    for (const p of [['paplay', [audioFile]], ['aplay', ['-q', audioFile]],
+        ['ffplay', ['-nodisp', '-autoexit', '-loglevel', 'quiet', audioFile]]]) {
+      if (!spawnSync(p[0], p[1], opt).error) break
+    }
+  }
+} catch (_) {}
+process.exit(0)
+`
+
 let cached = null
 
 function ensureHookFiles() {
@@ -42,27 +74,48 @@ function ensureHookFiles() {
   const dir = path.join(app.getPath('userData'), 'ace-hooks')
   const statusDir = path.join(dir, 'status')
   const scriptPath = path.join(dir, 'agent-status.js')
+  const soundScriptPath = path.join(dir, 'play-notification.js')
+  const audioPath = path.join(dir, 'notification.wav')
+  const muteMarker = path.join(dir, '.muted')
   const settingsPath = path.join(dir, 'settings.json')
   fs.mkdirSync(statusDir, { recursive: true })
   fs.writeFileSync(scriptPath, HOOK_SCRIPT)
+  fs.writeFileSync(soundScriptPath, SOUND_SCRIPT)
+
+  // Bundled via electron-builder extraResources (packaged) or read straight
+  // from the repo (dev). Missing audio just makes the sound hook a silent
+  // no-op -- SOUND_SCRIPT guards on existsSync -- so failure here is fine.
+  try {
+    const audioSrc = app.isPackaged
+      ? path.join(process.resourcesPath, 'notification.wav')
+      : path.join(app.getAppPath(), '..', 'assets', 'notification.wav')
+    fs.copyFileSync(audioSrc, audioPath)
+  } catch (_) {}
 
   // Forward slashes work on every platform and sidestep JSON backslash
   // escaping and shell quoting in the generated command strings.
-  const s = scriptPath.replace(/\\/g, '/')
-  const sd = statusDir.replace(/\\/g, '/')
-  const entry = (state) => [
-    { hooks: [{ type: 'command', command: `node "${s}" ${state} "${sd}"` }] },
+  const fwd = (p) => p.replace(/\\/g, '/')
+  const statusCmd = (state) => ({
+    type: 'command',
+    command: `node "${fwd(scriptPath)}" ${state} "${fwd(statusDir)}"`,
+  })
+  const soundCmd = {
+    type: 'command',
+    command: `node "${fwd(soundScriptPath)}" "${fwd(audioPath)}" "${fwd(muteMarker)}"`,
+  }
+  const entry = (state, withSound) => [
+    { hooks: withSound ? [statusCmd(state), soundCmd] : [statusCmd(state)] },
   ]
   fs.writeFileSync(settingsPath, JSON.stringify({
     hooks: {
       UserPromptSubmit: entry('working'),
       PreToolUse: entry('working'),
-      Notification: entry('waiting'),
-      Stop: entry('waiting'),
+      Notification: entry('waiting', true),
+      Stop: entry('waiting', true),
     },
   }, null, 2))
 
-  cached = { dir, statusDir, scriptPath, settingsPath }
+  cached = { dir, statusDir, scriptPath, settingsPath, soundScriptPath, audioPath, muteMarker }
   return cached
 }
 
