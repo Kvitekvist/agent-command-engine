@@ -61,6 +61,10 @@
       {
         "from": "main/project-template",
         "to": "project-template"
+      },
+      {
+        "from": "../assets/notification.wav",
+        "to": "notification.wav"
       }
     ],
     "asarUnpack": [

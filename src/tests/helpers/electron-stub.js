@@ -12,6 +12,7 @@ const os = require('os')
 const electronStub = {
   app: {
     getPath: () => os.tmpdir(),
+    getAppPath: () => process.cwd(),
     getName: () => 'agent-command-engine-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
