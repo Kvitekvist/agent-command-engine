@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.32] - 2026-09-04
+
+### Fixed
+- The stop / notification sound is now bundled with the app and wired
+  automatically. It plays out of the box on a clean install, in every project
+  ACE launches an agent in, on Windows and macOS — no per-project
+  `.claude/settings.local.json` needed. The mute toggle now writes one global
+  marker instead of a file in each project (TICKET-0124)
+
 ## [0.1.31] - 2026-09-03
 
 ### Added
