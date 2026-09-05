@@ -1,0 +1,26 @@
+{
+  "_comment": "Third-party skills ACE ships. On first launch after an install or update, SkillSetupService git-clones each repo below so its author gets clone traffic and a credit line in THIRD_PARTY_SKILLS.md. subdir: path inside the repo holding the skill files (SKILL.md etc.); null means the repo has no SKILL.md of its own and ACE's bundled copy is kept, the clone being for attribution only.",
+  "skills": {
+    "calibrate-enhanced": {
+      "repo": "https://github.com/robonuggets/calibrate",
+      "ref": "main",
+      "subdir": ".",
+      "author": "robonuggets",
+      "license": "MIT"
+    },
+    "gauntlet-loop": {
+      "repo": "https://github.com/robonuggets/gauntlet-loop",
+      "ref": "main",
+      "subdir": ".claude/skills/gauntlet-loop",
+      "author": "robonuggets",
+      "license": "CC-BY-4.0"
+    },
+    "token-analytics": {
+      "repo": "https://github.com/nateherkai/token-dashboard",
+      "ref": "main",
+      "subdir": null,
+      "author": "nateherkai",
+      "license": "MIT"
+    }
+  }
+}

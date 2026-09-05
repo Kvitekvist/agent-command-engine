@@ -18,6 +18,37 @@ process.on('unhandledRejection', (reason) => {
   } catch (_) {}
 })
 
+// Keep everything ACE writes -- ace.db, ace-hooks/, skills-cache/ -- in one
+// folder the user owns and can see, instead of hidden under %APPDATA% /
+// ~/Library. Must run before anything reads app.getPath('userData')
+// (DBService.init, HookService, handlers all do, from app.whenReady onward).
+{
+  const prevUserData = app.getPath('userData')
+  let aceHome = path.join(app.getPath('documents'), 'ACE')
+  try {
+    fs.mkdirSync(aceHome, { recursive: true })
+    fs.accessSync(aceHome, fs.constants.W_OK)
+  } catch (_) {
+    // e.g. an MSIX build without the documentsLibrary capability.
+    aceHome = path.join(app.getPath('home'), '.ace')
+    try { fs.mkdirSync(aceHome, { recursive: true }) } catch (_) {}
+  }
+  app.setPath('userData', aceHome)
+
+  // One-time: carry an existing install's database forward. DBService also
+  // migrates the older cpi.db name (TICKET-0071), so accept either here.
+  const dst = path.join(aceHome, 'ace.db')
+  if (!fs.existsSync(dst)) {
+    for (const name of ['ace.db', 'cpi.db']) {
+      const src = path.join(prevUserData, name)
+      if (fs.existsSync(src)) {
+        try { fs.copyFileSync(src, dst) } catch (_) {}
+        break
+      }
+    }
+  }
+}
+
 let DBService, AgentService, TerminalService, registerHandlers
 
 try {
@@ -36,15 +67,17 @@ let mainWindow = null
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
-// Icon path - works for both dev and packaged builds
+// Dev-only window icon. The repo-root assets/ folder sits outside the packaged
+// app directory (src/) and is not in electron-builder's `files` list, so in a
+// packaged build this path resolved inside app.asar to a file that isn't there
+// -- a silently dead reference. Nothing is lost by dropping it: Windows falls
+// back to the executable's own icon (electron-builder's win.icon) and macOS
+// ignores BrowserWindow's `icon` entirely in favour of the bundle icon.
 const getIconPath = () => {
-  if (process.platform === 'win32') {
-    return path.join(__dirname, '../../assets/icons/icon.ico')
-  } else if (process.platform === 'darwin') {
-    // macOS uses .icns, but Electron sets it automatically from the app bundle
-    return path.join(__dirname, '../../assets/icons/icon.icns')
-  }
-  return undefined
+  if (app.isPackaged) return undefined
+  const icon = path.join(__dirname, '../../assets/icons',
+    process.platform === 'win32' ? 'icon.ico' : 'icon.icns')
+  return fs.existsSync(icon) ? icon : undefined
 }
 
 // macOS ignores BrowserWindow's `icon` option, and an unpackaged dev run has
@@ -123,6 +156,19 @@ app.whenReady().then(async () => {
   // this process never creates a window or opens ace.db before app.quit().
   if (!gotTheLock) return
   setDevDockIcon()
+
+  // One-time skill-download gate (see SkillSetupService). Declining quits ACE
+  // before any window opens.
+  try {
+    const { ensureSkillsProvisioned } = require('./services/SkillSetupService')
+    if (!ensureSkillsProvisioned().proceed) {
+      app.quit()
+      return
+    }
+  } catch (err) {
+    console.error('SKILL SETUP ERROR:', err)
+  }
+
   try {
     console.log('Initializing DBService...')
     await DBService.init()

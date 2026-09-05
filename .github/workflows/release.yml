@@ -34,6 +34,22 @@ jobs:
 
       - run: npm ci
 
+      # electron-builder builds the x64 and the arm64 dmg from one node_modules
+      # tree, but npm only installs the optional native package matching the
+      # runner's OWN arch -- and the macOS runners are arm64. So the Intel dmg
+      # shipped an arm64 tokscale binary, which cannot run on an Intel Mac: the
+      # whole Usage tab read 0 there, with no error the user could see. Pull in
+      # both arches explicitly. `--force` is what gets npm past its platform
+      # check for a package deliberately installed for another arch; `--no-save`
+      # keeps package-lock.json untouched.
+      - name: Install both macOS tokscale binaries
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          V=$(node -p "require('./node_modules/@tokscale/cli/package.json').version")
+          npm install --no-save --force "@tokscale/cli-darwin-x64@$V" "@tokscale/cli-darwin-arm64@$V"
+          chmod +x node_modules/@tokscale/cli-darwin-*/bin/tokscale
+
       - run: npm run package
 
       # Prove the packaged app can actually spawn tokscale's native binary from

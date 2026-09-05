@@ -25,6 +25,9 @@ export default function ContextMenu({ x, y, items, onClose }) {
     <div
       ref={ref}
       style={{ top: y, left: x }}
+      // Right-clicking inside the menu shouldn't open another context menu on
+      // top of it (App.jsx's app-wide Copy/Paste menu would otherwise fire).
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation() }}
       className="fixed z-50 min-w-[170px] rounded border border-border bg-panel py-1 text-xs shadow-lg"
     >
       {items.map((item, i) =>

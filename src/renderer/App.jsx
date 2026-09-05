@@ -30,6 +30,11 @@ export default function App() {
 
   function handleContextMenu(e) {
     const target = e.target
+    // The Monaco editor (EditorView) ships its own richer context menu; don't
+    // stack ACE's generic Copy/Paste/Select all on top of it. Monaco has
+    // already preventDefault()ed by the time this bubbles up, so returning
+    // early here leaves only its menu, not the native Chromium one.
+    if (target?.closest?.('.monaco-editor')) return
     const isEditable = !!target && (
       target.tagName === 'INPUT' ||
       target.tagName === 'TEXTAREA' ||

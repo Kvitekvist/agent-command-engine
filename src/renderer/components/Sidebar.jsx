@@ -100,6 +100,16 @@ export default function Sidebar() {
 
   async function handleRemove(e, id) {
     e.stopPropagation()
+    // Stop and drop only the removed project's own agents. Other projects'
+    // agents keep their live PTY-backed terminal sessions — AgentView keeps
+    // that grid mounted even with no active project selected, so removing a
+    // project no longer tears every session down (TICKET-0030).
+    const { agents, removeAgent } = useStore.getState()
+    for (const a of agents.filter((a) => a.projectId === id)) {
+      await window.ace.stopAgent(a.agentId)
+      await window.ace.deleteAgent(a.agentId)
+      removeAgent(a.agentId)
+    }
     await window.ace.removeProject(id)
     const updated = await window.ace.getProjects()
     setProjects(updated)

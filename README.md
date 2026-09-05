@@ -56,6 +56,11 @@ Builds are unsigned, so first launch needs a right-click > Open the very first t
 
 **Windows** - download the installer or portable exe from the [latest release](https://github.com/Kvitekvist/agent-command-engine/releases/latest).
 
+The first launch after an install or update asks to download ACE's third-party
+skill packs from their authors' GitHub repositories (needs Git and a network
+connection); this is required to continue. ACE keeps its database, hooks and
+downloaded skills in `Documents/ACE/`.
+
 ---
 
 ## Quick Start

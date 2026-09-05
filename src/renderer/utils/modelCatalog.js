@@ -9,7 +9,7 @@ export const MODEL_GROUPS_BY_PROVIDER = {
     {
       label: 'Claude 5',
       options: [
-        { id: 'claude-fable-5', label: 'Claude Fable 5', description: 'Highest capability · long-running agents' },
+        { id: 'claude-fable-5-1', label: 'Claude Fable 5.1', description: 'Highest capability · long-running agents' },
         { id: 'claude-opus-5', label: 'Claude Opus 5', description: 'Complex coding and deep reasoning' },
         { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', description: 'Recommended · speed and intelligence' },
       ],
@@ -29,6 +29,12 @@ export const MODEL_GROUPS_BY_PROVIDER = {
   ],
   codex: [
     {
+      label: 'GPT-6',
+      options: [
+        { id: 'gpt-6-astra', label: 'GPT-6 Astra', description: 'Highest capability · end-to-end agentic work' },
+      ],
+    },
+    {
       label: 'GPT-5.6',
       options: [
         { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', description: 'Frontier coding model' },
@@ -45,6 +51,17 @@ export const MODEL_GROUPS_BY_PROVIDER = {
       ],
     },
   ],
+}
+
+export function getAllModelIds(provider) {
+  return MODEL_GROUPS_BY_PROVIDER[provider]?.flatMap(g => g.options.map(o => o.id)) ?? []
+}
+
+export function filterGroupsByEnabled(groups, enabledSet) {
+  if (!enabledSet || enabledSet.size === 0) return groups
+  return groups
+    .map(g => ({ ...g, options: g.options.filter(o => enabledSet.has(o.id)) }))
+    .filter(g => g.options.length > 0)
 }
 
 export const DEFAULT_MODEL_BY_PROVIDER = {

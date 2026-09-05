@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld('ace', {
   prereqs: {
     check: () => ipcRenderer.invoke('prereqs:check'),
     install: (name) => ipcRenderer.invoke('prereqs:install', name),
+    uninstall: () => ipcRenderer.invoke('prereqs:uninstall'),
     openNodeDownload: () => ipcRenderer.invoke('prereqs:openNodeDownload'),
     openGitDownload: () => ipcRenderer.invoke('prereqs:openGitDownload'),
   },

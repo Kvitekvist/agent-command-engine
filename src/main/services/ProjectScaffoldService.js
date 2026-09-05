@@ -1,6 +1,19 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+// Where the bundled project scaffold lives: inside app.asar in development,
+// shipped as an unpacked application resource in a packaged build (see
+// electron-builder's extraResources). Project creation, the bundled-skill
+// install and the skill-download gate all read from it, so none depends on
+// an external, machine-specific template folder. `electron` is required
+// lazily so this module stays importable from plain node tests.
+function getScaffoldDir() {
+  const { app } = require('electron')
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'project-template')
+    : path.join(app.getAppPath(), 'main', 'project-template')
+}
+
 async function restoreGitkeepFiles(dir) {
   for (const entry of await fs.promises.readdir(dir, { withFileTypes: true })) {
     const entryPath = path.join(dir, entry.name)
@@ -55,4 +68,58 @@ async function createProjectFromScaffold({ name, parentDir, scaffoldDir } = {}) 
   }
 }
 
-module.exports = { createProjectFromScaffold }
+// Every slash command a project offers (`/push-update`, `/gauntlet`, ...) only
+// exists if that skill's directory is in the project. ACE's own repo carries
+// them; a project ACE scaffolded gets them from the template; but a project
+// ACE never created had none, so buttons and docs referring to them silently
+// did nothing. Copy in every skill the project is missing, from the first
+// source that has it: the downloaded skills cache (SkillSetupService) first,
+// then the bundled template. Runs on every terminal spawn so projects that
+// predate a given skill pick it up too. Best-effort -- an unwritable project
+// just keeps what it has. A project's own copy of a skill is never
+// overwritten (a user may have adapted the workflow).
+function ensureBundledSkills(projectPath, scaffoldDir, cacheDir) {
+  const installed = []
+  try {
+    const sources = []
+    if (cacheDir && fs.existsSync(cacheDir)) sources.push({ dir: cacheDir, flat: true })
+    if (scaffoldDir) {
+      const s = path.join(scaffoldDir, '.claude', 'skills')
+      if (fs.existsSync(s)) sources.push({ dir: s, flat: true })
+    }
+    if (!sources.length) return installed
+
+    const names = new Set()
+    for (const { dir } of sources) {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory() && fs.existsSync(path.join(dir, e.name, 'SKILL.md'))) names.add(e.name)
+      }
+    }
+
+    for (const name of names) {
+      const dest = path.join(projectPath, '.claude', 'skills', name)
+      if (fs.existsSync(path.join(dest, 'SKILL.md'))) continue
+      const from = sources
+        .map((s) => path.join(s.dir, name))
+        .find((p) => fs.existsSync(path.join(p, 'SKILL.md')))
+      if (!from) continue
+      fs.mkdirSync(path.dirname(dest), { recursive: true })
+      fs.cpSync(from, dest, { recursive: true })
+      installed.push(name)
+    }
+
+    // Carry the third-party attribution list into the project so the credit
+    // travels with the skills it covers.
+    if (cacheDir) {
+      const credit = path.join(cacheDir, '..', 'THIRD_PARTY_SKILLS.md')
+      const creditDest = path.join(projectPath, '.claude', 'THIRD_PARTY_SKILLS.md')
+      if (fs.existsSync(credit) && !fs.existsSync(creditDest)) {
+        fs.mkdirSync(path.dirname(creditDest), { recursive: true })
+        fs.copyFileSync(credit, creditDest)
+      }
+    }
+  } catch (_) {}
+  return installed
+}
+
+module.exports = { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir }

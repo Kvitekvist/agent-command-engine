@@ -1,5 +1,46 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- GPT-6 Astra (`gpt-6-astra`) is selectable for Codex agents, and the Claude 4
+  models (Opus 4.8/4.7/4.6/4.5, Sonnet 4.6/4.5) are back in the model list
+  alongside the Claude 5 family. A new Settings → Models tab controls which
+  models appear in the launch-bar dropdown (TICKET-0128)
+- Settings → Prerequisites has an "Uninstall CLIs" button that removes the
+  global Claude Code and Codex npm packages, so a clean first-run setup can be
+  tested without dropping to a terminal. Node.js, npm and Git are left
+  untouched (TICKET-0126)
+- First launch after an install or update runs a one-time skill setup: ACE
+  asks to download its third-party skill packs (`calibrate-enhanced`,
+  `gauntlet-loop`, `token-analytics`) straight from their authors' GitHub
+  repositories, so each author gets the download, and records a
+  `THIRD_PARTY_SKILLS.md` credit table. The download is required — declining
+  quits ACE — but a failed download retries once and then falls back to the
+  copies bundled with the app (TICKET-0127)
+
+### Changed
+- ACE now keeps everything it writes — the database, agent-status hooks and
+  the downloaded skills — in `Documents/ACE/` instead of a hidden `AppData`
+  folder. An existing database is moved across automatically on first launch
+  (TICKET-0127)
+
+### Fixed
+- Inter and JetBrains Mono are now bundled with the app instead of fetched
+  from the Google Fonts CDN. The UI renders in its intended typefaces on a
+  machine with no network or behind a firewall, and ACE no longer makes an
+  outbound font request on every launch (TICKET-0125)
+- The Intel macOS build shipped an Apple Silicon `tokscale` binary, so the
+  Usage tab read 0 on every Intel Mac with no visible error. Release builds now
+  carry the binary for both Mac architectures, and the packaging smoke test
+  fails the release if any bundle is missing the one for its own architecture
+  (TICKET-0125)
+- The "Push update" button typed `/push-update` into the agent terminal, but
+  the skill behind that command only existed in ACE's own repository, so the
+  button did nothing anywhere else. The skill now ships with ACE and is
+  installed into a project the first time an agent terminal opens there
+  (TICKET-0125)
+
 ## [0.1.32] - 2026-09-04
 
 ### Fixed

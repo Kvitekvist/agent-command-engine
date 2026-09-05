@@ -69,9 +69,18 @@ process.exit(0)
 
 let cached = null
 
+// MSIX packages virtualize AppData writes — ACE sees one path, Claude sees
+// another. Use a non-VFS path both can access.
+function getHookDir() {
+  const isMsix = process.windowsStore ||
+    (process.platform === 'win32' && process.execPath.includes('WindowsApps'))
+  if (isMsix) return path.join(app.getPath('home'), '.ace-hooks')
+  return path.join(app.getPath('userData'), 'ace-hooks')
+}
+
 function ensureHookFiles() {
   if (cached) return cached
-  const dir = path.join(app.getPath('userData'), 'ace-hooks')
+  const dir = getHookDir()
   const statusDir = path.join(dir, 'status')
   const scriptPath = path.join(dir, 'agent-status.js')
   const soundScriptPath = path.join(dir, 'play-notification.js')

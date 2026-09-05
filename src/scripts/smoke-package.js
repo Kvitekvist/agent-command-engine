@@ -61,9 +61,18 @@ function findUnpackedDirs(root, depth = 0) {
   return found
 }
 
+// electron-builder names each output tree after the target it built --
+// mac/ and mac-arm64/, win-unpacked/ and win-arm64-unpacked/, linux-unpacked/
+// -- so a bundle's own arch is readable from its path. Check each bundle
+// against the binary IT needs rather than the runner's: the arm64 macOS runner
+// used to build an x64 dmg containing no x64 tokscale at all, and the old
+// host-arch-only loop skipped straight past it.
+function archOf(unpackedDir) {
+  return path.relative(RELEASES_DIR, unpackedDir).includes('arm64') ? 'arm64' : 'x64'
+}
+
 function main() {
-  const pkg = nativePackageFor(process.platform, process.arch)
-  if (!pkg) {
+  if (!nativePackageFor(process.platform, process.arch)) {
     console.log(`[smoke-package] SKIP: ${process.platform}/${process.arch} ships the JS shim, no native binary to smoke-test.`)
     process.exit(0)
   }
@@ -73,21 +82,25 @@ function main() {
   }
 
   const binName = process.platform === 'win32' ? 'tokscale.exe' : 'tokscale'
-  const relBin = path.join('node_modules', pkg, 'bin', binName)
 
   const unpackedDirs = findUnpackedDirs(RELEASES_DIR)
   if (unpackedDirs.length === 0) {
     fail(`found no app.asar.unpacked under ${RELEASES_DIR} -- packaging produced no unpacked tree (asarUnpack broken or package didn't run).`)
   }
 
-  // Only smoke-test bundles built for the runner's own arch: a binary for a
-  // different arch may not run here, and the point is to prove the real spawn.
-  let tested = 0
+  let spawned = 0
   for (const unpacked of unpackedDirs) {
-    const binPath = path.join(unpacked, relBin)
-    if (!fs.existsSync(binPath)) continue // e.g. an x64 bundle on an arm64 runner
+    const arch = archOf(unpacked)
+    const pkg = nativePackageFor(process.platform, arch)
+    if (!pkg) continue
+    const binPath = path.join(unpacked, 'node_modules', pkg, 'bin', binName)
 
-    console.log(`[smoke-package] checking ${binPath}`)
+    // Presence is asserted for EVERY bundle. A bundle missing its own arch's
+    // binary is a shipped app whose Usage tab reads 0 -- exactly the bug this
+    // test exists to catch, and it is invisible from the build machine.
+    if (!fs.existsSync(binPath)) {
+      fail(`${arch} bundle is missing ${pkg} at ${binPath}. Install that arch's tokscale package before packaging (see .github/workflows/release.yml), or asarUnpack dropped it.`)
+    }
 
     if (process.platform !== 'win32') {
       try {
@@ -97,6 +110,14 @@ function main() {
       }
     }
 
+    // Only the runner's own arch can actually be executed here. A foreign-arch
+    // binary is verified as far as this machine allows: present and +x.
+    if (arch !== process.arch) {
+      console.log(`[smoke-package] ${arch} bundle: ${pkg} present (not spawnable on ${process.arch})`)
+      continue
+    }
+
+    console.log(`[smoke-package] checking ${binPath}`)
     const result = spawnSync(binPath, ['--version'], { encoding: 'utf8', timeout: 30000, windowsHide: true })
     if (result.error) {
       fail(`spawning ${binPath} threw: ${result.error.message}`)
@@ -109,14 +130,14 @@ function main() {
     }
 
     console.log(`[smoke-package]   ok: ${result.stdout.trim()}`)
-    tested += 1
+    spawned += 1
   }
 
-  if (tested === 0) {
-    fail(`no packaged bundle contained ${relBin} for ${process.platform}/${process.arch}. asarUnpack likely dropped ${pkg}, or no matching-arch bundle was built.`)
+  if (spawned === 0) {
+    fail(`no packaged bundle matched the runner's own ${process.platform}/${process.arch}, so nothing was actually spawned. Packaging produced no native-arch bundle to verify.`)
   }
 
-  console.log(`[smoke-package] PASS: ${tested} packaged bundle(s) can spawn tokscale from app.asar.unpacked.`)
+  console.log(`[smoke-package] PASS: every bundle carries its tokscale binary; ${spawned} spawned it from app.asar.unpacked.`)
 }
 
 main()

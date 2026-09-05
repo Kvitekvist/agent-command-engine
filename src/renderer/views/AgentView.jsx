@@ -4,7 +4,12 @@ import ModelSelector from '../components/ModelSelector'
 import AgentTerminal from '../components/AgentTerminal'
 import UsageBar from '../components/UsageBar'
 import { generateAgentName } from '../utils/agentNames'
-import { DEFAULT_MODEL_BY_PROVIDER, MODEL_GROUPS_BY_PROVIDER } from '../utils/modelCatalog'
+import {
+  DEFAULT_MODEL_BY_PROVIDER,
+  MODEL_GROUPS_BY_PROVIDER,
+  getAllModelIds,
+  filterGroupsByEnabled,
+} from '../utils/modelCatalog'
 
 // TICKET-0039: the Safe/Guarded/Auto selector was removed from the launch
 // bar now that auto-answer permission prompts (see AgentTerminal.jsx) works
@@ -22,6 +27,8 @@ export default function AgentView() {
   const [model, setModel]         = useState(DEFAULT_MODEL_BY_PROVIDER.claude)
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState(null)
+  const [enabledClaude, setEnabledClaude] = useState(() => new Set(getAllModelIds('claude')))
+  const [enabledCodex, setEnabledCodex]   = useState(() => new Set(getAllModelIds('codex')))
 
   // Agent card layout: '2' is the default responsive grid (1 col, 2 cols at
   // xl); '1' forces a single full-width column so one card gets the whole
@@ -43,12 +50,16 @@ export default function AgentView() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [savedProvider, savedModel] = await Promise.all([
+      const [savedProvider, savedModel, ec, ex] = await Promise.all([
         window.ace.getSetting('default_provider'),
         window.ace.getSetting('default_model'),
+        window.ace.getSetting('enabled_models_claude'),
+        window.ace.getSetting('enabled_models_codex'),
         loadSoundsMuted(),
       ])
       if (cancelled) return
+      if (ec) setEnabledClaude(new Set(JSON.parse(ec)))
+      if (ex) setEnabledCodex(new Set(JSON.parse(ex)))
       const nextProvider = ['auto', 'claude', 'codex'].includes(savedProvider)
         ? savedProvider
         : 'claude'
@@ -74,6 +85,15 @@ export default function AgentView() {
     setLaunching(true)
     setLaunchError(null)
     try {
+      // Pre-check CLI availability before spawning terminal
+      const resolvedProvider = provider === 'auto' ? 'claude' : provider
+      const prereqs = await window.ace.prereqs.check()
+      if (!prereqs[resolvedProvider]?.present) {
+        const cliName = resolvedProvider === 'claude' ? 'Claude Code CLI' : 'Codex CLI'
+        setLaunchError(`${cliName} is not installed. Go to Settings → General → Prerequisites to install it.`)
+        setLaunching(false)
+        return
+      }
       await window.ace.startAgent({
         projectId: activeProject.id,
         projectPath: activeProject.path,
@@ -156,85 +176,87 @@ export default function AgentView() {
     return () => { cancelled = true }
   }, [activeProject?.id])
 
-  if (!activeProject) {
-    return (
-      <div className="flex flex-col h-full">
-        <UsageBar />
-        <div className="flex-1 flex flex-col items-center justify-center text-muted">
-          <div className="text-4xl mb-3">📁</div>
-          <div className="text-sm">Select a project from the sidebar to get started.</div>
-        </div>
-      </div>
-    )
-  }
+  const modelGroups = provider === 'auto'
+    ? null
+    : filterGroupsByEnabled(
+        MODEL_GROUPS_BY_PROVIDER[provider],
+        provider === 'claude' ? enabledClaude : enabledCodex
+      )
 
-  const modelGroups = provider === 'auto' ? null : MODEL_GROUPS_BY_PROVIDER[provider]
-
+  // One return, one tree shape, always. Removing a project (active or not)
+  // used to flip AgentView between two structurally different `return`s;
+  // React reconciles children by position, so the agent grid landed at a
+  // different spot and got unmounted — killing every running agent's
+  // PTY-backed CLI process (AgentTerminal.jsx) across every project, not
+  // just the removed one's. Keeping the grid at a fixed position, toggling
+  // only the launch bar / empty-state around it, keeps those sessions
+  // mounted. Cards for non-active projects stay hidden with CSS
+  // (TICKET-0030); `activeProject?.id` so it still renders with none active.
   return (
     <div className="flex flex-col h-full">
       <UsageBar />
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-panel shrink-0 flex-wrap">
-        <div className="text-sm font-semibold text-gray-100 mr-2 truncate max-w-xs">{activeProject.name}</div>
-        <input className="input w-32 text-xs" placeholder="Agent label" value={label} onChange={(e) => setLabel(e.target.value)} />
-        <div className="flex rounded overflow-hidden border border-border text-xs">
-          {['auto','claude','codex'].map((p) => (
-            <button key={p} onClick={() => {
-              setProvider(p)
-              if (p !== 'auto') setModel(DEFAULT_MODEL_BY_PROVIDER[p])
-            }}
-              className={'px-3 py-1.5 transition-colors ' + (provider === p ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
-              {p === 'auto' ? '⚖ Auto' : p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
-            </button>
-          ))}
+      {activeProject && (
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-panel shrink-0 flex-wrap">
+          <div className="text-sm font-semibold text-gray-100 mr-2 truncate max-w-xs">{activeProject.name}</div>
+          <input className="input w-32 text-xs" placeholder="Agent label" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <div className="flex rounded overflow-hidden border border-border text-xs">
+            {['auto','claude','codex'].map((p) => (
+              <button key={p} onClick={() => {
+                setProvider(p)
+                if (p !== 'auto') setModel(DEFAULT_MODEL_BY_PROVIDER[p])
+              }}
+                className={'px-3 py-1.5 transition-colors ' + (provider === p ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
+                {p === 'auto' ? '⚖ Auto' : p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
+              </button>
+            ))}
+          </div>
+          {modelGroups ? (
+            <ModelSelector groups={modelGroups} value={model} onChange={setModel} className="w-72" />
+          ) : (
+            <span className="text-xs text-muted">Provider and compatible model selected at launch</span>
+          )}
+          <button
+            onClick={toggleSoundsMuted}
+            className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
+            title={soundsMuted ? 'Notification sounds muted' : 'Notification sounds enabled'}
+          >
+            {soundsMuted ? '🔇' : '🔔'}
+          </button>
+          <button
+            onClick={toggleGridCols}
+            className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
+            title={gridCols === '1' ? 'Single wide column — click for two columns' : 'Two columns — click for one wide column'}
+          >
+            {gridCols === '1' ? '▤' : '▦'}
+          </button>
+          <button onClick={launchAgent} disabled={launching} className="btn-primary ml-auto text-xs">
+            {launching ? 'Launching…' : '+ New Agent'}
+          </button>
         </div>
-        {modelGroups ? (
-          <ModelSelector groups={modelGroups} value={model} onChange={setModel} className="w-72" />
-        ) : (
-          <span className="text-xs text-muted">Provider and compatible model selected at launch</span>
-        )}
-        <button
-          onClick={toggleSoundsMuted}
-          className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
-          title={soundsMuted ? 'Notification sounds muted' : 'Notification sounds enabled'}
-        >
-          {soundsMuted ? '🔇' : '🔔'}
-        </button>
-        <button
-          onClick={toggleGridCols}
-          className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
-          title={gridCols === '1' ? 'Single wide column — click for two columns' : 'Two columns — click for one wide column'}
-        >
-          {gridCols === '1' ? '▤' : '▦'}
-        </button>
-        <button onClick={launchAgent} disabled={launching} className="btn-primary ml-auto text-xs">
-          {launching ? 'Launching…' : '+ New Agent'}
-        </button>
-      </div>
+      )}
 
-      {launchError && (
+      {activeProject && launchError && (
         <div className="px-5 py-2 text-xs text-danger border-b border-border bg-red-500/10">
           {launchError}
         </div>
       )}
 
       <div className="flex-1 overflow-auto p-4">
-        {projectAgents.length === 0 && (
+        {!activeProject && (
+          <div className="flex flex-col items-center justify-center h-full text-muted">
+            <div className="text-4xl mb-3">📁</div>
+            <div className="text-sm">Select a project from the sidebar to get started.</div>
+          </div>
+        )}
+        {activeProject && projectAgents.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-muted">
             <div className="text-3xl mb-2">⚡</div>
             <div className="text-sm">No agents running. Launch one above.</div>
           </div>
         )}
-        {/* TICKET-0030: every agent across every project visited this
-            session stays mounted here, not just the active project's --
-            each running agent owns a real PTY-backed terminal
-            (AgentTerminal.jsx) that must keep running while its project
-            isn't active. Cards for other projects are hidden with CSS
-            instead of being unmounted, mirroring App.jsx's tab-level
-            hide-not-unmount pattern (TICKET-0027). A project switch no
-            longer tears any session down -- only Close/app quit do. */}
         <div className={'grid gap-4 ' + (gridCols === '1' ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-2') + (projectAgents.length === 0 ? ' hidden' : '')}>
           {agents.map((agent) => (
-            <div key={agent.agentId} className={agent.projectId === activeProject.id ? '' : 'hidden'}>
+            <div key={agent.agentId} className={agent.projectId === activeProject?.id ? '' : 'hidden'}>
               <AgentPane agent={agent}
                 onClose={() => closeAgent(agent.agentId)} />
             </div>

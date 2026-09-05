@@ -3,7 +3,7 @@ const { resolveLaunchPolicy } = require('../services/LaunchPolicy')
 const { FileService } = require('../services/FileService')
 const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
 const { ScreenshotService } = require('../services/ScreenshotService')
-const { createProjectFromScaffold } = require('../services/ProjectScaffoldService')
+const { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir } = require('../services/ProjectScaffoldService')
 const { ensureHookFiles, watchAgentStatus } = require('../services/HookService')
 
 // TICKET-0075: the renderer hands main a filesystem path for every fs / git /
@@ -108,16 +108,8 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     }
   })
 
-  // The scaffold lives inside ACE in development and is shipped as an
-  // unpacked application resource, so project creation never depends on an
-  // external machine-specific Template folder.
-  handle('projects:createNew', (_, { name, parentDir } = {}) => {
-    const path = require('path')
-    const scaffoldDir = app.isPackaged
-      ? path.join(process.resourcesPath, 'project-template')
-      : path.join(app.getAppPath(), 'main', 'project-template')
-    return createProjectFromScaffold({ name, parentDir, scaffoldDir })
-  })
+  handle('projects:createNew', (_, { name, parentDir } = {}) =>
+    createProjectFromScaffold({ name, parentDir, scaffoldDir: getScaffoldDir() }))
 
   // One-shot: createProjectFromScaffold drops `.claude/.needs-setup` into every
   // project made through `✨ New`. The first Claude AgentTerminal opened for
@@ -575,6 +567,32 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     })
   })
 
+  // Symmetrical opposite of prereqs:install, for testing a clean setup
+  // (TICKET-0126). Removes only the packages ACE installs -- node/npm/git are
+  // the user's own, ACE only ever linked out for those.
+  handle('prereqs:uninstall', async () => {
+    const { spawn } = require('child_process')
+    const pkgs = Object.values(PREREQ_PACKAGES)
+
+    return new Promise((resolve) => {
+      const proc = spawn('npm', ['uninstall', '-g', ...pkgs], { windowsHide: true, shell: true })
+      let stdout = ''
+      let stderr = ''
+      proc.stdout?.on('data', (d) => { stdout += d })
+      proc.stderr?.on('data', (d) => { stderr += d })
+      proc.on('error', (err) => resolve({ ok: false, error: err.message }))
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({ ok: true, message: `Uninstalled ${pkgs.join(', ')}` })
+          return
+        }
+        const raw = stderr || stdout || ''
+        const tail = raw.split('\n').filter(Boolean).slice(-5).join('\n')
+        resolve({ ok: false, error: tail || `npm uninstall exited with code ${code}` })
+      })
+    })
+  })
+
   handle('prereqs:openNodeDownload', () => {
     shell.openExternal('https://nodejs.org')
     return { ok: true }
@@ -589,7 +607,17 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keystrokes/resize/dispose are fire-and-forget (ipcMain.on) -- there's no
   // meaningful single response to a keystroke. Spawn is the one call with a
   // real result (did it start, what's its id/pid), so it's the one invoke().
-  handle('terminal:spawn', (_, opts) => TerminalSvc.spawn(opts))
+  handle('terminal:spawn', (_, opts = {}) => {
+    // Resolve through main's own project records first (TICKET-0075): the
+    // renderer-supplied cwd decides where a file gets written here, so it has
+    // to be a path ACE already knows about, not whatever string arrived.
+    try {
+      const path = require('path')
+      const cacheDir = path.join(app.getPath('userData'), 'skills-cache')
+      ensureBundledSkills(resolveProjectRoot(DB, opts.cwd), getScaffoldDir(), cacheDir)
+    } catch (_) {}
+    return TerminalSvc.spawn(opts)
+  })
   on('terminal:write', (_, { id, data } = {}) => TerminalSvc.write(id, data))
   on('terminal:resize', (_, { id, cols, rows } = {}) => TerminalSvc.resize(id, cols, rows))
   on('terminal:dispose', (_, { id } = {}) => TerminalSvc.dispose(id))

@@ -10,10 +10,11 @@ const CLI_INFO = {
   codex: { label: 'Codex CLI', pkg: '@openai/codex' },
 }
 
-export default function PrereqChecklist() {
+export default function PrereqChecklist({ allowUninstall = false }) {
   const [checking, setChecking] = useState(true)
   const [status, setStatus] = useState(null) // { node, npm, claude, codex } -> { present, version }
   const [installStatus, setInstallStatus] = useState({ claude: null, codex: null })
+  const [uninstallStatus, setUninstallStatus] = useState(null)
 
   async function check() {
     setChecking(true)
@@ -27,6 +28,11 @@ export default function PrereqChecklist() {
   async function install(name) {
     const setNameStatus = (val) => setInstallStatus((s) => ({ ...s, [name]: val }))
     await runOperation(installStatus[name], setNameStatus, CLI_INFO[name].label, () => window.ace.prereqs.install(name))
+    check()
+  }
+
+  async function uninstallAll() {
+    await runOperation(uninstallStatus, setUninstallStatus, 'CLIs', () => window.ace.prereqs.uninstall())
     check()
   }
 
@@ -123,6 +129,25 @@ export default function PrereqChecklist() {
           <span className="text-xs text-success">✓ Ready to launch agents</span>
         )}
       </div>
+
+      {allowUninstall && (
+        <div className="pt-3 mt-2 border-t border-border">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-muted">
+              Uninstall the Claude/Codex CLIs (npm global) to test a clean setup.
+              Node.js, npm and Git are left alone.
+            </div>
+            <button
+              className="btn-ghost text-xs shrink-0"
+              onClick={uninstallAll}
+              disabled={uninstallStatus?.type === 'loading'}
+            >
+              {uninstallStatus?.type === 'loading' ? 'Uninstalling…' : 'Uninstall CLIs'}
+            </button>
+          </div>
+          <OperationFeedback label="CLIs" status={uninstallStatus} />
+        </div>
+      )}
     </div>
   )
 }

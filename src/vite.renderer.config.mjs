@@ -32,9 +32,4 @@ export default defineConfig({
   server: {
     port: 5173,
   },
-  resolve: {
-    alias: {
-      '@shared': path.join(__dirname, 'shared'),
-    },
-  },
 })
