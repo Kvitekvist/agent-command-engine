@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.33] - 2026-09-05
+
 ### Added
 - GPT-6 Astra (`gpt-6-astra`) is selectable for Codex agents, and the Claude 4
   models (Opus 4.8/4.7/4.6/4.5, Sonnet 4.6/4.5) are back in the model list

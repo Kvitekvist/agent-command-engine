@@ -4,13 +4,13 @@
 
 - Product: Agent Command Engine (ACE), an Electron application for managing
   Claude and Codex CLI agents.
-- Current application version: **0.1.18**. `src/package.json` and
+- Current application version: **0.1.33**. `src/package.json` and
   `version.txt` are the only authoritative sources — this line is a
   convenience copy, so trust them if it drifts.
 - Runtime: Electron main process, React renderer, preload IPC bridge, and a
   forked PTY host.
 - Test/build: from `src/`, `npm test` and `npm run build`. CI runs
-  `bash scripts/run_tests.sh`. Last full run: 72 passed, 1 skipped
+  `bash scripts/run_tests.sh`. Last full run: 73 passed, 1 skipped
   (POSIX-only), 0 failed.
 
 ## Active priorities
