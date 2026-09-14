@@ -2,6 +2,8 @@ const fs = require('fs')
 const path = require('path')
 const { spawn } = require('child_process')
 const { shell } = require('electron')
+const { resolveWithinRoot } = require('./ProjectPath')
+const { randomUUID } = require('node:crypto')
 
 // TICKET-0021: backs the Sidebar file tree + Monaco editor. Every method
 // takes the project root the request is scoped to. As of TICKET-0075 the
@@ -9,14 +11,6 @@ const { shell } = require('electron')
 // project paths; this class then refuses to touch anything outside that
 // root, so a malformed or path-traversal-crafted request can't reach the
 // filesystem beyond the project the user actually opened.
-function resolveWithinRoot(root, target) {
-  const resolvedRoot = path.resolve(root)
-  const resolvedTarget = path.resolve(target ?? root)
-  if (resolvedTarget !== resolvedRoot && !resolvedTarget.startsWith(resolvedRoot + path.sep)) {
-    throw new Error('Path is outside the project root')
-  }
-  return resolvedTarget
-}
 
 // Above this size, Monaco (and the IPC round-trip) get sluggish for what
 // is very likely a generated/binary/log file rather than something a user
@@ -44,7 +38,10 @@ class FileService {
       .map((entry) => ({
         name: entry.name,
         path: path.join(target, entry.name),
-        isDirectory: entry.isDirectory(),
+        isDirectory: (() => {
+          try { return fs.statSync(resolveWithinRoot(root, path.join(target, entry.name))).isDirectory() }
+          catch (_) { return false }
+        })(),
       }))
       .sort((a, b) => {
         if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
@@ -65,9 +62,32 @@ class FileService {
     return { ok: true, content: buffer.toString('utf8') }
   }
 
-  writeFile(root, filePath, content) {
+  writeFile(root, filePath, content, expectedContent) {
     const target = resolveWithinRoot(root, filePath)
-    fs.writeFileSync(target, content, 'utf8')
+    if (typeof content !== 'string') throw new Error('File content must be text')
+    let current = null
+    try { current = fs.readFileSync(target, 'utf8') }
+    catch (error) { if (error.code !== 'ENOENT') throw error }
+    if (expectedContent !== undefined && current !== expectedContent) {
+      return { ok: false, reason: 'conflict', error: 'The file changed on disk. Reload or explicitly overwrite.', content: current }
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    const temporary = resolveWithinRoot(root, path.join(path.dirname(target), `.ace-save-${randomUUID()}`))
+    try {
+      const mode = current === null ? 0o666 : fs.statSync(target).mode
+      fs.writeFileSync(temporary, content, { encoding: 'utf8', flag: 'wx', mode })
+      // External tools cannot share main's serialization. Recheck immediately
+      // before replacement; native conditional replacement would be needed to
+      // eliminate the remaining filesystem race with an adversarial writer.
+      let latest = null
+      try { latest = fs.readFileSync(target, 'utf8') }
+      catch (error) { if (error.code !== 'ENOENT') throw error }
+      if (latest !== current) return { ok: false, reason: 'conflict', error: 'The file changed during saving.', content: latest }
+      resolveWithinRoot(root, target)
+      fs.renameSync(temporary, target)
+    } finally {
+      if (fs.existsSync(temporary)) fs.unlinkSync(temporary)
+    }
     return { ok: true }
   }
 
@@ -97,6 +117,7 @@ class FileService {
   // folder (still within the root, but surprising), so reject it.
   rename(root, filePath, newName) {
     const target = resolveWithinRoot(root, filePath)
+    if (target === resolveWithinRoot(root)) return { ok: false, error: "Can't rename the project root" }
     if (!newName || /[\\/]/.test(newName) || newName === '.' || newName === '..') {
       return { ok: false, error: 'Not a valid file name' }
     }
@@ -109,7 +130,7 @@ class FileService {
   // Moves to the OS trash (recoverable) rather than a permanent unlink.
   async trash(root, filePath) {
     const target = resolveWithinRoot(root, filePath)
-    if (path.resolve(target) === path.resolve(root)) {
+    if (target === resolveWithinRoot(root)) {
       return { ok: false, error: "Can't delete the project root" }
     }
     await shell.trashItem(target)

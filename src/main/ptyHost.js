@@ -326,6 +326,9 @@ if (typeof process.send === 'function') {
   process.on('SIGTERM', () => {
     gracefulShutdown().finally(() => process.exit(0))
   })
+  process.on('disconnect', () => {
+    gracefulShutdown().finally(() => process.exit(0))
+  })
 
   process.send({ ready: true })
 }

@@ -1,47 +1,46 @@
 name: Release
-
-# Builds installers on a version tag push (e.g. `git tag v0.1.20 && git push
-# origin v0.1.20`) and attaches them to a GitHub Release for that tag,
-# creating the release if it doesn't already exist. Runs on real macOS/Windows
-# runners because electron-builder's dmg target needs to run on macOS.
-#
-# Builds are unsigned (no Apple Developer / code-signing certs configured) --
-# macOS Gatekeeper will show an "unidentified developer" warning on first
-# launch; right-click > Open bypasses it. scripts/install-mac.sh strips the
-# quarantine flag for the same reason.
 on:
   push:
     tags: ['v*']
-
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: src
+    env:
+      CSC_LINK: ${{ matrix.os == 'windows-latest' && secrets.WIN_CSC_LINK || secrets.MAC_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ matrix.os == 'windows-latest' && secrets.WIN_CSC_KEY_PASSWORD || secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
+      - name: Require release signing credentials
+        shell: bash
+        run: |
+          test -n "$CSC_LINK" || { echo "Signing certificate is required"; exit 1; }
+          if [ "$RUNNER_OS" = macOS ]; then
+            test -n "$APPLE_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD" && test -n "$APPLE_TEAM_ID" || exit 1
+          fi
+      - name: Check tag and version
+        shell: bash
+        run: |
+          test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF#refs/tags/}"
+          node -e "const fs=require('fs');if(fs.readFileSync('../version.txt','utf8').trim()!==require('./package.json').version)process.exit(1)"
       - run: npm ci
-
-      # electron-builder builds the x64 and the arm64 dmg from one node_modules
-      # tree, but npm only installs the optional native package matching the
-      # runner's OWN arch -- and the macOS runners are arm64. So the Intel dmg
-      # shipped an arm64 tokscale binary, which cannot run on an Intel Mac: the
-      # whole Usage tab read 0 there, with no error the user could see. Pull in
-      # both arches explicitly. `--force` is what gets npm past its platform
-      # check for a package deliberately installed for another arch; `--no-save`
-      # keeps package-lock.json untouched.
+      - run: npm test
+      - run: node scripts/smoke-pty.js
       - name: Install both macOS tokscale binaries
         if: runner.os == 'macOS'
         shell: bash
@@ -49,26 +48,62 @@ jobs:
           V=$(node -p "require('./node_modules/@tokscale/cli/package.json').version")
           npm install --no-save --force "@tokscale/cli-darwin-x64@$V" "@tokscale/cli-darwin-arm64@$V"
           chmod +x node_modules/@tokscale/cli-darwin-*/bin/tokscale
-
-      - run: npm run package
-
-      # Prove the packaged app can actually spawn tokscale's native binary from
-      # app.asar.unpacked before we ship it. This is the only layer that catches
-      # the TICKET-0029/0100 class of bug (asar spawn), which is invisible to the
-      # unit matrix and `npm run dev`. A broken package fails the release here.
+      - run: npm run build
+      - run: node node_modules/electron/cli.js scripts/smoke-renderer.js
+      - run: node node_modules/electron/cli.js scripts/smoke-main.js
+      - run: npm run fetch:mingit
+      - run: npx electron-builder --config.forceCodeSigning=true
       - name: Smoke-test packaged build
-        shell: bash
         run: node scripts/smoke-package.js
-
-      - name: Upload artifacts to release
+      - name: Verify Windows signatures
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $artifacts = Get-ChildItem ../releases -Filter *.exe
+          if (!$artifacts) { throw 'No Windows artifacts' }
+          foreach ($artifact in $artifacts) {
+            if ((Get-AuthenticodeSignature -LiteralPath $artifact.FullName).Status -ne 'Valid') {
+              throw "Invalid signature: $($artifact.Name)"
+            }
+          }
+      - name: Verify macOS signatures and notarization
+        if: runner.os == 'macOS'
         shell: bash
+        run: |
+          test -n "$(find ../releases -maxdepth 3 -name '*.app' -print -quit)" || exit 1
+          find ../releases -maxdepth 3 -name '*.app' -print0 | while IFS= read -r -d '' app; do
+            codesign --verify --deep --strict "$app"
+            xcrun stapler validate "$app"
+            spctl --assess --type execute "$app"
+          done
+      - name: Create checksums
+        shell: bash
+        run: node ../scripts/release-checksums.js "$RUNNER_OS"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ runner.os }}
+          path: |
+            releases/*.exe
+            releases/*.dmg
+            releases/SHA256SUMS-*.txt
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
+      - name: Publish verified artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes
-          cd ../releases
-          shopt -s nullglob
-          files=(*.dmg *.exe)
-          gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes
+          gh release upload "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY"

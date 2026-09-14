@@ -20,6 +20,23 @@ test('writeFile then readFile round-trips text content', () => {
   assert.deepEqual(FileService.readFile(root, file), { ok: true, content: 'hello world' })
 })
 
+test('writeFile creates missing parent directories', () => {
+  const root = makeRoot()
+  const file = path.join(root, '.ace', 'notes.txt')
+  assert.deepEqual(FileService.writeFile(root, file, 'hi'), { ok: true })
+  assert.equal(fs.readFileSync(file, 'utf8'), 'hi')
+})
+
+// NotesPanel.jsx and AgentTerminal.jsx's build-capability check both pass a
+// path relative to the project root (e.g. '.ace/notes.txt') rather than the
+// full path FileTree always uses -- writeFile/readFile must resolve that
+// against root, not against the main process's own cwd.
+test('writeFile then readFile round-trip a root-relative path', () => {
+  const root = makeRoot()
+  assert.deepEqual(FileService.writeFile(root, '.ace/notes.txt', 'hello'), { ok: true })
+  assert.deepEqual(FileService.readFile(root, '.ace/notes.txt'), { ok: true, content: 'hello' })
+})
+
 test('readDir lists directories before files, each alphabetized', () => {
   const root = makeRoot()
   fs.writeFileSync(path.join(root, 'b.txt'), '')
@@ -121,4 +138,32 @@ test('RUNNABLE_EXTENSIONS is the expected per-platform set', () => {
       ? ['.exe', '.bat', '.cmd', '.ps1', '.vbs', '.com', '.msi']
       : ['.sh', '.command', '.app']
   assert.deepEqual([...RUNNABLE_EXTENSIONS].sort(), expected.sort())
+})
+
+test('junctions and symlinks cannot escape, including new linked children', async () => {
+  const parent = makeRoot()
+  const root = path.join(parent, 'project')
+  const outside = path.join(parent, 'outside')
+  fs.mkdirSync(root)
+  fs.mkdirSync(outside)
+  fs.writeFileSync(path.join(outside, 'sentinel.txt'), 'untouched')
+  const link = path.join(root, 'link')
+  fs.symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir')
+  const file = path.join(link, 'sentinel.txt')
+  for (const operation of [
+    () => FileService.readFile(root, file),
+    () => FileService.readDir(root, link),
+    () => FileService.writeFile(root, file, 'bad'),
+    () => FileService.writeFile(root, path.join(link, 'new', 'file.txt'), 'bad'),
+    () => FileService.rename(root, file, 'bad.txt'),
+    () => FileService.runFile(root, file),
+  ]) assert.throws(operation, /outside the project root/)
+  await assert.rejects(FileService.trash(root, file), /outside the project root/)
+  assert.equal(fs.readFileSync(path.join(outside, 'sentinel.txt'), 'utf8'), 'untouched')
+  assert.equal(fs.existsSync(path.join(outside, 'new')), false)
+  const inside = path.join(root, 'inside')
+  fs.mkdirSync(inside)
+  fs.symlinkSync(inside, path.join(root, 'local'), process.platform === 'win32' ? 'junction' : 'dir')
+  FileService.writeFile(root, 'local/new.txt', 'allowed')
+  assert.equal(FileService.readFile(root, 'inside/new.txt').content, 'allowed')
 })

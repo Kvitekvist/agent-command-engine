@@ -57,6 +57,10 @@ by accident, not by decision.
 
 ## Implementation Plan
 
+### Audit continuation, 2026-09-14
+
+Use shared successful-settings revision updates, preserve intentional manual selections, reconcile hidden models and distinguish unset from empty preferences.
+
 * [x] Add a `GPT-6` group with `gpt-6-astra` to `MODEL_GROUPS_BY_PROVIDER.codex`
 * [x] Restore the full Claude 4 option list
 * [x] `getAllModelIds` / `filterGroupsByEnabled` helpers in `modelCatalog.js`
@@ -69,6 +73,8 @@ by accident, not by decision.
 
 ## Files Modified
 
+Audit continuation: modelCatalog.js, ModelSelector.jsx, SettingsView.jsx, AgentView.jsx, useStore.js; model-catalog.test.js.
+
 - `src/renderer/utils/modelCatalog.js`
 - `src/renderer/views/SettingsView.jsx`
 - `src/renderer/views/AgentView.jsx`
@@ -77,6 +83,8 @@ by accident, not by decision.
 ---
 
 ## Testing
+
+Audit continuation: Unset/empty/filtered catalog tests and build pass. Still verify uncheck-all, disable-selected, provider switch and settings reload UI paths. Legacy Auto conservatively chooses an installed provider.
 
 - `cd src && npm test` — 74 tests, 73 pass, 1 skipped (POSIX-only), unchanged
 - `cd src && npm run build` — renderer builds clean
@@ -89,6 +97,9 @@ a fresh install shows all).
 ---
 
 ## Result
+
+Audit changes are implemented in the working tree, not yet committed or released.
+Remaining verification is recorded in docs/agents/audit-2026-09-13.md.
 
 ---
 

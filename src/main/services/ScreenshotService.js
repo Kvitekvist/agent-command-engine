@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { resolveWithinRoot } = require('./ProjectPath')
 const { BrowserWindow, screen, desktopCapturer, clipboard } = require('electron')
 
 // TICKET-0034: reworked from TICKET-0032's clipboard-paste model to an
@@ -18,11 +19,12 @@ function timestampedFilename() {
 // doesn't exist yet) so screenshots -- and anything else ACE ever stores
 // under the project root -- never get committed to the user's own repo.
 function ensureGitignored(projectRoot) {
-  const gitignorePath = path.join(projectRoot, '.gitignore')
+  const gitignorePath = resolveWithinRoot(projectRoot, '.gitignore')
   let content = ''
   try {
     content = fs.readFileSync(gitignorePath, 'utf8')
-  } catch (_) {
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
     // no .gitignore yet -- created below
   }
   if (content.split(/\r?\n/).some((line) => line.trim() === '.ace/')) return
@@ -35,8 +37,8 @@ function ensureGitignored(projectRoot) {
 // the first time it's touched after the rename, rather than silently
 // starting a new, empty .ace/ next to an orphaned .cpi/.
 function migrateLegacyFolder(projectRoot) {
-  const legacyDir = path.join(projectRoot, '.cpi')
-  const newDir = path.join(projectRoot, '.ace')
+  const legacyDir = resolveWithinRoot(projectRoot, '.cpi')
+  const newDir = resolveWithinRoot(projectRoot, '.ace')
   if (!fs.existsSync(newDir) && fs.existsSync(legacyDir)) {
     fs.renameSync(legacyDir, newDir)
   }
@@ -95,11 +97,11 @@ class ScreenshotService {
 
     const cropped = fullImage.crop(cropRect)
     migrateLegacyFolder(projectRoot)
-    const folder = path.join(projectRoot, 'assets', 'images', 'screenshots')
+    const folder = resolveWithinRoot(projectRoot, 'assets/images/screenshots')
     fs.mkdirSync(folder, { recursive: true })
     const filename = timestampedFilename()
-    const filePath = path.join(folder, filename)
-    fs.writeFileSync(filePath, cropped.toPNG())
+    const filePath = resolveWithinRoot(projectRoot, path.join(folder, filename))
+    fs.writeFileSync(filePath, cropped.toPNG(), { flag: 'wx' })
 
     ensureGitignored(projectRoot)
 

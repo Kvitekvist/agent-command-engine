@@ -67,6 +67,8 @@ and the `claude` / `codex` CLIs.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Install the current signed/sideload-approved MSIX on a clean Windows machine and start a PTY. Later identity tickets supersede the old misspelt fixture identity.
+
 `node scripts/build-msix.js` produced
 `releases/Agent Command Engine 0.1.30.appx` (~160 MB, unsigned). Unzipped and
 checked the manifest: `Identity Name="JensR.AgnetCommandEngine"`,

@@ -39,8 +39,12 @@ function buildCodexArgs(permissionMode) {
   return ['--sandbox', 'read-only', '--ask-for-approval', 'never']
 }
 
-function quoteArg(arg) {
-  return /^[A-Za-z0-9_.-]+$/.test(arg) ? arg : `"${arg.replace(/"/g, '\\"')}"`
+export function quoteArg(arg, platform) {
+  if (typeof arg !== 'string' || /[\r\n\0]/.test(arg)) throw new Error('Invalid launch argument')
+  if (/^[A-Za-z0-9_.-]+$/.test(arg)) return arg
+  return platform === 'win32'
+    ? "'" + arg.replace(/'/g, "''") + "'"
+    : "'" + arg.replace(/'/g, "'\\''") + "'"
 }
 
 // TICKET-0044: `sessionId`, when given, is injected as `claude --session-id
@@ -53,14 +57,14 @@ function quoteArg(arg) {
 // points at the ACE-generated JSON that wires Claude's lifecycle hooks to the
 // per-agent status badge (see HookService.js). Additive to the project's own
 // Claude settings; Codex has no equivalent, so it's skipped there.
-export function buildLaunchCommand({ provider, model, permissionMode }, sessionId, settingsPath) {
+export function buildLaunchCommand({ provider, model, permissionMode }, sessionId, settingsPath, platform = process.platform, executable = [provider]) {
   const args = provider === 'codex'
-    ? ['codex', '--model', model, ...buildCodexArgs(permissionMode)]
+    ? [...executable, '--model', model, ...buildCodexArgs(permissionMode)]
     : [
-        'claude', '--model', model,
+        ...executable, '--model', model,
         ...(sessionId ? ['--session-id', sessionId] : []),
         ...(settingsPath ? ['--settings', settingsPath] : []),
         ...buildClaudePermissionArgs(permissionMode),
       ]
-  return args.map(quoteArg).join(' ')
+  return (platform === 'win32' ? '& ' : '') + args.map(arg => quoteArg(arg, platform)).join(' ')
 }

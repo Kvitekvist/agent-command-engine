@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, lazy, Suspense } from 'react'
 import useStore from './store/useStore'
 import Sidebar from './components/Sidebar'
 import AgentView from './views/AgentView'
 import TokenView from './views/TokenView'
 import SettingsView from './views/SettingsView'
-import EditorView from './views/EditorView'
+const EditorView = lazy(() => import('./views/EditorView'))
 import ProcessesView from './views/ProcessesView'
 import SetupView from './views/SetupView'
 import ContextMenu from './components/ContextMenu'
+import Modal from './components/Modal'
+import NotesPanel from './components/NotesPanel'
+import ProjectSkillsPanel from './components/ProjectSkillsPanel'
 
 // TICKET-0022/0023: live subscription quota is whole-machine data (not
 // scoped to whichever ACE project is active), and both the Agents tab's
@@ -27,6 +30,35 @@ export default function App() {
   // and stopping this menu from firing over it (a main-process context-menu
   // handler would fire regardless of the renderer's preventDefault).
   const [ctxMenu, setCtxMenu] = useState(null)
+  const [closing, setClosing] = useState(false)
+  const [closeSaving, setCloseSaving] = useState(false)
+  const [closeError, setCloseError] = useState('')
+  const activeProject = useStore(s => s.activeProject)
+  useEffect(() => window.ace.onCloseRequested(() => {
+    if (!useStore.getState().openFiles.some(file => file.dirty)) window.ace.closeDecision(true)
+    else { setClosing(true); setCloseError('') }
+  }), [])
+  function cancelClose() {
+    if (closeSaving) return
+    setClosing(false)
+    window.ace.closeDecision(false)
+  }
+  async function saveAndClose() {
+    setCloseSaving(true)
+    setCloseError('')
+    try {
+      const state = useStore.getState()
+      for (const file of state.openFiles.filter(file => file.dirty)) {
+        const result = await window.ace.fs.writeFile(state.activeProject.path, file.path, file.content, file.originalContent)
+        if (!result.ok) throw new Error(`${file.name}: ${result.error}`)
+        useStore.getState().markFileSaved(file.path, file.content)
+      }
+      if (useStore.getState().openFiles.some(file => file.dirty)) throw new Error('New edits remain unsaved.')
+      window.ace.closeDecision(true)
+      setClosing(false)
+    } catch (error) { setCloseError(error.message) }
+    finally { setCloseSaving(false) }
+  }
 
   function handleContextMenu(e) {
     const target = e.target
@@ -123,11 +155,13 @@ export default function App() {
 
   useEffect(() => {
     async function checkSetup() {
-      const dismissed = await window.ace.getSetting('prereqs_setup_dismissed')
-      if (dismissed === 'true') { setSetupChecked(true); return }
       try {
+        const dismissed = await window.ace.getSetting('prereqs_setup_dismissed')
+        if (dismissed === 'true') return
         const result = await window.ace.prereqs.check()
         setShowSetup(!result.claude?.present || !result.codex?.present || !result.git?.present)
+      } catch (_) {
+        setShowSetup(true)
       } finally {
         setSetupChecked(true)
       }
@@ -148,7 +182,19 @@ export default function App() {
       onContextMenu={handleContextMenu}
     >
       <Sidebar />
+      {closing && <Modal title="Save changes before closing?" onClose={cancelClose}>
+        <p className="text-sm">{useStore.getState().openFiles.filter(f => f.dirty).map(f => f.name).join(', ')}</p>
+        {closeError && <p role="alert" className="text-danger">{closeError}</p>}
+        <div className="flex justify-end gap-2 mt-3">
+          <button disabled={closeSaving} className="btn-ghost" onClick={cancelClose}>Cancel</button>
+          <button disabled={closeSaving} className="btn-danger" onClick={() => window.ace.closeDecision(true)}>Discard</button>
+          <button disabled={closeSaving} className="btn-primary" onClick={saveAndClose}>{closeSaving ? 'Saving...' : 'Save all'}</button>
+        </div>
+      </Modal>}
+      {activeProject && activeView === 'notes' && <NotesPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
+      {activeProject && activeView === 'skills' && <ProjectSkillsPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
       <main className="flex-1 overflow-auto">
+        {!activeProject && ['notes', 'skills'].includes(activeView) && <p className="p-5 text-muted">Select a project to open {activeView}.</p>}
         {/* TICKET-0027: unlike the other views, AgentView stays mounted at
             all times -- toggled with a CSS class instead of conditional
             rendering -- because each running agent's card owns a real
@@ -165,7 +211,7 @@ export default function App() {
         {activeView === 'processes' && <ProcessesView />}
         {activeView === 'tokens'    && <TokenView />}
         {activeView === 'settings'  && <SettingsView />}
-        {activeView === 'editor'    && <EditorView />}
+        {activeView === 'editor'    && <Suspense fallback={<p className="p-4">Loading editor...</p>}><EditorView /></Suspense>}
       </main>
       {ctxMenu && (
         <ContextMenu

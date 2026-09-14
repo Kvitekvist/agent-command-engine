@@ -13,6 +13,8 @@ class TerminalService {
     this.host = null
     this.pendingSpawns = new Map()
     this.isShuttingDown = false
+    this.sessions = new Map()
+    this.onState = () => {}
   }
 
   init(mainWindow) {
@@ -67,10 +69,21 @@ class TerminalService {
         return
       }
       if (msg.type === 'data') {
-        this._send('terminal:data', { id: msg.id, chunk: msg.chunk })
+        const session = [...this.sessions.values()].find(s => s.id === msg.id)
+        if (session) {
+          session.output = (session.output + msg.chunk).slice(-262144)
+          session.sequence++
+        }
+        this._send('terminal:data', { id: msg.id, agentId: session?.agentId, chunk: msg.chunk, sequence: session?.sequence })
         return
       }
       if (msg.type === 'exit') {
+        const session = [...this.sessions.values()].find(s => s.id === msg.id)
+        if (session) {
+          session.state = msg.exitCode === 0 ? 'exited' : 'error'
+          session.exitCode = msg.exitCode
+          this.onState(session.agentId, session.state)
+        }
         // A spawn that crashes the host before ever confirming 'spawned'
         // would otherwise leave its caller's promise unresolved forever.
         const pending = this.pendingSpawns.get(msg.id)
@@ -92,6 +105,12 @@ class TerminalService {
         pending.resolve({ success: false, error: 'PTY host process crashed' })
       }
       this.pendingSpawns.clear()
+      for (const session of this.sessions.values()) {
+        if (session.state === 'running' || session.state === 'connecting') {
+          session.state = 'lost'
+          this.onState(session.agentId, 'lost')
+        }
+      }
       // Every live terminal session lives entirely in the host process's
       // memory -- a host crash always takes them all down with it, so tell
       // the renderer explicitly rather than leaving a panel that looks
@@ -111,14 +130,43 @@ class TerminalService {
   }
 
   spawn(opts = {}) {
-    return new Promise((resolve) => {
+    const existing = this.sessions.get(opts.agentId)
+    if (existing) {
+      if (existing.state === 'connecting') return existing.pending.then(result => ({ ...result, reconnected: true, output: existing.output, sequence: existing.sequence, autoAnswer: !!existing.autoAnswer }))
+      if (existing.state !== 'running') return Promise.resolve({ success: false, error: `Session ${existing.state}; launch a new agent explicitly` })
+      return Promise.resolve({ success: true, id: existing.id, pid: existing.pid, reconnected: true, output: existing.output, sequence: existing.sequence, autoAnswer: !!existing.autoAnswer })
+    }
+    // ponytail: replay the last 256K characters; full terminal snapshots if longer recovery history is needed.
+    const session = { agentId: opts.agentId, id: randomUUID(), output: '', sequence: 0, state: 'connecting' }
+    this.sessions.set(opts.agentId, session)
+    session.pending = new Promise((resolve) => {
       if (!this.host || !this.host.connected) {
+        session.state = 'error'
         resolve({ success: false, error: 'Terminal host process is not available' })
         return
       }
-      const id = randomUUID()
+      const id = session.id
+      const timer = setTimeout(() => {
+        this.pendingSpawns.delete(id)
+        session.state = 'lost'
+        this.dispose(id)
+        this.onState(opts.agentId, 'lost')
+        resolve({ success: false, error: 'Terminal startup timed out' })
+      }, 15000)
       this.pendingSpawns.set(id, {
-        resolve: (msg) => resolve({ success: !!msg.success, id, pid: msg.pid, error: msg.error }),
+        resolve: (msg) => {
+          clearTimeout(timer)
+          if (this.sessions.get(opts.agentId) !== session) {
+            this.dispose(id)
+            resolve({ success: false, error: 'Agent stopped during startup' })
+            return
+          }
+          session.state = msg.success ? 'running' : 'error'
+          session.pid = msg.pid
+          if (msg.success && opts.command) this.write(id, opts.command + '\r')
+          this.onState(opts.agentId, session.state)
+          resolve({ success: !!msg.success, id, pid: msg.pid, error: msg.error, output: session.output, sequence: session.sequence })
+        },
       })
       try {
         this.host.send({
@@ -130,10 +178,20 @@ class TerminalService {
           rows: opts.rows,
         })
       } catch (error) {
+        clearTimeout(timer)
         this.pendingSpawns.delete(id)
+        session.state = 'error'
         resolve({ success: false, error: `PTY host communication failed: ${error.message}` })
       }
     })
+    return session.pending
+  }
+
+  stopAgent(agentId) {
+    const session = this.sessions.get(agentId)
+    if (!session) return
+    this.dispose(session.id)
+    this.sessions.delete(agentId)
   }
 
   write(id, data) {
@@ -158,6 +216,8 @@ class TerminalService {
   // running, so a permission prompt already on screen doesn't require the
   // agent to be stopped and relaunched to resolve.
   setAutoAnswer(id, enabled) {
+    const session = [...this.sessions.values()].find(session => session.id === id)
+    if (session) session.autoAnswer = !!enabled
     if (this.host && this.host.connected) {
       try { this.host.send({ cmd: 'setAutoAnswer', id, enabled }) } catch (_) { /* host gone */ }
     }
@@ -183,4 +243,4 @@ class TerminalService {
   }
 }
 
-module.exports = { TerminalService: new TerminalService() }
+module.exports = { TerminalService: new TerminalService(), TerminalServiceClass: TerminalService }

@@ -56,6 +56,8 @@ this warrants.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Inspect the current package manifest's platform range and install on a supported clean Windows machine.
+
 `node scripts/build-msix.js` end to end: builds, packs, unpacks, patches,
 repacks. `unzip -t` clean; manifest shows
 `MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0"`, identity and

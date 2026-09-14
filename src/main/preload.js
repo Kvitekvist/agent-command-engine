@@ -2,6 +2,16 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('ace', {
   platform: process.platform,
+  onCloseRequested: cb => {
+    const listener = () => cb()
+    ipcRenderer.on('window:requestClose', listener)
+    return () => ipcRenderer.removeListener('window:requestClose', listener)
+  },
+  closeDecision: approved => ipcRenderer.send('window:closeDecision', approved),
+  notes: {
+    read: root => ipcRenderer.invoke('notes:read', root),
+    mutate: (root, mutation) => ipcRenderer.invoke('notes:mutate', root, mutation),
+  },
 
   // Projects
   getProjects: () => ipcRenderer.invoke('projects:getAll'),
@@ -41,6 +51,17 @@ contextBridge.exposeInMainWorld('ace', {
     return () => ipcRenderer.removeListener('agent:activity', l)
   },
 
+  // Shell operations
+  shell: {
+    openUrl: (url) => ipcRenderer.invoke('shell:openUrl', url),
+    showInFolder: (filePath) => ipcRenderer.invoke('shell:showInFolder', filePath),
+  },
+
+  // Clipboard operations
+  clipboard: {
+    saveImage: (projectPath) => ipcRenderer.invoke('clipboard:saveImage', { projectPath }),
+  },
+
   // Processes
   getProcesses: () => ipcRenderer.invoke('processes:list'),
 
@@ -56,7 +77,7 @@ contextBridge.exposeInMainWorld('ace', {
   fs: {
     readDir: (root, dirPath) => ipcRenderer.invoke('fs:readDir', { root, dirPath }),
     readFile: (root, filePath) => ipcRenderer.invoke('fs:readFile', { root, filePath }),
-    writeFile: (root, filePath, content) => ipcRenderer.invoke('fs:writeFile', { root, filePath, content }),
+    writeFile: (root, filePath, content, expectedContent) => ipcRenderer.invoke('fs:writeFile', { root, filePath, content, expectedContent }),
     // TICKET-0033: file-tree right-click actions
     openInExplorer: (root, filePath) => ipcRenderer.invoke('fs:openInExplorer', { root, filePath }),
     runFile: (root, filePath) => ipcRenderer.invoke('fs:runFile', { root, filePath }),
@@ -78,6 +99,7 @@ contextBridge.exposeInMainWorld('ace', {
 
   // Project build (TICKET-0050)
   project: {
+    capabilities: projectPath => ipcRenderer.invoke('project:capabilities', projectPath),
     build: (projectPath) => ipcRenderer.invoke('project:build', { projectPath }),
   },
 
@@ -88,7 +110,9 @@ contextBridge.exposeInMainWorld('ace', {
   prereqs: {
     check: () => ipcRenderer.invoke('prereqs:check'),
     install: (name) => ipcRenderer.invoke('prereqs:install', name),
-    uninstall: () => ipcRenderer.invoke('prereqs:uninstall'),
+    installNode: () => ipcRenderer.invoke('prereqs:installNode'),
+    relaunch: () => ipcRenderer.invoke('prereqs:relaunch'),
+    uninstall: name => ipcRenderer.invoke('prereqs:uninstall', name),
     openNodeDownload: () => ipcRenderer.invoke('prereqs:openNodeDownload'),
     openGitDownload: () => ipcRenderer.invoke('prereqs:openGitDownload'),
   },

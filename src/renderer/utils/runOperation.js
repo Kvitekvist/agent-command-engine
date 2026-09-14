@@ -16,7 +16,9 @@ export async function runOperation(status, setStatus, label, invoke) {
     } else {
       setStatus({ type: 'error', message: result?.error || 'Failed' })
     }
+    return result
   } catch (err) {
     setStatus({ type: 'error', message: err?.message || String(err) })
+    return { ok: false, error: err?.message || String(err) }
   }
 }

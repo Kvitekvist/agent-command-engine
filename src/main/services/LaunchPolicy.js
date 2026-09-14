@@ -1,5 +1,4 @@
 const { DBService } = require('./DBService')
-const { LoadBalancer } = require('./LoadBalancer')
 
 const DEFAULT_MODEL_BY_PROVIDER = Object.freeze({
   claude: 'claude-sonnet-5',
@@ -18,7 +17,7 @@ function normalizeProvider(provider) {
 // renderer-supplied model because it may belong to the other provider.
 function resolveLaunchPolicy({ provider, model, projectId } = {}, deps = {}) {
   const getSetting = deps.getSetting || ((key) => DBService.getSetting(key))
-  const decideProvider = deps.decideProvider || ((opts) => LoadBalancer.decide(opts))
+  const decideProvider = deps.decideProvider || (({ manualProvider }) => manualProvider || 'claude')
 
   const manualProvider = normalizeProvider(provider)
   const resolvedProvider = normalizeProvider(decideProvider({ manualProvider, projectId }))
@@ -34,6 +33,9 @@ function resolveLaunchPolicy({ provider, model, projectId } = {}, deps = {}) {
     || (manualProvider && configuredProvider === resolvedProvider && configuredModel)
     || DEFAULT_MODEL_BY_PROVIDER[resolvedProvider]
 
+  if (typeof resolvedModel !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(resolvedModel)) {
+    throw new Error('Invalid model ID')
+  }
   return { provider: resolvedProvider, model: resolvedModel, automatic: !manualProvider }
 }
 

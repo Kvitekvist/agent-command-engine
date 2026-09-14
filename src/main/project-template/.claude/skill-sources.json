@@ -1,5 +1,5 @@
 {
-  "_comment": "Third-party skills ACE ships. On first launch after an install or update, SkillSetupService git-clones each repo below so its author gets clone traffic and a credit line in THIRD_PARTY_SKILLS.md. subdir: path inside the repo holding the skill files (SKILL.md etc.); null means the repo has no SKILL.md of its own and ACE's bundled copy is kept, the clone being for attribution only.",
+  "_comment": "Provenance record for the third-party skills ACE bundles directly under .claude/skills/ (see THIRD_PARTY_SKILLS.md) -- not read at runtime. subdir: where the skill files (SKILL.md etc.) live inside the author's repo, kept here for anyone re-syncing a skill from upstream.",
   "skills": {
     "calibrate-enhanced": {
       "repo": "https://github.com/robonuggets/calibrate",

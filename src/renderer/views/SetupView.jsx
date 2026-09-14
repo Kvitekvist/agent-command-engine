@@ -3,11 +3,12 @@ import PrereqChecklist from '../components/PrereqChecklist'
 
 // TICKET-0055: shown on launch (and every subsequent launch, until
 // dismissed) when the claude/codex CLIs ACE actually spawns aren't on PATH
-// yet. Never installs anything without the user clicking a button -- see
-// PrereqChecklist. "Continue to ACE" always works (this never hard-blocks
-// the app -- someone using only one provider, or who'll install later,
-// shouldn't be stuck), it just re-checks and reappears on the next launch
-// unless "Don't show this again" is also checked.
+// yet. Passes autoInstall to PrereqChecklist so missing pieces install
+// themselves once instead of waiting for a click here; the buttons stay for
+// retrying a failed install. "Continue to ACE" always works (this never
+// hard-blocks the app -- someone using only one provider, or who'll install
+// later, shouldn't be stuck), it just re-checks and reappears on the next
+// launch unless "Don't show this again" is also checked.
 export default function SetupView({ onContinue }) {
   const [dontShowAgain, setDontShowAgain] = useState(false)
 
@@ -32,7 +33,7 @@ export default function SetupView({ onContinue }) {
           </p>
         </div>
 
-        <PrereqChecklist />
+        <PrereqChecklist autoInstall />
 
         <div className="flex items-center justify-between pt-2 border-t border-border">
           <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">

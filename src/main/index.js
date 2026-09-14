@@ -49,6 +49,16 @@ process.on('unhandledRejection', (reason) => {
   }
 }
 
+// Fall back to the bundled MinGit when git isn't on PATH (see GitPath.js).
+// Must run before ptyHost is forked (TerminalService) or any `git` spawn --
+// both inherit process.env, so mutating PATH once here covers every one of
+// them, including agent terminals.
+try {
+  require('./services/GitPath').ensureGitOnPath({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath() })
+} catch (err) {
+  console.error('GitPath fallback failed:', err)
+}
+
 let DBService, AgentService, TerminalService, registerHandlers
 
 try {
@@ -64,6 +74,22 @@ try {
 }
 
 let mainWindow = null
+let closeApproved = false
+let pendingClose = null
+function requestClose(action) {
+  if (pendingClose) { if (action === 'quit') pendingClose = action; return }
+  pendingClose = action
+  mainWindow.webContents.send('window:requestClose')
+}
+ipcMain.on('window:closeDecision', (event, approved) => {
+  try { require('./ipc/handlers').assertAppSender(event, mainWindow) } catch (_) { return }
+  const action = pendingClose
+  pendingClose = null
+  if (approved !== true || !action) return
+  closeApproved = true
+  if (action === 'quit') app.quit()
+  else mainWindow.close()
+})
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -122,6 +148,7 @@ if (!gotTheLock) {
 }
 
 function createWindow() {
+  closeApproved = false
   const iconPath = getIconPath()
 
   mainWindow = new BrowserWindow({
@@ -135,8 +162,13 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   })
+
+  mainWindow.webContents.on('will-navigate', event => event.preventDefault())
+  mainWindow.webContents.on('will-redirect', event => event.preventDefault())
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
   if (isDev) {
     const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
@@ -147,7 +179,10 @@ function createWindow() {
     mainWindow.loadFile(path.join(app.getAppPath(), 'dist/renderer/index.html'))
   }
 
-  mainWindow.on('closed', () => { mainWindow = null })
+  mainWindow.on('close', event => {
+    if (!closeApproved) { event.preventDefault(); requestClose('close') }
+  })
+  mainWindow.on('closed', () => { mainWindow = null; pendingClose = null })
 }
 
 app.whenReady().then(async () => {
@@ -156,18 +191,6 @@ app.whenReady().then(async () => {
   // this process never creates a window or opens ace.db before app.quit().
   if (!gotTheLock) return
   setDevDockIcon()
-
-  // One-time skill-download gate (see SkillSetupService). Declining quits ACE
-  // before any window opens.
-  try {
-    const { ensureSkillsProvisioned } = require('./services/SkillSetupService')
-    if (!ensureSkillsProvisioned().proceed) {
-      app.quit()
-      return
-    }
-  } catch (err) {
-    console.error('SKILL SETUP ERROR:', err)
-  }
 
   try {
     console.log('Initializing DBService...')
@@ -178,7 +201,7 @@ app.whenReady().then(async () => {
     Menu.setApplicationMenu(buildMenu(mainWindow))
     AgentService.init(mainWindow)
     TerminalService.init(mainWindow)
-    registerHandlers(ipcMain, mainWindow, DBService, AgentService, TerminalService)
+    registerHandlers(ipcMain, () => mainWindow, DBService, AgentService, TerminalService)
     console.log('Startup complete.')
   } catch (err) {
     console.error('STARTUP ERROR:', err)
@@ -211,6 +234,7 @@ let cleanupDone = false
 app.on('before-quit', async (e) => {
   if (cleanupDone) return
   e.preventDefault()
+  if (mainWindow && !closeApproved) { requestClose('quit'); return }
   if (AgentService) AgentService.killAll()
   if (TerminalService) await TerminalService.shutdown()
   cleanupDone = true

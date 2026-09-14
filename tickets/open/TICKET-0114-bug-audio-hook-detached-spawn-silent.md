@@ -75,6 +75,8 @@ Confirmed with a WASAPI loopback capture of the default output device:
 
 ## Testing
 
+Current outstanding check (2026-09-14): Verify the macOS/Linux audio hook in a live provider session and ensure mute suppresses playback.
+
 Windows loopback capture (`soundcard` + `numpy`, dev-only) — see the table
 above. 3 consecutive Stop invocations each captured a -8 dBFS waveform
 identical to a direct play; the silence control captured nothing; the mute

@@ -56,6 +56,9 @@ const KEYWORDS = {
   "CHANGELOG.md": "release history versions changes shipped",
   "README.md": "overview install usage getting started features",
   "src/main/preload.js": "bridge context isolation exposed api window ace renderer boundary",
+  "src/renderer/components/NotesPanel.jsx": "notes project shared search edit undo reminders",
+  "src/main/services/NotesService.js": "notes persistence concurrency revision identity",
+  "src/renderer/components/ProjectSkillsPanel.jsx": "project skills claude codex bundled installed availability",
   "scripts/run_tests.sh": "run tests ci test suite verification checks",
   "src/tests/helpers/electron-stub.js": "test stub mock electron",
   ".claude/memory/ticket_memory.md": "history historical ticket log past work search only",
@@ -78,7 +81,8 @@ function ticketNodes(dir){
     const id = path.basename(f, ".md");
     const text = fs.readFileSync(path.join(ROOT, dir, f), "utf8");
     const m = text.match(/##\s*Description\s*\n+([\s\S]*?)(?:\n\s*\n|\n##)/);
-    let desc = m ? m[1].replace(/\s+/g, " ").trim() : "";
+    const title = text.match(/^#\s+TICKET-\d+\s*[:—-]\s*(.+)$/m);
+    let desc = title ? title[1].trim() : m ? m[1].replace(/\s+/g, " ").trim() : "";
     desc = desc.split(/(?<=\.)\s/)[0].replace(/\.$/, "");
     if (desc.length > 62) desc = desc.slice(0, 62).replace(/\s+\S*$/, "");
     return node(dir + "/" + f, desc ? id + " " + desc.toLowerCase() : id);
@@ -98,7 +102,7 @@ const cats = [
   { id: "main",     label: "Main Process", files: walk("src/main", [], 3) },
   { id: "renderer", label: "Renderer",     files: walk("src/renderer", [], 3) },
   { id: "tests",    label: "Tests",        files: walk("src/tests", [], 2) },
-  { id: "scripts",  label: "Scripts",      files: walk("scripts", [], 1) },
+  { id: "scripts",  label: "Scripts",      files: [...walk("scripts", [], 1), ...walk("src/scripts", [], 1)] },
   { id: "docs",     label: "Docs",         files: ["README.md", "CHANGELOG.md", ...walk("docs", [], 0)] },
   { id: "skills",   label: "Skills",       nodes: skillNodes() },
   { id: "prompts",  label: "Prompts & Templates", files: [...walk(".claude/prompts", [], 0), ...walk(".claude/templates", [], 0), "tickets/TEMPLATE.md", ".claude/PROJECT_RULES.md", ".claude/project_config.md", ".claude/PROJECT_SKELETON.md", ".claude/framework_version.md"] }

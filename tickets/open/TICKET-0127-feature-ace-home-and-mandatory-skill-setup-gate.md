@@ -20,6 +20,10 @@ High
 
 ## Description
 
+Current scope (2026-09-14): TICKET-0132 supersedes the mandatory download gate,
+skills cache and upstream clone-traffic checks below. Do not restore that gate.
+This ticket retains the ACE home/database migration verification only.
+
 Follow-up to TICKET-0125 (self-contained release audit). Two further ways a
 shipped install reached outside itself, or hid state from the user:
 
@@ -107,7 +111,12 @@ then runs offline from the cache.
 - `cd src && npm run build:main` — clean; `dist/main` loads both new/changed
   services
 
-Still to verify live:
+Current live checks: launch a packaged build with a pre-existing legacy ace.db,
+verify the copied database is intact in Documents/ACE (or the documented MSIX
+fallback), keep the original as a safety copy, and verify a second launch opens
+without a download gate. Bundled project skills are now verified under TICKET-0132.
+
+Historical gate checklist, superseded by TICKET-0132 and no longer required:
 - packaged build with an existing `%APPDATA%` db → first launch shows the
   consent dialog; **Quit** closes with no window; relaunch → **Download and
   continue** populates `~/Documents/ACE/{ace.db,ace-hooks,skills-cache,

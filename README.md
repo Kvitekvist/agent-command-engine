@@ -20,9 +20,10 @@ ACE runs Claude Code and Codex agents in separate terminals for each project. It
 - **Projects:** Open and switch between project folders.
 - **Files:** Browse a project in a VS Code-style sidebar. Edit files in Monaco and save them to disk. The context menu can open files in Explorer or run executable files.
 - **Agents:** Start several Claude Code or Codex agents in one project. Each has its own interactive terminal and remains available when you switch tabs or projects.
-- **Names and status:** Agents receive a generated name and a title from their first prompt. Their badges reflect Claude Code lifecycle events: **Running**, **Waiting**, **Done**, or **Error**. A project can play a sound when an agent finishes.
-- **Screenshots:** Capture a selected screen area from an agent card. ACE writes the image to `.ace/screenshots/`, adds that directory to `.gitignore`, and copies its path.
-- **Usage:** The default dashboard reads Claude and Codex quota and usage data from `tokscale`. It shows reset times and today's use by model, project, and session.
+- **Names and status:** Agents receive a generated name and a title from their first prompt. Badges distinguish Starting, Active, known Waiting, completion, failure and lost sessions. Claude hooks provide detailed activity; Codex is not labelled Waiting without an input signal. A project can play a sound when an agent finishes.
+- **Screenshots:** Capture a selected screen area from an agent card. ACE writes the image to `assets/images/screenshots/` and copies its path.
+- **Usage:** Whole-machine quota and usage come from `tokscale`; project history is separately labelled and grouped by stable agent/session identities.
+- **Notes:** Open Project Notes without a running agent. Search, edit and undo deletion; per-agent insertion pastes without submitting. See the [notes format](docs/agents/notes-format.md) before appending from scripts.
 - **Usage bar:** The Agents tab shows each provider's used and available percentage, plus its reset time.
 - **Models:** Choose the Claude or Codex model for an agent.
 - **Push update:** This terminal action creates a ticket and a `feature/` or `bugfix/` branch, makes a local commit, then opens a pull request through `/push-update`.
@@ -56,10 +57,16 @@ Builds are unsigned, so first launch needs a right-click > Open the very first t
 
 **Windows** - download the installer or portable exe from the [latest release](https://github.com/Kvitekvist/agent-command-engine/releases/latest).
 
-The first launch after an install or update asks to download ACE's third-party
-skill packs from their authors' GitHub repositories (needs Git and a network
-connection); this is required to continue. ACE keeps its database, hooks and
-downloaded skills in `Documents/ACE/`.
+The next release bundles its third-party skill packs and credits directly;
+there is no mandatory download or consent gate. Missing Claude project skills
+are copied from the bundle without overwriting existing skills. Project Skills
+shows Claude and Codex directories separately; a Claude skill does not imply
+Codex support. ACE keeps its database and generated hooks in `Documents/ACE/`.
+
+The release workflow now requires signing credentials, but a signed release
+has not yet been verified. Follow the [release verification and offline update
+instructions](docs/agents/release-delivery.md), not a signing claim inferred
+from a successful local build.
 
 ---
 
@@ -80,7 +87,9 @@ scripts/run.sh      # start in development mode
 scripts/build.sh    # build for production
 ```
 
-Requires: Node.js 20+, Claude Code CLI (`claude`), OpenAI Codex CLI (`codex`) installed and authenticated.
+Development uses Node.js 22. Install and authenticate whichever provider CLI
+you use. Removing a global CLI is an explicit per-provider maintenance action
+and also affects terminals outside ACE.
 
 Automated checks:
 
@@ -92,6 +101,15 @@ npm run package
 ```
 
 Application build output is written to `src/dist`; installers are written to `releases`.
+Ordinary builds do not bump versions or commit files. Release preparation takes
+a full reviewed commit SHA and requires a clean tree; tagging and publishing
+remain separate actions.
+
+Editor saves check the loaded disk content before replacing a file. Conflicts
+keep both the external file and the unsaved buffer until you choose what to
+keep. Window close offers Save, Discard and Cancel. Main owns running PTYs:
+renderer reattachment replays recent output; app quit ends sessions, and host
+failure is reported as lost rather than silently starting another agent.
 
 ---
 

@@ -104,6 +104,8 @@ skill.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Start the package offline to verify bundled fonts/workers, then use a disposable Claude project to verify bundled Push update availability.
+
 - `npm test` — 74 tests, 73 pass, 1 skipped (POSIX-only chmod case on Windows)
 - `npm run build` — renderer emits five local `.woff2` files (115 KB total);
   built `dist/renderer/index.html` contains no `fonts.googleapis.com`
@@ -140,4 +142,3 @@ ignored for a direct install on npm 11 (verified). `--no-save` keeps
 ---
 
 ## Closed
-

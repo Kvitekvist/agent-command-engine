@@ -14,6 +14,9 @@
 
 @layer base {
   * { box-sizing: border-box; }
+  :focus-visible { outline: 2px solid #a89bff; outline-offset: 2px; }
+  button { min-height: 28px; }
+  button:disabled { cursor: not-allowed; opacity: 0.6; }
   /* TICKET-0051: make UI text highlightable/copyable everywhere. This is the
      default anyway, but stated explicitly as a safety net; it sits in the base
      layer so the intentional `select-none` utilities (screenshot toast, the
@@ -22,6 +25,11 @@
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
+  /* Each agent's terminal scrollback (xterm's own internal scroll element)
+     must not hand off unconsumed wheel delta to the agent grid/project
+     scroll behind it once it hits its own top/bottom -- otherwise scrolling
+     inside one agent's terminal also scrolls the whole project view. */
+  .xterm-viewport { overscroll-behavior: contain; }
 }
 
 @layer components {

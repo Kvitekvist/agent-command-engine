@@ -1,8 +1,8 @@
 name: Tests
 
 # Runs the Agent Command Engine test suite on every push and pull request
-# targeting main. The suite is dependency-free (see scripts/run_tests.sh), so no
-# `npm install` / Electron download is needed -- it just needs Node.
+# targeting main. Run the dependency-free checks first, then install the lockfile
+# for migration, renderer and real runtime checks.
 #
 # The suite runs on all three developer platforms (macOS, Windows, Linux), not
 # just Linux: past macOS-only regressions in platform-divergent code (tokscale
@@ -40,3 +40,39 @@ jobs:
         # so the one POSIX script drives the suite uniformly across the matrix.
         shell: bash
         run: bash scripts/run_tests.sh
+
+      - name: Install locked dependencies
+        working-directory: src
+        run: npm ci
+
+      - name: Test installed dependencies and migrations
+        working-directory: src
+        run: npm test
+
+      - name: Build renderer and main
+        working-directory: src
+        run: npm run build
+
+      - name: Start a real PTY
+        working-directory: src
+        run: node scripts/smoke-pty.js
+
+      - name: Exercise built renderer and offline workers
+        if: runner.os != 'Linux'
+        working-directory: src
+        run: node node_modules/electron/cli.js scripts/smoke-renderer.js
+
+      - name: Exercise built renderer under Xvfb
+        if: runner.os == 'Linux'
+        working-directory: src
+        run: xvfb-run -a node node_modules/electron/cli.js --no-sandbox scripts/smoke-renderer.js
+
+      - name: Exercise real main authorization and session recovery
+        if: runner.os != 'Linux'
+        working-directory: src
+        run: node node_modules/electron/cli.js scripts/smoke-main.js
+
+      - name: Exercise real main under Xvfb
+        if: runner.os == 'Linux'
+        working-directory: src
+        run: xvfb-run -a node node_modules/electron/cli.js --no-sandbox scripts/smoke-main.js

@@ -73,6 +73,8 @@ Two Agents-screen bugs reproduce on macOS but not on Windows:
 
 ## Testing
 
+Current outstanding check (2026-09-14): On macOS select/copy terminal text with Cmd+C and confirm a new Claude launch retains its welcome box; reconnect must not create a fresh session.
+
 `npm test` from `src/` (regression). The behaviour itself is manual/live: the
 copy path depends on real key events and the OS clipboard, and the splash
 timing depends on real CLI startup, neither of which the unit suite exercises.

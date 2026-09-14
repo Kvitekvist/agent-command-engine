@@ -4,16 +4,21 @@
   Store package can be smoke-tested before submission.
 
   The Microsoft Store re-signs the package with your real publisher cert on
-  ingestion -- this script's cert is ONLY for local sideloading and never
-  leaves your machine. Upload the *unsigned* releases\*.appx to Partner Center,
-  not the signed copy this script makes under releases\sideload\.
+  ingestion -- this script's cert is ONLY for local sideloading. Upload the
+  *unsigned* releases\*.appx to Partner Center, not the signed copy this
+  script makes under releases\sideload\.
+
+  To test on ANOTHER machine (e.g. a Hyper-V VM), copy both
+  releases\sideload\<name>.appx and releases\sideload\ace-test-cert.cer over,
+  then see .claude/skills/msix-sideload-test/SKILL.md for the per-machine
+  trust + install steps.
 
   Run from an ELEVATED PowerShell:
     powershell -ExecutionPolicy Bypass -File scripts\sign-and-install-msix.ps1
 
   Undo everything:
     Get-AppxPackage *AgentCommandEngine* | Remove-AppxPackage
-    Get-ChildItem Cert:\LocalMachine\TrustedPeople, Cert:\CurrentUser\My |
+    Get-ChildItem Cert:\LocalMachine\TrustedPeople, Cert:\LocalMachine\Root, Cert:\CurrentUser\My |
       Where-Object Subject -eq (that publisher) | Remove-Item
 #>
 
@@ -52,20 +57,30 @@ if (-not $cert) {
     -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
 }
 
-# Trust it for sideloading: LocalMachine\TrustedPeople is the store Windows checks.
-$cer = Join-Path $env:TEMP 'ace-msix-test.cer'
-Export-Certificate -Cert $cert -FilePath $cer -Force | Out-Null
-Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
-
-# Sign a COPY, leaving releases\*.appx pristine for the Store upload.
+# Trust it for sideloading. TrustedPeople is what Add-AppxPackage checks;
+# some Windows builds' chain-building also want the self-signed leaf in Root
+# (seen in practice on a Hyper-V test VM) -- both are harmless to add.
 $outDir = Join-Path $root 'releases\sideload'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+$cer = Join-Path $outDir 'ace-test-cert.cer'  # kept alongside the signed .appx, not $env:TEMP, so it's there to copy to another machine
+Export-Certificate -Cert $cert -FilePath $cer -Force | Out-Null
+Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+
+# Sign a COPY, leaving releases\*.appx pristine for the Store upload.
 $signed = Join-Path $outDir $src.Name
 Copy-Item $src.FullName $signed -Force
 
 Write-Host "Signing $($src.Name)"
 & $signtool.FullName sign /fd SHA256 /sha1 $cert.Thumbprint "$signed"
 if ($LASTEXITCODE -ne 0) { throw "signtool failed ($LASTEXITCODE)" }
+
+# signtool sign can exit 0 without actually applying a signature (seen in
+# practice: a re-run produced a byte-identical, unsigned "signed" copy with
+# no error). Verify before trusting it, so a bad package never reaches
+# Add-AppxPackage -- local or on another machine -- silently.
+& $signtool.FullName verify /pa "$signed"
+if ($LASTEXITCODE -ne 0) { throw "signtool verify failed on $signed -- the signature did not actually apply, do not ship this file" }
 
 # Reinstall.
 $pkgLike = ($idName -split '\.')[-1] + '*'          # e.g. AgentCommandEngine*

@@ -2,11 +2,12 @@ import { create } from 'zustand'
 
 const useStore = create((set, get) => ({
   // ── Active view ────────────────────────────────────────────────────────────
-  // Default is 'tokens' (TICKET-0022) -- the live usage dashboard is
-  // project-independent and useful the instant the app opens, unlike
-  // 'agents' which needs a project selected first.
-  activeView: 'tokens', // 'agents' | 'processes' | 'tokens' | 'settings' | 'editor'
-  setActiveView: (view) => set({ activeView: view }),
+  // Restore the last view; new installs start with project work.
+  activeView: (() => { try { return localStorage.getItem('ace:view') || 'agents' } catch (_) { return 'agents' } })(),
+  setActiveView: (view) => {
+    try { localStorage.setItem('ace:view', view) } catch (_) {}
+    set({ activeView: view })
+  },
 
   // ── Projects ───────────────────────────────────────────────────────────────
   projects: [],
@@ -21,7 +22,7 @@ const useStore = create((set, get) => ({
   // equivalent for tabs). AgentView.jsx now renders every agent across
   // every visited project, hiding (not unmounting) any that don't belong
   // to the active project.
-  setActiveProject: (project) => set({ activeProject: project, openFiles: [], activeFilePath: null }),
+  setActiveProject: (project) => set(s => s.activeProject?.id === project?.id ? s : { activeProject: project, openFiles: [], activeFilePath: null }),
 
   // ── File explorer / editor (TICKET-0021) ──────────────────────────────────
   // [{ path, name, content, originalContent, dirty }]
@@ -48,6 +49,19 @@ const useStore = create((set, get) => ({
     }),
 
   setActiveFile: (filePath) => set({ activeFilePath: filePath }),
+  reconcileFiles: (oldPath, newPath) => set(s => {
+    const affected = value => value === oldPath || value?.startsWith(oldPath + '/') || value?.startsWith(oldPath + '\\')
+    const openFiles = s.openFiles.flatMap(file => {
+      if (!affected(file.path)) return [file]
+      if (!newPath) return []
+      const renamed = newPath + file.path.slice(oldPath.length)
+      return [{ ...file, path: renamed, name: renamed.split(/[\\/]/).pop() }]
+    })
+    const activeFilePath = affected(s.activeFilePath)
+      ? newPath ? newPath + s.activeFilePath.slice(oldPath.length) : openFiles.at(-1)?.path || null
+      : s.activeFilePath
+    return { openFiles, activeFilePath }
+  }),
 
   updateFileContent: (filePath, content) =>
     set((s) => ({
@@ -56,10 +70,10 @@ const useStore = create((set, get) => ({
       ),
     })),
 
-  markFileSaved: (filePath) =>
+  markFileSaved: (filePath, savedContent) =>
     set((s) => ({
       openFiles: s.openFiles.map((f) =>
-        f.path === filePath ? { ...f, originalContent: f.content, dirty: false } : f
+        f.path === filePath ? { ...f, originalContent: savedContent, dirty: f.content !== savedContent } : f
       ),
     })),
 
@@ -91,6 +105,8 @@ const useStore = create((set, get) => ({
 
   // ── Token stats ────────────────────────────────────────────────────────────
   tokenStats: [],
+  settingsRevision: 0,
+  settingsUpdated: () => set(s => ({ settingsRevision: s.settingsRevision + 1 })),
   setTokenStats: (stats) => set({ tokenStats: stats }),
 
   // ── Live token usage (TICKET-0022, shared TICKET-0023) ────────────────────
@@ -104,16 +120,16 @@ const useStore = create((set, get) => ({
     codex: { plan: null, quota: [], models: [], projects: [], totalTokens: 0, totalCost: 0 },
   },
   liveUsageLoading: true,
+  liveUsageError: null,
   loadLiveUsage: async () => {
-    const usage = await window.ace.getLiveTokenUsage()
-    set({ liveUsage: usage, liveUsageLoading: false })
+    try {
+      const usage = await window.ace.getLiveTokenUsage()
+      set({ liveUsage: usage, liveUsageError: null })
+    } catch (error) { set({ liveUsageError: error.message }) }
+    finally { set({ liveUsageLoading: false }) }
   },
 
   // ── Settings ───────────────────────────────────────────────────────────────
-  defaultModel: 'claude-sonnet-5',
-  defaultProvider: 'claude',
-  setDefaultModel: (m) => set({ defaultModel: m }),
-  setDefaultProvider: (p) => set({ defaultProvider: p }),
 
   // ── Notification sounds ────────────────────────────────────────────────────
   soundsMuted: false,

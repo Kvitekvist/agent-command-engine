@@ -77,7 +77,7 @@ new navigate message.
 
 - `npm test` from `src/` — new `menu.test.js` plus existing suite
 - `npm run build`
-- Manual: launch, check menu bar has About (shows 0.1.30) and Settings
+- Manual: launch, check menu bar has About (shows src/package.json's version) and Settings
   (`Ctrl+,` opens the Settings view); confirm Reload/DevTools are absent in a
   packaged build and present in `npm run dev`
 

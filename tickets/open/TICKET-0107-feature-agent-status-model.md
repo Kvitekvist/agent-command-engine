@@ -63,6 +63,10 @@ the guesswork without touching any project or global Claude config.
 
 ## Implementation Plan
 
+### Audit continuation, 2026-09-14
+
+Extend activity/lifecycle labels and group history using owner agent/session IDs without changing Claude hook implementation.
+
 * [x] `DBService`: rename `label` → `agent_name` + add `session_title` on
       `agents` and `agent_sessions`; migrate existing rows (rebuild `agents`
       to drop the NOT NULL `label` and `title_set`); replace
@@ -99,6 +103,8 @@ the guesswork without touching any project or global Claude config.
 
 ## Files Modified
 
+Audit continuation: handlers.js, AgentView.jsx, TokenView.jsx, ProcessesView.jsx; hidden renderer history fixtures.
+
 - `src/main/services/DBService.js`
 - `src/main/services/HookService.js` (new)
 - `src/main/services/ScreenshotService.js`
@@ -121,6 +127,10 @@ the guesswork without touching any project or global Claude config.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Check actual Claude working/input hooks, Codex Active, initial Starting and normal/error exit; same-name history grouping is now automated.
+
+Audit continuation: Same-name agents and same-title sessions retain two rows; reverse-order project history responses pass hidden Electron smoke. Still check actual Claude working/input and Codex active/normal/error exit states.
+
 - `npm test` from `src/` — 65 pass, 1 skipped (Windows POSIX bit)
 - `npm run build` from `src/` — renderer + main build clean
 - Manual (pending): launch a Claude agent, confirm the badge tracks
@@ -131,6 +141,9 @@ the guesswork without touching any project or global Claude config.
 ---
 
 ## Result
+
+Audit changes are implemented in the working tree, not yet committed or released.
+Remaining verification is recorded in docs/agents/audit-2026-09-13.md.
 
 Implemented and committed; awaiting the live manual check above.
 

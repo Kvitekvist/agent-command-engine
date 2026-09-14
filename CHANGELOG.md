@@ -2,6 +2,48 @@
 
 ## [Unreleased]
 
+## [0.1.34] - 2026-09-14
+
+### Added
+
+- Git is bundled and used automatically when it isn't on PATH, and a fresh
+  Setup screen now installs Node.js and the Claude/Codex CLIs without
+  requiring a click per prerequisite, recovering on its own after a Node.js
+  install instead of asking for a manual restart (TICKET-0148).
+
+### Changed
+
+- Skills and attribution now ship in the application, replacing the mandatory
+  download gate introduced in 0.1.33 (TICKET-0132, supersedes that part of TICKET-0127).
+- Electron, electron-builder and Vite upgraded; Monaco loads only when the editor
+  opens, with local workers. PR and release CI build and test the checked-out
+  commit. Release delivery requires signing and checksums (TICKET-0085, 0086, 0091).
+- Main owns terminal lifecycles, reconnects and cleanup. Project actions have one
+  toolbar; agent cards can be focused without restarting their PTYs (TICKET-0079, 0121).
+- Projects are searchable and pinnable; Notes and Skills have project navigation.
+  Settings refresh launch choices immediately and empty model selections disable
+  launch. Unsupported provider actions are labelled unavailable (TICKET-0128, 0143).
+
+### Fixed
+
+- Windows terminals recognize Claude npm packages containing bin/claude.exe,
+  while retaining support for older cli.js installations (TICKET-0147).
+- Setup no longer misreports Node.js as failed to install when winget finds
+  it already present with nothing to upgrade (TICKET-0148).
+
+- Real-path project confinement rejects escaping symlinks and Windows junctions.
+  Native folder selection authorizes registration; IPC is tied to the ACE main
+  window, external links accept only HTTP(S), and launch arguments are shell-aware
+  (TICKET-0085).
+- Shared Notes mutations preserve other writers, use stable IDs and an escaped
+  text format, and retain drafts on failed saves (TICKET-0134).
+- Editor saves track the written snapshot and reject external-file conflicts.
+  Project reselection, rename/trash and window close preserve dirty buffers or
+  require an explicit discard decision (TICKET-0135 through TICKET-0141).
+- Usage responses cannot overwrite a different project's history; reports group
+  by stable IDs. Dialogs trap and restore focus, and secondary text is lighter
+  (TICKET-0107, 0140, 0142, 0144).
+
 ## [0.1.33] - 2026-09-05
 
 ### Added

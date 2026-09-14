@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import useStore from '../store/useStore'
 import ContextMenu from './ContextMenu'
+import Modal from './Modal'
 
 // TICKET-0033/0037: kept in sync by hand with FileService's
 // RUNNABLE_EXTENSIONS (main process) -- this copy only gates which files
@@ -30,9 +31,12 @@ function FileTreeNode({ root, entry, depth, onOpenFile, onContextMenu }) {
     }
     if (!expanded && children === null) {
       setLoading(true)
-      const result = await window.ace.fs.readDir(root, entry.path)
-      setLoading(false)
-      setChildren(result.ok ? result.entries : [])
+      try {
+        const result = await window.ace.fs.readDir(root, entry.path)
+        if (!result.ok) throw new Error(result.error)
+        setChildren(result.entries)
+      } catch (error) { window.alert(error.message); return }
+      finally { setLoading(false) }
     }
     setExpanded((v) => !v)
   }
@@ -47,18 +51,28 @@ function FileTreeNode({ root, entry, depth, onOpenFile, onContextMenu }) {
 
   return (
     <div>
-      <div
+      <button
+        type="button"
+        aria-expanded={entry.isDirectory ? expanded : undefined}
         onClick={toggle}
         onContextMenu={handleContextMenu}
+        onKeyDown={event => {
+          if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+            event.preventDefault()
+            event.stopPropagation()
+            const rect = event.currentTarget.getBoundingClientRect()
+            onContextMenu({ clientX: rect.left, clientY: rect.bottom }, entry)
+          }
+        }}
         title={entry.name}
-        className="flex items-center gap-1 py-0.5 rounded text-xs text-gray-300 hover:bg-border cursor-pointer truncate"
+        className="w-full text-left flex items-center gap-1 py-1 rounded text-sm text-gray-300 hover:bg-border cursor-pointer truncate"
         style={{ paddingLeft: depth * 14 + 8 }}
       >
         <span className="w-3 shrink-0 text-muted">{entry.isDirectory ? (expanded ? '▾' : '▸') : ''}</span>
         <span className="shrink-0">{entry.isDirectory ? '📁' : '📄'}</span>
         <span className="truncate">{entry.name}</span>
         {loading && <span className="text-muted shrink-0">…</span>}
-      </div>
+      </button>
       {expanded && children?.map((child) => (
         <FileTreeNode key={child.path} root={root} entry={child} depth={depth + 1} onOpenFile={onOpenFile} onContextMenu={onContextMenu} />
       ))}
@@ -70,7 +84,7 @@ function FileTreeNode({ root, entry, depth, onOpenFile, onContextMenu }) {
 function RenamePrompt({ entry, onCancel, onSubmit }) {
   const [value, setValue] = useState(entry.name)
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-32" onMouseDown={onCancel}>
+    <Modal title="Rename" onClose={onCancel}>
       <form
         onMouseDown={(e) => e.stopPropagation()}
         onSubmit={(e) => { e.preventDefault(); onSubmit(value.trim()) }}
@@ -78,6 +92,7 @@ function RenamePrompt({ entry, onCancel, onSubmit }) {
       >
         <label className="mb-1 block text-xs text-muted">Rename “{entry.name}” to</label>
         <input
+          aria-label="New name"
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -89,7 +104,7 @@ function RenamePrompt({ entry, onCancel, onSubmit }) {
           <button type="submit" className="rounded bg-accent px-2 py-1 text-white hover:bg-accent-hover">Rename</button>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }
 
@@ -109,7 +124,7 @@ export default function FileTree({ project }) {
       if (cancelled) return
       if (result.ok) setRootEntries(result.entries)
       else setError(result.error)
-    })
+    }).catch(error => { if (!cancelled) setError(error.message) })
     return () => { cancelled = true }
   }, [project.path, refreshVersion])
 
@@ -145,18 +160,26 @@ export default function FileTree({ project }) {
     if (!newName || newName === entry.name) return
     const result = await window.ace.fs.rename(project.path, entry.path, newName)
     if (!result.ok) window.alert(`Couldn't rename "${entry.name}": ${result.error}`)
-    else setRefreshVersion((version) => version + 1)
+    else {
+      useStore.getState().reconcileFiles(entry.path, result.path)
+      setRefreshVersion((version) => version + 1)
+    }
   }
 
   async function handleDelete(entry) {
+    const dirty = useStore.getState().openFiles.filter(f => f.dirty && (f.path === entry.path || f.path.startsWith(entry.path + '/') || f.path.startsWith(entry.path + '\\')))
+    if (dirty.length && !window.confirm(`Discard unsaved changes to ${dirty.map(f => f.name).join(', ')} and trash their files?`)) return
     const kind = entry.isDirectory ? 'folder' : 'file'
     if (!window.confirm(`Move ${kind} "${entry.name}" to the Recycle Bin?`)) return
     const result = await window.ace.fs.trash(project.path, entry.path)
     if (!result.ok) window.alert(`Couldn't delete "${entry.name}": ${result.error}`)
-    else setRefreshVersion((version) => version + 1)
+    else {
+      useStore.getState().reconcileFiles(entry.path, null)
+      setRefreshVersion((version) => version + 1)
+    }
   }
 
-  if (error) return <div className="px-3 py-2 text-xs text-danger">Couldn't load files: {error}</div>
+  if (error) return <div role="alert" className="px-3 py-2 text-xs text-danger">Couldn't load files: {error}<button onClick={() => setRefreshVersion(n => n + 1)}>Retry</button></div>
   if (!rootEntries) return <div className="px-3 py-2 text-xs text-muted">Loading…</div>
   if (rootEntries.length === 0) return <div className="px-3 py-2 text-xs text-muted">Empty folder.</div>
 

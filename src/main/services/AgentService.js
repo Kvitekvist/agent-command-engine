@@ -124,7 +124,7 @@ class AgentService extends EventEmitter {
   start({ projectId, projectPath, label, provider = 'claude', model = 'claude-sonnet-5', permissionMode = 'safe' }) {
     const agentId = randomUUID()
     const meta = { agentId, projectId, projectPath, label, provider, model, permissionMode, startedAt: Date.now() }
-    this.agents.set(agentId, { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: null })
+    this.agents.set(agentId, { meta, sessionId: null })
     this._emit('agent:status', { agentId, status: 'running', meta })
     return { agentId, meta }
   }
@@ -142,7 +142,7 @@ class AgentService extends EventEmitter {
   restore({ agentId, projectId, projectPath, label, provider, model, permissionMode, sessionId }) {
     if (this.agents.has(agentId)) return { agentId, meta: this.agents.get(agentId).meta }
     const meta = { agentId, projectId, projectPath, label, provider, model, permissionMode, startedAt: Date.now() }
-    this.agents.set(agentId, { activeProc: null, meta, inputTokens: 0, outputTokens: 0, sessionId: sessionId || null })
+    this.agents.set(agentId, { meta, sessionId: sessionId || null })
     return { agentId, meta }
   }
 
@@ -207,26 +207,17 @@ class AgentService extends EventEmitter {
   stop(agentId) {
     const agent = this.agents.get(agentId)
     if (!agent) return
-    if (agent.activeProc) {
-      try { agent.activeProc.kill('SIGTERM') } catch (_) {}
-    }
-    const tokenSummary = { input: agent.inputTokens, output: agent.outputTokens }
-    this._emit('agent:status', { agentId, status: 'stopped', tokenSummary })
+    this._emit('agent:status', { agentId, status: 'stopped' })
     this.agents.delete(agentId)
   }
 
   killAll() {
-    for (const [, agent] of this.agents) {
-      try { if (agent.activeProc) agent.activeProc.kill('SIGTERM') } catch (_) {}
-    }
     this.agents.clear()
   }
 
   getRunning() {
     return [...this.agents.entries()].map(([id, a]) => ({
       agentId: id, ...a.meta,
-      pid: a.activeProc?.pid || null,
-      inputTokens: a.inputTokens, outputTokens: a.outputTokens,
     }))
   }
 }

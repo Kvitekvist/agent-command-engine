@@ -3,6 +3,9 @@ import useStore from '../store/useStore'
 import ModelSelector from '../components/ModelSelector'
 import AgentTerminal from '../components/AgentTerminal'
 import UsageBar from '../components/UsageBar'
+import ProjectSkillsPanel from '../components/ProjectSkillsPanel'
+import { runOperation } from '../utils/runOperation'
+import OperationFeedback from '../components/OperationFeedback'
 import { generateAgentName } from '../utils/agentNames'
 import {
   DEFAULT_MODEL_BY_PROVIDER,
@@ -27,6 +30,22 @@ export default function AgentView() {
   const [model, setModel]         = useState(DEFAULT_MODEL_BY_PROVIDER.claude)
   const [launching, setLaunching] = useState(false)
   const [launchError, setLaunchError] = useState(null)
+  const [showSkills, setShowSkills] = useState(false)
+  const [buildCapability, setBuildCapability] = useState(null)
+  const [projectOperation, setProjectOperation] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    setBuildCapability(null)
+    setProjectOperation(null)
+    if (activeProject) window.ace.project.capabilities(activeProject.path)
+      .then(result => { if (!cancelled) setBuildCapability(result) })
+      .catch(error => { if (!cancelled) setBuildCapability({ ok: false, error: error.message }) })
+    return () => { cancelled = true }
+  }, [activeProject?.id])
+  const [focusedAgent, setFocusedAgent] = useState(null)
+  useEffect(() => { setFocusedAgent(null) }, [activeProject?.id])
+  const settingsRevision = useStore(s => s.settingsRevision)
+  const launchSelectionEdited = useRef(false)
   const [enabledClaude, setEnabledClaude] = useState(() => new Set(getAllModelIds('claude')))
   const [enabledCodex, setEnabledCodex]   = useState(() => new Set(getAllModelIds('codex')))
 
@@ -44,9 +63,7 @@ export default function AgentView() {
     })
   }
 
-  // TICKET-0084: Settings are real launch defaults, not Settings-page-only
-  // state. Auto has no selected model; main resolves a compatible one after
-  // LoadBalancer chooses the provider.
+  // Saved defaults refresh untouched launch selections; manual choices stay selected.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -60,18 +77,23 @@ export default function AgentView() {
       if (cancelled) return
       if (ec) setEnabledClaude(new Set(JSON.parse(ec)))
       if (ex) setEnabledCodex(new Set(JSON.parse(ex)))
-      const nextProvider = ['auto', 'claude', 'codex'].includes(savedProvider)
+      let nextProvider = ['claude', 'codex'].includes(savedProvider)
         ? savedProvider
         : 'claude'
-      setProvider(nextProvider)
-      if (nextProvider !== 'auto') {
-        setModel(savedModel || DEFAULT_MODEL_BY_PROVIDER[nextProvider])
+      if (savedProvider === 'auto') {
+        const available = await window.ace.prereqs.check()
+        if (cancelled) return
+        if (!available.claude?.present && available.codex?.present) nextProvider = 'codex'
+      }
+      if (!launchSelectionEdited.current) setProvider(nextProvider)
+      if (!launchSelectionEdited.current) {
+        setModel(savedProvider === 'auto' ? DEFAULT_MODEL_BY_PROVIDER[nextProvider] : savedModel || DEFAULT_MODEL_BY_PROVIDER[nextProvider])
       }
     })().catch((error) => {
       if (!cancelled) setLaunchError(`Couldn't load launch defaults: ${error.message}`)
     })
     return () => { cancelled = true }
-  }, [])
+  }, [settingsRevision])
 
   // `agents` (the store) holds every agent across every project visited
   // this session, not just the active one -- see the render below and
@@ -86,11 +108,11 @@ export default function AgentView() {
     setLaunchError(null)
     try {
       // Pre-check CLI availability before spawning terminal
-      const resolvedProvider = provider === 'auto' ? 'claude' : provider
+      const resolvedProvider = provider
       const prereqs = await window.ace.prereqs.check()
       if (!prereqs[resolvedProvider]?.present) {
         const cliName = resolvedProvider === 'claude' ? 'Claude Code CLI' : 'Codex CLI'
-        setLaunchError(`${cliName} is not installed. Go to Settings → General → Prerequisites to install it.`)
+        setLaunchError(prereqs[resolvedProvider]?.error || `${cliName} is not installed. Go to Settings → General → Prerequisites to install it.`)
         setLaunching(false)
         return
       }
@@ -99,7 +121,7 @@ export default function AgentView() {
         projectPath: activeProject.path,
         label,
         provider,
-        model: provider === 'auto' ? null : model,
+        model,
         permissionMode: PERMISSION_MODE,
       })
       const existingNames = useStore.getState().agents
@@ -172,16 +194,18 @@ export default function AgentView() {
         // re-capture from the next line.
         useStore.getState().addAgent({ ...meta, agentId: row.id, status: row.status, hasSessionTitle: !!row.session_title })
       }
-    })()
+    })().catch(error => { if (!cancelled) setLaunchError(`Could not restore agents: ${error.message}`) })
     return () => { cancelled = true }
   }, [activeProject?.id])
 
-  const modelGroups = provider === 'auto'
-    ? null
-    : filterGroupsByEnabled(
+  const modelGroups = filterGroupsByEnabled(
         MODEL_GROUPS_BY_PROVIDER[provider],
         provider === 'claude' ? enabledClaude : enabledCodex
       )
+  useEffect(() => {
+    const options = (modelGroups || []).flatMap(group => group.options)
+    if (!options.some(option => option.id === model)) setModel(options[0]?.id || '')
+  }, [provider, enabledClaude, enabledCodex, model])
 
   // One return, one tree shape, always. Removing a project (active or not)
   // used to flip AgentView between two structurally different `return`s;
@@ -198,23 +222,22 @@ export default function AgentView() {
       {activeProject && (
         <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-panel shrink-0 flex-wrap">
           <div className="text-sm font-semibold text-gray-100 mr-2 truncate max-w-xs">{activeProject.name}</div>
+          <button className="btn-ghost text-xs" disabled={projectOperation?.type === 'loading'} onClick={() => runOperation(projectOperation, setProjectOperation, 'Pull', () => window.ace.git.pull(activeProject.path))}>⬇️ Pull</button>
+          {buildCapability?.ok && <button className="btn-ghost text-xs" disabled={projectOperation?.type === 'loading'} onClick={() => runOperation(projectOperation, setProjectOperation, 'Build', () => window.ace.project.build(activeProject.path))}>🔨 Build</button>}
           <input className="input w-32 text-xs" placeholder="Agent label" value={label} onChange={(e) => setLabel(e.target.value)} />
           <div className="flex rounded overflow-hidden border border-border text-xs">
-            {['auto','claude','codex'].map((p) => (
+            {['claude','codex'].map((p) => (
               <button key={p} onClick={() => {
+                launchSelectionEdited.current = true
                 setProvider(p)
-                if (p !== 'auto') setModel(DEFAULT_MODEL_BY_PROVIDER[p])
+                setModel(DEFAULT_MODEL_BY_PROVIDER[p])
               }}
                 className={'px-3 py-1.5 transition-colors ' + (provider === p ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
-                {p === 'auto' ? '⚖ Auto' : p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
+                {p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
               </button>
             ))}
           </div>
-          {modelGroups ? (
-            <ModelSelector groups={modelGroups} value={model} onChange={setModel} className="w-72" />
-          ) : (
-            <span className="text-xs text-muted">Provider and compatible model selected at launch</span>
-          )}
+          <ModelSelector groups={modelGroups} value={model} onChange={value => { launchSelectionEdited.current = true; setModel(value) }} className="w-72" />
           <button
             onClick={toggleSoundsMuted}
             className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
@@ -223,13 +246,20 @@ export default function AgentView() {
             {soundsMuted ? '🔇' : '🔔'}
           </button>
           <button
+            onClick={() => setShowSkills(true)}
+            className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
+            title="See the skills available to agents in this project"
+          >
+            🧩 Skills
+          </button>
+          <button
             onClick={toggleGridCols}
             className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
             title={gridCols === '1' ? 'Single wide column — click for two columns' : 'Two columns — click for one wide column'}
           >
             {gridCols === '1' ? '▤' : '▦'}
           </button>
-          <button onClick={launchAgent} disabled={launching} className="btn-primary ml-auto text-xs">
+          <button onClick={launchAgent} disabled={launching || !model} title={!model ? 'Enable a model in Settings before launching' : 'Launch selected model'} className="btn-primary ml-auto text-xs">
             {launching ? 'Launching…' : '+ New Agent'}
           </button>
         </div>
@@ -240,6 +270,7 @@ export default function AgentView() {
           {launchError}
         </div>
       )}
+      {activeProject && <OperationFeedback label="Project" status={projectOperation} />}
 
       <div className="flex-1 overflow-auto p-4">
         {!activeProject && (
@@ -254,15 +285,22 @@ export default function AgentView() {
             <div className="text-sm">No agents running. Launch one above.</div>
           </div>
         )}
-        <div className={'grid gap-4 ' + (gridCols === '1' ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-2') + (projectAgents.length === 0 ? ' hidden' : '')}>
+        <div className={'grid gap-4 ' + (gridCols === '1' || focusedAgent ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-2') + (projectAgents.length === 0 ? ' hidden' : '')}>
           {agents.map((agent) => (
-            <div key={agent.agentId} className={agent.projectId === activeProject?.id ? '' : 'hidden'}>
+            <div key={agent.agentId} className={agent.projectId === activeProject?.id && (!focusedAgent || focusedAgent === agent.agentId) ? 'min-w-0' : 'hidden'}>
               <AgentPane agent={agent}
+                focused={focusedAgent === agent.agentId}
+                onFocus={() => setFocusedAgent(focusedAgent === agent.agentId ? null : agent.agentId)}
                 onClose={() => closeAgent(agent.agentId)} />
             </div>
           ))}
         </div>
       </div>
+      <ProjectSkillsPanel
+        isOpen={showSkills}
+        onClose={() => setShowSkills(false)}
+        projectPath={activeProject?.path}
+      />
     </div>
   )
 }
@@ -275,7 +313,7 @@ export default function AgentView() {
 // here anymore; Claude Code's own interactive UI (visible inside the
 // terminal) handles all of that.
 
-function AgentPane({ agent, onClose }) {
+function AgentPane({ agent, onClose, focused, onFocus }) {
   const [screenshotMsg, setScreenshotMsg] = useState(null)
   const screenshotMsgTimer = useRef(null)
 
@@ -323,32 +361,37 @@ function AgentPane({ agent, onClose }) {
   // sit at Waiting while running -- they never had a finer signal anyway.
   let statusBadge
   if (agent.status !== 'running') {
-    statusBadge = <span className="badge-gray">○ Stopped</span>
+    statusBadge = <span className="badge-gray">○ {agent.status === 'lost' ? 'Lost' : agent.status === 'exited' ? 'Done' : agent.status === 'error' ? 'Failed' : 'Stopped'}</span>
   } else if (terminalStatus === 'error') {
     statusBadge = <span className="badge-red">● Error</span>
   } else if (terminalStatus === 'exited') {
     statusBadge = <span className="badge-blue">● Done</span>
+  } else if (terminalStatus === 'connecting') {
+    statusBadge = <span className="badge-blue">● Starting</span>
   } else if (activity === 'working') {
     statusBadge = <span className="badge-green">● Running</span>
-  } else {
+  } else if (activity === 'waiting') {
     statusBadge = <span className="badge-yellow">● Waiting</span>
+  } else {
+    statusBadge = <span className="badge-blue" title="Detailed activity is unavailable">● Active</span>
   }
 
   return (
-    <div className="card flex flex-col" style={{ height: '32rem' }}>
+    <div className="card flex flex-col min-w-0" style={{ height: focused ? 'calc(100vh - 13rem)' : '32rem', minHeight: '20rem' }}>
       <div className="flex items-center justify-between mb-2 shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
           {statusBadge}
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent/20 text-accent border border-accent/30">
             {agent.agentName}
           </span>
           {agent.sessionTitle && (
-            <span className="text-sm font-medium text-gray-200">{agent.sessionTitle}</span>
+            <span title={agent.sessionTitle} className="text-sm font-medium text-gray-200 truncate min-w-0">{agent.sessionTitle}</span>
           )}
-          <span className="text-xs text-muted">{agent.model}</span>
+          <span title={agent.model} className="text-xs text-muted truncate min-w-0">{agent.model}</span>
           <span className="text-xs" title={'Permission: ' + agent.permissionMode}>{permIcon}</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={onFocus} className="btn-ghost text-xs">{focused ? 'Restore' : 'Focus'}</button>
           {agent.status === 'running' && (
             <button onClick={captureScreenshot} disabled={capturing}
               title="Drag-select a screen region to save into this project's assets/images/screenshots/ folder"

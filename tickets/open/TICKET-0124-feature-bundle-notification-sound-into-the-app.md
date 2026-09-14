@@ -68,6 +68,8 @@ with no per-project setup.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Verify the bundled completion sound in the packaged macOS application and confirm mute works without a project-local hook.
+
 `npm test` — 72 pass / 1 skip. WASAPI loopback capture of the **generated**
 `userData/ace-hooks/play-notification.js` + copied `notification.wav`: audio
 at -9.9 dBFS; with `.muted` present, silence. macOS `afplay` path not run

@@ -61,6 +61,8 @@ The `build/` directory should contain only generated outputs, not source assets.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Verify packaged Windows executable and macOS app icons. Regenerating artwork is not required just to inspect them.
+
 ```bash
 # Verify scripts still work
 python scripts/create-icons.py

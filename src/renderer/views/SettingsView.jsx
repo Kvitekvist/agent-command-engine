@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import ModelSelector from '../components/ModelSelector'
 import PrereqChecklist from '../components/PrereqChecklist'
+import useStore from '../store/useStore'
 import {
   DEFAULT_MODEL_BY_PROVIDER,
   MODEL_GROUPS_BY_PROVIDER,
@@ -18,6 +19,9 @@ export default function SettingsView() {
   const [defaultModel, setDefaultModel] = useState(DEFAULT_MODEL_BY_PROVIDER.claude)
   const [provider, setProvider] = useState('claude')
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [retry, setRetry] = useState(0)
 
   const [enabledClaude, setEnabledClaude] = useState(new Set())
   const [enabledCodex, setEnabledCodex] = useState(new Set())
@@ -30,30 +34,48 @@ export default function SettingsView() {
         window.ace.getSetting('enabled_models_claude'),
         window.ace.getSetting('enabled_models_codex'),
       ])
-      if (m) setDefaultModel(m)
-      if (p) setProvider(p)
+      let nextProvider = p === 'codex' ? 'codex' : 'claude'
+      if (p === 'auto') {
+        const available = await window.ace.prereqs.check()
+        if (!available.claude?.present && available.codex?.present) nextProvider = 'codex'
+      }
+      setProvider(nextProvider)
+      setDefaultModel(p === 'auto' ? DEFAULT_MODEL_BY_PROVIDER[nextProvider] : m || DEFAULT_MODEL_BY_PROVIDER[nextProvider])
       setEnabledClaude(ec ? new Set(JSON.parse(ec)) : new Set(getAllModelIds('claude')))
       setEnabledCodex(ex ? new Set(JSON.parse(ex)) : new Set(getAllModelIds('codex')))
     }
-    load()
-  }, [])
+    load().then(() => setError('')).catch(error => setError(error.message))
+  }, [retry])
 
   async function saveSettings() {
+    setSaving(true)
+    setError('')
+    try {
     await Promise.all([
       window.ace.setSetting('default_model', defaultModel),
       window.ace.setSetting('default_provider', provider),
     ])
+    useStore.getState().settingsUpdated()
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+    } catch (error) { setError(error.message) }
+    finally { setSaving(false) }
   }
 
   async function saveEnabledModels() {
+    setSaving(true)
+    setError('')
+    try {
     await Promise.all([
       window.ace.setSetting('enabled_models_claude', JSON.stringify([...enabledClaude])),
       window.ace.setSetting('enabled_models_codex', JSON.stringify([...enabledCodex])),
+      window.ace.setSetting('default_model', defaultModel),
     ])
+    useStore.getState().settingsUpdated()
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+    } catch (error) { setError(error.message) }
+    finally { setSaving(false) }
   }
 
   function toggleModel(providerKey, modelId) {
@@ -70,9 +92,14 @@ export default function SettingsView() {
     MODEL_GROUPS_BY_PROVIDER[provider],
     provider === 'claude' ? enabledClaude : enabledCodex
   )
+  useEffect(() => {
+    const options = filteredGroups.flatMap(group => group.options)
+    if (!options.some(option => option.id === defaultModel)) setDefaultModel(options[0]?.id || '')
+  }, [provider, enabledClaude, enabledCodex, defaultModel])
 
   return (
     <div className="p-6 max-w-2xl space-y-6 overflow-y-auto h-full">
+      {error && <p role="alert" className="text-danger">{error}<button onClick={() => setRetry(n => n + 1)}>Reload settings</button></p>}
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-border">
         {TABS.map(t => (
@@ -111,7 +138,7 @@ export default function SettingsView() {
             <div>
               <label className="text-xs text-muted block mb-1">Default Provider</label>
               <div className="flex gap-2">
-                {['auto', 'claude', 'codex'].map(p => (
+                {['claude', 'codex'].map(p => (
                   <button
                     key={p}
                     onClick={() => {
@@ -143,7 +170,7 @@ export default function SettingsView() {
               </div>
             )}
 
-            <button onClick={saveSettings} className="btn-primary text-xs">
+            <button disabled={saving} onClick={saveSettings} className="btn-primary text-xs">
               {saved ? '✓ Saved' : 'Save Settings'}
             </button>
           </section>
@@ -191,7 +218,7 @@ export default function SettingsView() {
             )
           })}
 
-          <button onClick={saveEnabledModels} className="btn-primary text-xs">
+          <button disabled={saving} onClick={saveEnabledModels} className="btn-primary text-xs">
             {saved ? '✓ Saved' : 'Save Model Visibility'}
           </button>
         </section>

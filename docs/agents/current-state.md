@@ -10,10 +10,18 @@
 - Runtime: Electron main process, React renderer, preload IPC bridge, and a
   forked PTY host.
 - Test/build: from `src/`, `npm test` and `npm run build`. CI runs
-  `bash scripts/run_tests.sh`. Last full run: 73 passed, 1 skipped
+  `bash scripts/run_tests.sh`. Last full run: 97 passed, 1 skipped
   (POSIX-only), 0 failed.
 
 ## Active priorities
+
+The 2026-09-13 audit follow-up is tracked in
+[the audit ledger](audit-2026-09-13.md). Working-tree changes harden project/IPC
+boundaries, make main own PTY lifecycles, protect Notes/editor writes and expand
+CI. They are not a signed release. Windows package/runtime checks passed;
+macOS and provider-specific manual checks remain. The user deferred signing
+(TICKET-0091) for this pass. TICKET-0132 supersedes
+TICKET-0127's download gate; bundled skills need no mandatory network download.
 
 1. The 2026-08-30 backlog triage closed the pure-decomposition refactors
    (TICKET-0074, 0076, 0077, 0078, 0080) and two speculative features

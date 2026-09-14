@@ -12,6 +12,9 @@ Thumbs.db
 !/releases/.gitkeep
 /src/dist/
 
+# Fetched at package time by scripts/fetch-mingit.js
+/src/resources/mingit/
+
 # Python
 __pycache__/
 *.pyc

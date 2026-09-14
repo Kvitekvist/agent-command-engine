@@ -59,6 +59,8 @@ or the package won't bind to the product.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Inspect the current MSIX identity against the reserved Store identity and verify installation; do not expect the historical artifact version.
+
 `node scripts/build-msix.js`; unzip the `.appx` and confirm
 `<Identity Name="JensR.AgentCommandEngine" … />`.
 

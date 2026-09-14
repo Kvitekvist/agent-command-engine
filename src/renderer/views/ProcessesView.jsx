@@ -8,10 +8,11 @@ function formatMem(kb) {
 
 export default function ProcessesView() {
   const [data, setData] = useState(null)
+  const [error, setError] = useState('')
   const timer = useRef(null)
 
   function refresh() {
-    window.ace.getProcesses().then(setData).catch(() => {})
+    window.ace.getProcesses().then(data => { setData(data); setError('') }).catch(error => setError(error.message))
   }
 
   useEffect(() => {
@@ -20,10 +21,11 @@ export default function ProcessesView() {
     return () => clearInterval(timer.current)
   }, [])
 
-  if (!data) return <div className="p-6 text-muted text-sm">Loading…</div>
+  if (!data) return <div className="p-6 text-muted text-sm">{error || 'Loading...'}{error && <button onClick={refresh}>Retry</button>}</div>
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
+      {error && <p role="alert" className="text-danger">{error}. Displayed data is stale. <button onClick={refresh}>Retry</button></p>}
       <h2 className="text-lg font-semibold text-gray-100">Processes</h2>
 
       {/* ACE internal */}
@@ -63,8 +65,6 @@ export default function ProcessesView() {
                 <th className="py-1.5 pr-4">Agent</th>
                 <th className="py-1.5 pr-4">Model</th>
                 <th className="py-1.5 pr-4 text-right">PID</th>
-                <th className="py-1.5 pr-4 text-right">In tokens</th>
-                <th className="py-1.5 text-right">Out tokens</th>
               </tr>
             </thead>
             <tbody>
@@ -73,8 +73,6 @@ export default function ProcessesView() {
                   <td className="py-1.5 pr-4 text-gray-200">{a.label}</td>
                   <td className="py-1.5 pr-4 text-muted">{a.model}</td>
                   <td className="py-1.5 pr-4 text-right text-muted tabular-nums">{a.pid ?? '—'}</td>
-                  <td className="py-1.5 pr-4 text-right text-muted tabular-nums">{a.inputTokens?.toLocaleString() ?? '—'}</td>
-                  <td className="py-1.5 text-right text-muted tabular-nums">{a.outputTokens?.toLocaleString() ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

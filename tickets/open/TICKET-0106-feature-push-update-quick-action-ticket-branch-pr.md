@@ -76,6 +76,8 @@ into one commit. TICKET-0103 already anticipated this workflow by name.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Use a disposable Claude project and explicitly approve any remote PR action; the provider-supported Push update action must create only the intended ticket/branch/commit/PR.
+
 - `npm test` from `src/`
 - `npm run build` from `src/`
 - Manual: launch an agent, make a small edit in its project, click

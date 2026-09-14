@@ -5,6 +5,11 @@ const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleSer
 const { ScreenshotService } = require('../services/ScreenshotService')
 const { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir } = require('../services/ProjectScaffoldService')
 const { ensureHookFiles, watchAgentStatus } = require('../services/HookService')
+const fs = require('node:fs')
+const { resolveWithinRoot } = require('../services/ProjectPath')
+const { notesOperation } = require('../services/NotesService')
+const { detectBuild } = require('../services/ProjectBuild')
+const { providerExecutable } = require('../services/ProviderExecutable')
 
 // TICKET-0075: the renderer hands main a filesystem path for every fs / git /
 // build / screenshot / agent-spawn call. Trusting that string verbatim lets a
@@ -23,50 +28,133 @@ function resolveProjectRoot(DB, candidate) {
   const wanted = norm(candidate)
   const match = DB.getProjects().find((p) => norm(p.path) === wanted)
   if (!match) throw new Error('Path is not a registered project')
-  return match.path
+  return fs.realpathSync.native(match.path)
 }
 
 // TICKET-0075: these channels exist only for ACE's own top-level renderer.
 // The screenshot overlay uses its own per-window IPC; nothing else should
 // reach them. Reject any other sender (an injected iframe/webview) before a
 // handler runs.
-function assertAppSender(event) {
+function assertAppSender(event, window) {
   const frame = event.senderFrame
-  if (!frame || frame.parent) throw new Error('IPC sender not permitted')
+  if (!window || window.isDestroyed() || event.sender !== window.webContents ||
+      !frame || frame.parent || frame !== window.webContents.mainFrame) {
+    throw new Error('IPC sender not permitted')
+  }
 }
 
 function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
+  const getWindow = typeof mainWindow === 'function' ? mainWindow : () => mainWindow
+  const selectedFolders = new Set()
+  const canonicalDirectory = (folder) => {
+    if (typeof folder !== 'string' || !folder.trim()) throw new Error('A directory is required')
+    const canonical = fs.realpathSync.native(folder)
+    if (!fs.statSync(canonical).isDirectory()) throw new Error('Select a directory')
+    return canonical
+  }
+  const projectFor = (id, candidate) => {
+    const project = DB.getProjects().find(p => p.id === id)
+    if (!project || resolveProjectRoot(DB, candidate) !== fs.realpathSync.native(project.path)) {
+      throw new Error('Project ID and path do not match')
+    }
+    return project
+  }
   // Keep window ref updated
-  AgentSvc.setWindow(mainWindow)
-  if (TerminalSvc) TerminalSvc.setWindow(mainWindow)
+  AgentSvc.setWindow(getWindow())
+  if (TerminalSvc) TerminalSvc.setWindow(getWindow())
+  TerminalSvc.onState = (agentId, status) => {
+    DB.updateAgentStatus(agentId, status)
+    if (status !== 'running') getWindow()?.webContents.send('agent:status', { agentId, status })
+  }
 
   // Claude-hook-driven agent status badge (see HookService). Agents launch
   // with `--settings <this file>`; the hooks write per-session status files
   // this watcher forwards to the renderer as 'agent:status'.
   const { dir: hookDir, settingsPath: hookSettingsPath } = ensureHookFiles()
-  watchAgentStatus(DB, () => mainWindow)
+  watchAgentStatus(DB, getWindow)
 
   // TICKET-0075: every invoke/send below goes through a sender check.
   const handle = (channel, fn) =>
     ipcMain.handle(channel, (event, ...args) => {
-      assertAppSender(event)
+      assertAppSender(event, getWindow())
       return fn(event, ...args)
     })
   const on = (channel, fn) =>
     ipcMain.on(channel, (event, ...args) => {
-      try { assertAppSender(event) } catch (_) { return }
+      try { assertAppSender(event, getWindow()) } catch (_) { return }
       fn(event, ...args)
     })
 
+  // ── Shell operations ────────────────────────────────────────────────────────
+  handle('shell:openUrl', async (_, url) => {
+    try {
+      if (typeof url !== 'string') throw new Error('A web URL is required')
+      const parsed = new URL(url)
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only HTTP and HTTPS links are supported')
+      await shell.openExternal(parsed.href)
+      return { ok: true }
+    } catch (error) { return { ok: false, error: error.message } }
+  })
+
+  handle('shell:showInFolder', (_, filePath) => {
+    const path = require('path')
+    const fs = require('fs')
+    if (!fs.existsSync(filePath)) return { success: false, error: 'Path does not exist' }
+    shell.showItemInFolder(path.resolve(filePath))
+    return { success: true }
+  })
+
+  handle('clipboard:saveImage', (_, { projectPath }) => {
+    const { clipboard } = require('electron')
+    const path = require('path')
+    const fs = require('fs')
+
+    const resolvedPath = resolveProjectRoot(DB, projectPath)
+    const image = clipboard.readImage()
+    if (image.isEmpty()) return { success: false, error: 'No image in clipboard' }
+
+    const folder = resolveWithinRoot(resolvedPath, 'assets/images/screenshots')
+    fs.mkdirSync(folder, { recursive: true })
+
+    const iso = new Date().toISOString().replace(/[:.]/g, '-')
+    const filename = `pasted-${iso}.png`
+    const filePath = resolveWithinRoot(resolvedPath, path.join(folder, filename))
+    fs.writeFileSync(filePath, image.toPNG(), { flag: 'wx' })
+
+    const relativePath = path.relative(resolvedPath, filePath).split(path.sep).join('/')
+    return { success: true, path: filePath, relativePath }
+  })
+
   // ── Projects ────────────────────────────────────────────────────────────────
-  handle('projects:getAll', () => DB.getProjects())
+  handle('projects:getAll', () => DB.getProjects().map(project => ({
+    ...project,
+    activeSessions: [...TerminalSvc.sessions.values()].filter(session =>
+      ['running', 'connecting'].includes(session.state) && AgentSvc.agents.get(session.agentId)?.meta.projectId === project.id
+    ).length,
+  })))
+  handle('notes:read', async (_, root) => {
+    try { return await notesOperation(resolveProjectRoot(DB, root)) }
+    catch (error) { return { ok: false, error: error.message } }
+  })
+  handle('notes:mutate', async (_, root, mutation) => {
+    try { return await notesOperation(resolveProjectRoot(DB, root), mutation) }
+    catch (error) { return { ok: false, error: error.message } }
+  })
 
   handle('projects:add', (_, name, folderPath) => {
-    DB.addProject(name, folderPath)
+    const canonical = canonicalDirectory(folderPath)
+    if (!selectedFolders.delete(canonical)) throw new Error('Select this folder in the native dialog first')
+    if (typeof name !== 'string' || !name.trim()) throw new Error('A project name is required')
+    DB.addProject(name.trim(), canonical)
     return DB.getProjects()
   })
 
   handle('projects:remove', (_, id) => {
+    for (const agent of DB.getAgentsByProject(id)) {
+      TerminalSvc.stopAgent(agent.id)
+      AgentSvc.stop(agent.id)
+      DB.deleteAgent(agent.id)
+    }
     DB.removeProject(id)
     return DB.getProjects()
   })
@@ -81,7 +169,9 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     if (defaultPath) opts.defaultPath = defaultPath
     const result = await dialog.showOpenDialog(opts)
     if (result.canceled) return null
-    return result.filePaths[0]
+    const canonical = canonicalDirectory(result.filePaths[0])
+    selectedFolders.add(canonical)
+    return canonical
   })
 
   // TICKET-0057: "parent folder of ACE" for the New-project folder picker's
@@ -108,8 +198,13 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     }
   })
 
-  handle('projects:createNew', (_, { name, parentDir } = {}) =>
-    createProjectFromScaffold({ name, parentDir, scaffoldDir: getScaffoldDir() }))
+  handle('projects:createNew', async (_, { name, parentDir } = {}) => {
+    const canonical = canonicalDirectory(parentDir)
+    if (!selectedFolders.delete(canonical)) throw new Error('Select the parent folder in the native dialog first')
+    const result = await createProjectFromScaffold({ name, parentDir: canonical, scaffoldDir: getScaffoldDir() })
+    if (result.path) selectedFolders.add(canonicalDirectory(result.path))
+    return result
+  })
 
   // One-shot: createProjectFromScaffold drops `.claude/.needs-setup` into every
   // project made through `✨ New`. The first Claude AgentTerminal opened for
@@ -126,7 +221,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     } catch (_) {
       return { needsSetup: false }
     }
-    const marker = path.join(root, '.claude', '.needs-setup')
+    const marker = resolveWithinRoot(root, '.claude/.needs-setup')
     try {
       fs.unlinkSync(marker)
       return { needsSetup: true }
@@ -137,12 +232,19 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
 
   // ── Agents ──────────────────────────────────────────────────────────────────
   handle('agents:getByProject', (_, projectId) => {
-    return DB.getAgentsByProject(projectId)
+    return DB.getAgentsByProject(projectId).map(row => {
+      if (row.status === 'running' && !TerminalSvc.sessions.has(row.id)) {
+        DB.updateAgentStatus(row.id, 'lost')
+        return { ...row, status: 'lost' }
+      }
+      return row
+    })
   })
 
   handle('agents:start', (_, { projectId, projectPath, label, provider, model, permissionMode }) => {
+    projectFor(projectId, projectPath)
     const projectRoot = resolveProjectRoot(DB, projectPath)
-    const launch = resolveLaunchPolicy({ provider, model, projectId })
+    const launch = resolveLaunchPolicy({ provider, model, projectId }, { getSetting: key => DB.getSetting(key) })
     const resolvedMode = permissionMode || 'safe'
     const result = AgentSvc.start({
       projectId, projectPath: projectRoot, label,
@@ -166,15 +268,18 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Re-register agents persisted from a previous run (app reopened, or the
   // project was reselected) so their history + session can be resumed.
   handle('agents:restore', (_, { id, project_id, projectPath, agent_name, session_title, provider, model, permission_mode, session_id }) => {
+    projectFor(project_id, projectPath)
+    const stored = DB.getAgentsByProject(project_id).find(a => a.id === id)
+    if (!stored) throw new Error('Unknown agent')
     return AgentSvc.restore({
       agentId: id,
       projectId: project_id,
       projectPath: resolveProjectRoot(DB, projectPath),
-      label: agent_name,
-      provider,
-      model,
-      permissionMode: permission_mode,
-      sessionId: session_id,
+      label: stored.agent_name,
+      provider: stored.provider,
+      model: stored.model,
+      permissionMode: stored.permission_mode,
+      sessionId: stored.session_id,
     })
   })
 
@@ -197,6 +302,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
 
   handle('agents:stop', (_, agentId) => {
+    TerminalSvc.stopAgent(agentId)
     AgentSvc.stop(agentId)
     DB.updateAgentStatus(agentId, 'stopped')
     return { ok: true }
@@ -205,6 +311,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Removes an agent from the interface entirely. Stops the process first
   // (no-op if it's already stopped) so a delete can never orphan a subprocess.
   handle('agents:delete', (_, agentId) => {
+    TerminalSvc.stopAgent(agentId)
     AgentSvc.stop(agentId)
     DB.deleteAgent(agentId)
     return { ok: true }
@@ -215,7 +322,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Usage tab's "By Agent" breakdown can join tokscale's per-session rows
   // back to real agent names. Fire-and-forget from the renderer's side.
   handle('agents:recordSession', (_, payload) => {
-    DB.recordAgentSession(payload || {})
+    const owner = DB.getAgentsByProject(payload?.project_id).find(a => a.id === payload?.agent_id)
+    if (!owner || typeof payload.session_id !== 'string' || !/^[a-zA-Z0-9-]{1,128}$/.test(payload.session_id)) throw new Error('Invalid agent session')
+    const previous = DB.getAgentIdBySession(payload.session_id)
+    if (previous && previous !== owner.id) throw new Error('Session belongs to another agent')
+    DB.recordAgentSession({ session_id: payload.session_id, agent_id: owner.id, project_id: owner.project_id, agent_name: owner.agent_name, session_title: owner.session_title })
     return { ok: true }
   })
 
@@ -230,6 +341,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Sessions with no recorded owner (Codex, or anything from before this shipped)
   // are labelled "Untracked". Returns a normalized, flat row list; the renderer aggregates.
   handle('tokens:getProjectHistory', async (_, { projectId, projectPath } = {}) => {
+    projectFor(projectId, projectPath)
     let projectRoot
     try { projectRoot = resolveProjectRoot(DB, projectPath) }
     catch (_) { return { rows: [] } }
@@ -255,6 +367,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
         cost: Number(r.total_cost) || 0,
         prompts: Number(r.message_count) || 0,
         agentName: owner?.agent_name || 'Untracked',
+        agentId: owner?.agent_id || null,
         sessionTitle: owner?.session_title || null,
       }
     })
@@ -334,7 +447,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     try {
       return { ok: true, entries: FileService.readDir(resolveProjectRoot(DB, root), dirPath) }
     } catch (error) {
-      return { ok: false, error: error.message }
+      return { ok: false, error: error.message, code: error.code }
     }
   })
 
@@ -346,9 +459,9 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     }
   })
 
-  handle('fs:writeFile', (_, { root, filePath, content }) => {
+  handle('fs:writeFile', (_, { root, filePath, content, expectedContent }) => {
     try {
-      return FileService.writeFile(resolveProjectRoot(DB, root), filePath, content)
+      return FileService.writeFile(resolveProjectRoot(DB, root), filePath, content, expectedContent)
     } catch (error) {
       return { ok: false, error: error.message }
     }
@@ -448,6 +561,10 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // one settled result the renderer turns into a success/fail line; the last few
   // lines of npm output are surfaced on failure so the error is actionable
   // without opening a terminal.
+  handle('project:capabilities', (_, projectPath) => {
+    try { return detectBuild(resolveProjectRoot(DB, projectPath)) }
+    catch (error) { return { ok: false, error: error.message } }
+  })
   handle('project:build', async (_, { projectPath } = {}) => {
     let projectRoot
     try { projectRoot = resolveProjectRoot(DB, projectPath) }
@@ -457,18 +574,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     const path = require('path')
 
     // src/ first (ACE's own layout), then the project root.
-    let cwd = null
-    let script = null
-    for (const dir of [path.join(projectRoot, 'src'), projectRoot]) {
-      const pkgPath = path.join(dir, 'package.json')
-      if (!fs.existsSync(pkgPath)) continue
-      try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
-        if (pkg.scripts?.build) { cwd = dir; script = 'build'; break }
-        if (pkg.scripts?.package) { cwd = dir; script = 'package'; break }
-      } catch (_) { /* unreadable/invalid package.json -- keep looking */ }
-    }
-    if (!cwd) return { ok: false, error: 'No build/package script found in package.json' }
+    let capability
+    try { capability = detectBuild(projectRoot) }
+    catch (error) { return { ok: false, error: error.message } }
+    if (!capability.ok) return capability
+    const { cwd, script } = capability
 
     try {
       const result = await new Promise((resolve) => {
@@ -528,13 +638,24 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     await Promise.all(checks.map(({ name, cmd, args, shell: useShell }) => new Promise((resolve) => {
       let stdout = ''
       const proc = spawn(cmd, args, { windowsHide: true, shell: useShell })
-      proc.stdout?.on('data', (d) => { stdout += d })
-      proc.on('error', () => { results[name] = { present: false, version: null }; resolve() })
-      proc.on('close', (code) => {
-        results[name] = code === 0
-          ? { present: true, version: stdout.trim().replace(/^v/, '') }
-          : { present: false, version: null }
+      let settled = false
+      const finish = result => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        results[name] = result
         resolve()
+      }
+      const timer = setTimeout(() => {
+        finish({ present: false, version: null, error: 'Check timed out. Retry when the CLI responds.' })
+        try { proc.kill() } catch (_) {}
+      }, 8000)
+      proc.stdout?.on('data', (d) => { stdout += d })
+      proc.on('error', error => finish({ present: false, version: null, error: error.message }))
+      proc.on('close', (code) => {
+        finish(code === 0
+          ? { present: true, version: stdout.trim().replace(/^v/, '') }
+          : { present: false, version: null, error: code === null ? 'Check timed out' : 'Command unavailable' })
       })
     })))
     return results
@@ -567,12 +688,71 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     })
   })
 
+  // One-click Node.js install on Windows via winget (preinstalled on Win 11),
+  // so a clean PC isn't stuck: the CLI install buttons need npm and stay
+  // disabled until it exists. Other platforms keep linking out
+  // (openNodeDownload) -- brew/apt/nvm isn't ours to choose. winget runs its
+  // own UAC prompt; a machine-scope Node install needs it. PATH in this
+  // already-running process won't pick up the new npm, so the result asks for
+  // an ACE restart rather than trying to chain the CLI installs here.
+  handle('prereqs:installNode', async () => {
+    if (process.platform !== 'win32') return { ok: false, error: 'unsupported' }
+    const { spawn } = require('child_process')
+    return new Promise((resolve) => {
+      const proc = spawn('winget', [
+        'install', '--id', 'OpenJS.NodeJS.LTS', '--silent',
+        '--accept-package-agreements', '--accept-source-agreements',
+      ], { windowsHide: true, shell: true })
+      let out = ''
+      proc.stdout?.on('data', (d) => { out += d })
+      proc.stderr?.on('data', (d) => { out += d })
+      proc.on('error', (err) => resolve({ ok: false, error: err.message }))
+      proc.on('close', (code) => {
+        // winget exits non-zero here when Node is already installed and there's
+        // no newer version to upgrade to -- a benign outcome (Node IS present),
+        // not a failure. Misreading it as an error left prereqs:check's stale
+        // PATH unexplained and skipped the relaunch that would actually detect it.
+        const alreadyInstalled = /No available upgrade found|already installed/i.test(out)
+        if (code === 0 || alreadyInstalled) {
+          resolve({
+            ok: true,
+            message: alreadyInstalled
+              ? 'Node.js is already installed — restart ACE to pick it up on PATH'
+              : 'Node.js installed — restart ACE, then install the CLIs',
+          })
+          return
+        }
+        const tail = out.split('\n').filter(Boolean).slice(-5).join('\n')
+        const hint = /No package found|not recognized|APPINSTALLER/i.test(out)
+          ? '\n\nwinget (App Installer) may be missing — install Node from https://nodejs.org instead.'
+          : ''
+        resolve({ ok: false, error: (tail || `winget exited with code ${code}`) + hint })
+      })
+    })
+  })
+
+  // SetupView only: after a Node install, this process's PATH is stale (see
+  // above), so relaunch instead of asking the user to do it. Not wired into
+  // the Settings re-run path -- that can run with agent terminals already
+  // open, and killing those without asking would be destructive.
+  handle('prereqs:relaunch', () => {
+    app.relaunch()
+    app.exit(0)
+  })
+
   // Symmetrical opposite of prereqs:install, for testing a clean setup
   // (TICKET-0126). Removes only the packages ACE installs -- node/npm/git are
   // the user's own, ACE only ever linked out for those.
-  handle('prereqs:uninstall', async () => {
+  handle('prereqs:uninstall', async (_, name) => {
     const { spawn } = require('child_process')
-    const pkgs = Object.values(PREREQ_PACKAGES)
+    if (!PREREQ_PACKAGES[name]) return { ok: false, error: 'Select one provider to remove' }
+    const pkgs = [PREREQ_PACKAGES[name]]
+    const confirmation = await dialog.showMessageBox(getWindow(), {
+      type: 'warning', buttons: ['Cancel', 'Remove globally'], defaultId: 0, cancelId: 0,
+      message: `Remove ${pkgs[0]} from this machine?`,
+      detail: 'This also removes the CLI from external terminals and other applications. The other provider is kept.',
+    })
+    if (confirmation.response !== 1) return { ok: false, error: 'Removal cancelled' }
 
     return new Promise((resolve) => {
       const proc = spawn('npm', ['uninstall', '-g', ...pkgs], { windowsHide: true, shell: true })
@@ -607,20 +787,41 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Keystrokes/resize/dispose are fire-and-forget (ipcMain.on) -- there's no
   // meaningful single response to a keystroke. Spawn is the one call with a
   // real result (did it start, what's its id/pid), so it's the one invoke().
-  handle('terminal:spawn', (_, opts = {}) => {
+  handle('terminal:spawn', async (_, opts = {}) => {
+    const cwd = resolveProjectRoot(DB, opts.cwd)
+    const agent = AgentSvc.agents.get(opts.agentId)
+    if (!agent || fs.realpathSync.native(agent.meta.projectPath) !== cwd) throw new Error('Terminal agent and project do not match')
+    const shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash'
+    if (opts.shell && opts.shell !== shell) throw new Error('Unsupported terminal shell')
+    const dimension = (value, fallback) => {
+      if (value === undefined) return fallback
+      if (!Number.isInteger(value) || value < 1 || value > 500) throw new Error('Invalid terminal dimensions')
+      return value
+    }
+    const cols = dimension(opts.cols, 80)
+    const rows = dimension(opts.rows, 24)
+    // Reattachment must not depend on a CLI still being installed on disk.
+    if (TerminalSvc.sessions.has(opts.agentId)) return TerminalSvc.spawn({ agentId: opts.agentId })
     // Resolve through main's own project records first (TICKET-0075): the
     // renderer-supplied cwd decides where a file gets written here, so it has
     // to be a path ACE already knows about, not whatever string arrived.
     try {
-      const path = require('path')
-      const cacheDir = path.join(app.getPath('userData'), 'skills-cache')
-      ensureBundledSkills(resolveProjectRoot(DB, opts.cwd), getScaffoldDir(), cacheDir)
+      ensureBundledSkills(cwd, getScaffoldDir())
     } catch (_) {}
-    return TerminalSvc.spawn(opts)
+    const { buildLaunchCommand } = await import('../services/agentLaunch.mjs')
+    if (AgentSvc.agents.get(opts.agentId) !== agent) throw new Error('Agent stopped during startup')
+    const sessionId = agent.meta.provider === 'claude' ? require('node:crypto').randomUUID() : null
+    const launch = resolveLaunchPolicy({ provider: agent.meta.provider, model: agent.meta.model, projectId: agent.meta.projectId }, { getSetting: key => DB.getSetting(key) })
+    const command = buildLaunchCommand({ ...agent.meta, ...launch }, sessionId, hookSettingsPath, process.platform, providerExecutable(launch.provider))
+    const result = await TerminalSvc.spawn({ agentId: opts.agentId, cwd, shell, cols, rows, command })
+    if (result.success && !result.reconnected && sessionId) DB.recordAgentSession({ session_id: sessionId, agent_id: opts.agentId, project_id: agent.meta.projectId, agent_name: agent.meta.label })
+    return result
   })
   on('terminal:write', (_, { id, data } = {}) => TerminalSvc.write(id, data))
-  on('terminal:resize', (_, { id, cols, rows } = {}) => TerminalSvc.resize(id, cols, rows))
-  on('terminal:dispose', (_, { id } = {}) => TerminalSvc.dispose(id))
+  on('terminal:resize', (_, { id, cols, rows } = {}) => {
+    if ([cols, rows].every(n => Number.isInteger(n) && n > 0 && n <= 500)) TerminalSvc.resize(id, cols, rows)
+  })
+  // Renderer unmount only detaches; explicit agent stop/removal owns disposal.
   on('terminal:setAutoAnswer', (_, { id, enabled } = {}) => TerminalSvc.setAutoAnswer(id, enabled))
 
   // ── Processes panel ─────────────────────────────────────────────────────────
@@ -646,14 +847,12 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
       cpu: +(m.cpu.percentCPUUsage.toFixed(1)),
     }))
 
-    const agents = AgentSvc.getRunning().map((a) => ({
+    const agents = AgentSvc.getRunning().filter(a => TerminalSvc.sessions.get(a.agentId)?.state === 'running').map((a) => ({
       kind: 'agent',
-      pid: a.pid,
+      pid: TerminalSvc.sessions.get(a.agentId)?.pid || null,
       label: a.label,
       provider: a.provider,
       model: a.model,
-      inputTokens: a.inputTokens,
-      outputTokens: a.outputTokens,
       memoryKB: null,
       cpu: null,
     }))

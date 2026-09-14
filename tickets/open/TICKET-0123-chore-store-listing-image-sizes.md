@@ -37,6 +37,8 @@ tiles in `src/build/appx/`. Add the sizes requested for the ACE listing.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Validate current Store image dimensions and preview the listing upload; do not regenerate unchanged images as verification.
+
 Generated from `assets/icons/icon.iconset/icon_1024x1024.png` with ffmpeg
 (lanczos). Dimensions verified with `file`.
 

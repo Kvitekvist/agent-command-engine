@@ -54,6 +54,8 @@ The three quick-action commands are `/push-update` (present), `/clear`
 
 ## Testing
 
+Current outstanding check (2026-09-14): In a Claude project, invoke Actions > Calibrate and verify the installed bundled skill runs; unsupported Codex actions must remain disabled.
+
 Diffed the copy against the template source — identical. Not yet run via the
 button.
 

@@ -53,6 +53,8 @@ COM STA message pump and resolves the deadlock.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Verify completion audio from an actual detached provider hook, including muted state; a direct playback test is not a substitute.
+
 Ran `play-seatbelt.ps1` directly via PowerShell and measured elapsed time:
 - Old approach: returned instantly (no audio)
 - New approach: blocked ~3.3 seconds (full track played through)

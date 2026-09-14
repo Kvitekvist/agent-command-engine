@@ -31,6 +31,10 @@ tasks rather than more hardcoded framework detection.
 
 ## Implementation Plan
 
+### Audit continuation, 2026-09-14
+
+Share main's npm build detection with execution, falling through unrelated src manifests; put Pull/Build once in project toolbar.
+
 * [ ] Define project action configuration and safe command representation
 * [ ] Add discovery with user confirmation for common ecosystems
 * [ ] Stream output, exit state, duration, and cancellation
@@ -39,15 +43,22 @@ tasks rather than more hardcoded framework detection.
 
 ## Files Modified
 
+Audit continuation: ProjectBuild.js, handlers.js, preload.js, AgentView.jsx, AgentTerminal.jsx; audit-regressions.test.js.
+
 ---
 
 ## Testing
+
+Audit continuation: Root-only, src build, unrelated src/root fallback and missing build regressions pass. Multi-agent layout review remains; broader task-engine scope is not implemented.
 
 * [ ] Configuration/parser tests
 * [ ] Cross-platform process tests
 * [ ] Manual npm and non-npm project verification
 
 ## Result
+
+Audit changes are implemented in the working tree, not yet committed or released.
+Remaining verification is recorded in docs/agents/audit-2026-09-13.md.
 
 ---
 

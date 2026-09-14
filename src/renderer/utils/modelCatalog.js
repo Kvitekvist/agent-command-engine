@@ -58,8 +58,8 @@ export function getAllModelIds(provider) {
 }
 
 export function filterGroupsByEnabled(groups, enabledSet) {
-  if (!enabledSet || enabledSet.size === 0) return groups
-  return groups
+  if (!enabledSet) return groups || []
+  return (groups || [])
     .map(g => ({ ...g, options: g.options.filter(o => enabledSet.has(o.id)) }))
     .filter(g => g.options.length > 0)
 }

@@ -59,6 +59,8 @@ Partner Center listing.
 
 ## Testing
 
+Current outstanding check (2026-09-14): Verify the current scripts/install-msix-local.ps1 flow on a clean Windows test machine and review privacy statements against the shipped release.
+
 `scripts/sign-and-install-msix.ps1` not yet run. `docs/privacy-policy.md`
 reflects the app's actual behaviour: a repo-wide search of `src/main` found no
 outbound HTTP/socket calls; all writes go to `userData` or a registered

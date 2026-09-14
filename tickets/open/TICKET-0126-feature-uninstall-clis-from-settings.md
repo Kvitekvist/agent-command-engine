@@ -41,6 +41,10 @@ the UI; the reverse should be too.
 
 ## Implementation Plan
 
+### Audit continuation, 2026-09-14
+
+Move global removal to Advanced/Maintenance; per-provider native confirmation names package and external-terminal impact.
+
 * [x] `prereqs:uninstall` IPC handler — `npm uninstall -g` for every entry in
   `PREREQ_PACKAGES`, same result shape as `prereqs:install`.
 * [x] Expose `window.ace.prereqs.uninstall()` in `preload.js`.
@@ -52,6 +56,8 @@ the UI; the reverse should be too.
 
 ## Files Modified
 
+Audit continuation: PrereqChecklist.jsx, SettingsView.jsx, handlers.js, preload.js.
+
 - `src/main/ipc/handlers.js`
 - `src/main/preload.js`
 - `src/renderer/components/PrereqChecklist.jsx`
@@ -62,13 +68,19 @@ the UI; the reverse should be too.
 
 ## Testing
 
+Audit continuation: No global CLI was removed. Remaining check: cancel without running npm, then remove one provider in a disposable environment and verify the other remains.
+
 - `npm test` (from `src/`) — existing suite.
-- Manual: Settings → Prerequisites → Uninstall CLIs, confirm both packages go
-  away (`npm ls -g`), rows flip to "Not found", install buttons return.
+- Current manual check: Settings > Advanced/Maintenance, choose one provider,
+  cancel and verify no command runs. In a disposable environment, confirm removal
+  names only that package, its row changes to Not found, and the other CLI remains.
 
 ---
 
 ## Result
+
+Audit changes are implemented in the working tree, not yet committed or released.
+Remaining verification is recorded in docs/agents/audit-2026-09-13.md.
 
 ---
 
@@ -80,4 +92,3 @@ Node.js / npm / git are deliberately not touched — ACE never installed them
 ---
 
 ## Closed
-

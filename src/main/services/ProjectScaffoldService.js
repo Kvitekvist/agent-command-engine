@@ -1,12 +1,13 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const { resolveWithinRoot } = require('./ProjectPath')
 
 // Where the bundled project scaffold lives: inside app.asar in development,
 // shipped as an unpacked application resource in a packaged build (see
-// electron-builder's extraResources). Project creation, the bundled-skill
-// install and the skill-download gate all read from it, so none depends on
-// an external, machine-specific template folder. `electron` is required
-// lazily so this module stays importable from plain node tests.
+// electron-builder's extraResources). Project creation and the bundled-skill
+// install both read from it, so neither depends on an external,
+// machine-specific template folder. `electron` is required lazily so this
+// module stays importable from plain node tests.
 function getScaffoldDir() {
   const { app } = require('electron')
   return app.isPackaged
@@ -72,51 +73,40 @@ async function createProjectFromScaffold({ name, parentDir, scaffoldDir } = {}) 
 // exists if that skill's directory is in the project. ACE's own repo carries
 // them; a project ACE scaffolded gets them from the template; but a project
 // ACE never created had none, so buttons and docs referring to them silently
-// did nothing. Copy in every skill the project is missing, from the first
-// source that has it: the downloaded skills cache (SkillSetupService) first,
-// then the bundled template. Runs on every terminal spawn so projects that
-// predate a given skill pick it up too. Best-effort -- an unwritable project
-// just keeps what it has. A project's own copy of a skill is never
-// overwritten (a user may have adapted the workflow).
-function ensureBundledSkills(projectPath, scaffoldDir, cacheDir) {
+// did nothing. Copy in every skill the project is missing from the bundled
+// template (including the third-party ones -- their licenses (see
+// .claude/THIRD_PARTY_SKILLS.md) permit shipping them directly, no runtime
+// download needed). Runs on every terminal spawn so projects that predate a
+// given skill pick it up too. Best-effort -- an unwritable project just keeps
+// what it has. A project's own copy of a skill is never overwritten (a user
+// may have adapted the workflow).
+function ensureBundledSkills(projectPath, scaffoldDir) {
   const installed = []
   try {
-    const sources = []
-    if (cacheDir && fs.existsSync(cacheDir)) sources.push({ dir: cacheDir, flat: true })
-    if (scaffoldDir) {
-      const s = path.join(scaffoldDir, '.claude', 'skills')
-      if (fs.existsSync(s)) sources.push({ dir: s, flat: true })
-    }
-    if (!sources.length) return installed
+    if (!scaffoldDir) return installed
+    const src = path.join(scaffoldDir, '.claude', 'skills')
+    if (!fs.existsSync(src)) return installed
 
-    const names = new Set()
-    for (const { dir } of sources) {
-      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (e.isDirectory() && fs.existsSync(path.join(dir, e.name, 'SKILL.md'))) names.add(e.name)
-      }
-    }
-
-    for (const name of names) {
-      const dest = path.join(projectPath, '.claude', 'skills', name)
+    for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+      if (!e.isDirectory()) continue
+      const from = path.join(src, e.name)
+      if (!fs.existsSync(path.join(from, 'SKILL.md'))) continue
+      const dest = resolveWithinRoot(projectPath, path.join('.claude', 'skills', e.name))
       if (fs.existsSync(path.join(dest, 'SKILL.md'))) continue
-      const from = sources
-        .map((s) => path.join(s.dir, name))
-        .find((p) => fs.existsSync(path.join(p, 'SKILL.md')))
-      if (!from) continue
+      // Never merge a bundle into an existing tree containing unknown links.
+      if (fs.existsSync(dest)) continue
       fs.mkdirSync(path.dirname(dest), { recursive: true })
       fs.cpSync(from, dest, { recursive: true })
-      installed.push(name)
+      installed.push(e.name)
     }
 
     // Carry the third-party attribution list into the project so the credit
     // travels with the skills it covers.
-    if (cacheDir) {
-      const credit = path.join(cacheDir, '..', 'THIRD_PARTY_SKILLS.md')
-      const creditDest = path.join(projectPath, '.claude', 'THIRD_PARTY_SKILLS.md')
-      if (fs.existsSync(credit) && !fs.existsSync(creditDest)) {
-        fs.mkdirSync(path.dirname(creditDest), { recursive: true })
-        fs.copyFileSync(credit, creditDest)
-      }
+    const credit = path.join(scaffoldDir, '.claude', 'THIRD_PARTY_SKILLS.md')
+    const creditDest = resolveWithinRoot(projectPath, '.claude/THIRD_PARTY_SKILLS.md')
+    if (fs.existsSync(credit) && !fs.existsSync(creditDest)) {
+      fs.mkdirSync(path.dirname(creditDest), { recursive: true })
+      fs.copyFileSync(credit, creditDest)
     }
   } catch (_) {}
   return installed

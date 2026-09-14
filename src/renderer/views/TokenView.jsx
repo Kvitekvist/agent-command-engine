@@ -5,6 +5,7 @@ import {
   Legend, ResponsiveContainer,
 } from 'recharts'
 import useStore from '../store/useStore'
+import { useRef } from 'react'
 import UsageCard from '../components/UsageCard'
 import claudeIcon from '../assets/icons/claude.svg?raw'
 import codexIcon from '../assets/icons/codex.svg?raw'
@@ -20,6 +21,9 @@ export default function TokenView() {
   // tokscale subprocess call on its own timer.
   const { activeProject, tokenStats, setTokenStats, liveUsage, liveUsageLoading, loadLiveUsage } = useStore()
   const [loading, setLoading] = useState(false)
+  const liveUsageError = useStore(s => s.liveUsageError)
+  const requestId = useRef(0)
+  const [error, setError] = useState('')
   const [view, setView]       = useState('daily') // 'daily' | 'model' | 'agent' | 'session'
 
   // TICKET-0044: "History (this project)" now reads real per-session usage
@@ -28,14 +32,19 @@ export default function TokenView() {
   // removed in TICKET-0083).
   // `tokenStats` holds the normalized row list the main process returns.
   async function load() {
-    if (!activeProject) { setTokenStats([]); return }
+    const request = ++requestId.current
+    setTokenStats([])
+    setError('')
+    if (!activeProject) { setLoading(false); return }
     setLoading(true)
-    const { rows } = await window.ace.getProjectHistory(activeProject.id, activeProject.path)
-    setTokenStats(rows || [])
-    setLoading(false)
+    try {
+      const { rows } = await window.ace.getProjectHistory(activeProject.id, activeProject.path)
+      if (request === requestId.current && useStore.getState().activeProject?.id === activeProject.id) setTokenStats(rows || [])
+    } catch (error) { if (request === requestId.current) setError(error.message) }
+    finally { if (request === requestId.current) setLoading(false) }
   }
 
-  useEffect(() => { load() }, [activeProject])
+  useEffect(() => { load(); return () => { ++requestId.current } }, [activeProject])
 
   // Aggregate by day
   const byDay = Object.values(
@@ -68,8 +77,8 @@ export default function TokenView() {
   // at launch resolve to their agent's name; everything else is "Untracked".
   const byAgent = Object.values(
     tokenStats.reduce((acc, row) => {
-      const name = row.agentName || 'Untracked'
-      if (!acc[name]) acc[name] = { agent: name, input: 0, output: 0, cost: 0, prompts: 0 }
+      const name = row.agentId || 'untracked'
+      if (!acc[name]) acc[name] = { id: name, agent: (row.agentName || 'Untracked') + (row.agentId ? ` (${row.agentId.slice(0, 8)})` : ''), input: 0, output: 0, cost: 0, prompts: 0 }
       acc[name].input   += row.input   || 0
       acc[name].output  += row.output  || 0
       acc[name].cost    += row.cost    || 0
@@ -82,8 +91,8 @@ export default function TokenView() {
   // untitled and untracked sessions appear as "Untitled".
   const bySession = Object.values(
     tokenStats.reduce((acc, row) => {
-      const title = row.sessionTitle || 'Untitled'
-      if (!acc[title]) acc[title] = { session: title, input: 0, output: 0, cost: 0, prompts: 0 }
+      const title = row.client + ':' + row.sessionId
+      if (!acc[title]) acc[title] = { session: (row.sessionTitle || 'Untitled') + ' (' + row.sessionId + ')', input: 0, output: 0, cost: 0, prompts: 0 }
       acc[title].input   += row.input   || 0
       acc[title].output  += row.output  || 0
       acc[title].cost    += row.cost    || 0
@@ -101,6 +110,8 @@ export default function TokenView() {
 
   return (
     <div className="p-5 space-y-6 overflow-y-auto h-full">
+      {liveUsageError && <p role="alert" className="text-danger">Live usage could not refresh: {liveUsageError}. Last results may be stale.</p>}
+      {error && <p role="alert" className="text-danger">{error} <button onClick={load}>Retry history</button></p>}
       {/* Live usage (TICKET-0022) -- real subscription quota + today's
           usage straight from tokscale, independent of ACE's own project
           selection (the old `prompts` DB table was removed in TICKET-0083). */}
@@ -165,8 +176,8 @@ export default function TokenView() {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={byDay} margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" />
-                <XAxis dataKey="day" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <XAxis dataKey="day" tick={{ fill: '#a1a7b3', fontSize: 12 }} />
+                <YAxis tick={{ fill: '#a1a7b3', fontSize: 12 }} />
                 <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2a2d3a', fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="input"  name="Input"  fill={chartColors.input}  radius={[2,2,0,0]} />
@@ -179,8 +190,8 @@ export default function TokenView() {
             <ResponsiveContainer width="100%" height={160}>
               <LineChart data={byDay} margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" />
-                <XAxis dataKey="day" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} />
+                <XAxis dataKey="day" tick={{ fill: '#a1a7b3', fontSize: 12 }} />
+                <YAxis tick={{ fill: '#a1a7b3', fontSize: 12 }} />
                 <Tooltip
                   contentStyle={{ background: '#1a1d27', border: '1px solid #2a2d3a', fontSize: 12 }}
                   formatter={(v) => [`$${v.toFixed(4)}`, 'Cost']}
@@ -198,8 +209,8 @@ export default function TokenView() {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={byModel} margin={{ top: 4, right: 20, left: 0, bottom: 0 }} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" />
-                <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                <YAxis type="category" dataKey="model" tick={{ fill: '#6b7280', fontSize: 10 }} width={160} />
+                <XAxis type="number" tick={{ fill: '#a1a7b3', fontSize: 12 }} />
+                <YAxis type="category" dataKey="model" tick={{ fill: '#a1a7b3', fontSize: 12 }} width={160} />
                 <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2a2d3a', fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="input"  name="Input"  fill={chartColors.input}  />
@@ -217,8 +228,8 @@ export default function TokenView() {
             <ResponsiveContainer width="100%" height={Math.max(200, byAgent.length * 40)}>
               <BarChart data={byAgent} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" />
-                <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                <YAxis type="category" dataKey="agent" tick={{ fill: '#6b7280', fontSize: 10 }} width={140} />
+                <XAxis type="number" tick={{ fill: '#a1a7b3', fontSize: 12 }} />
+                <YAxis type="category" dataKey="agent" tick={{ fill: '#a1a7b3', fontSize: 12 }} width={140} />
                 <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2a2d3a', fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="input"  name="Input"  fill={chartColors.input}  />
@@ -236,8 +247,8 @@ export default function TokenView() {
             <ResponsiveContainer width="100%" height={Math.max(200, bySession.length * 40)}>
               <BarChart data={bySession} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2d3a" />
-                <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                <YAxis type="category" dataKey="session" tick={{ fill: '#6b7280', fontSize: 10 }} width={180} />
+                <XAxis type="number" tick={{ fill: '#a1a7b3', fontSize: 12 }} />
+                <YAxis type="category" dataKey="session" tick={{ fill: '#a1a7b3', fontSize: 12 }} width={180} />
                 <Tooltip contentStyle={{ background: '#1a1d27', border: '1px solid #2a2d3a', fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="input"  name="Input"  fill={chartColors.input}  />
@@ -317,7 +328,7 @@ function AgentCostTable({ data }) {
         </thead>
         <tbody className="divide-y divide-border">
           {data.map((row) => (
-            <tr key={row.agent}>
+            <tr key={row.id}>
               <td className="py-1.5 text-gray-300">{row.agent}</td>
               <td className="text-right text-gray-400">{row.prompts.toLocaleString()}</td>
               <td className="text-right text-gray-400">{row.input.toLocaleString()}</td>

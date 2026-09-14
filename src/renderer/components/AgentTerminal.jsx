@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { buildLaunchCommand } from '../utils/agentLaunch'
-import { runOperation } from '../utils/runOperation'
 import { feedLineCapture, deriveTitle } from '../utils/firstLineCapture.mjs'
 import { buildImageGenerationPrompt } from '../utils/imageGenerationPrompt.mjs'
 import { readPasteText } from '../utils/terminalPaste.mjs'
 import OperationFeedback from './OperationFeedback'
+import NotesPanel from './NotesPanel'
+import Modal from './Modal'
 import useStore from '../store/useStore'
 
 // TICKET-0019 (correction): each agent card embeds its own live PTY session
@@ -23,10 +24,44 @@ const XTERM_THEME = {
   selectionBackground: '#6858e0', // accent-hover
 }
 
+// Both link sources below (WebLinksAddon for URLs, the custom provider for
+// file paths) open on a plain click, which is one accidental click away from
+// firing while a user is just selecting/dragging over terminal text -- so
+// activation requires Alt+click, and this tooltip is the only way a user
+// would otherwise know that. One shared DOM element (not React state --
+// these hover/leave callbacks fire straight from xterm, outside React) that
+// follows the cursor while any link is hovered.
+let linkTooltipEl = null
+function showLinkTooltip(event) {
+  if (!linkTooltipEl) {
+    linkTooltipEl = document.createElement('div')
+    linkTooltipEl.className = 'xterm-hover'
+    linkTooltipEl.textContent = 'Alt+Click to open'
+    Object.assign(linkTooltipEl.style, {
+      position: 'fixed',
+      zIndex: 9999,
+      pointerEvents: 'none',
+      background: '#1c1e2a',
+      color: '#f3f4f6',
+      border: '1px solid #2a2d3a',
+      borderRadius: '4px',
+      padding: '2px 6px',
+      fontSize: '11px',
+      fontFamily: 'Inter, sans-serif',
+    })
+    document.body.appendChild(linkTooltipEl)
+  }
+  linkTooltipEl.style.left = `${event.clientX + 12}px`
+  linkTooltipEl.style.top = `${event.clientY + 12}px`
+}
+function hideLinkTooltip() {
+  linkTooltipEl?.remove()
+  linkTooltipEl = null
+}
+
 // The real CLI prints its own splash (account info, "What's new", tips) on
-// every fresh launch -- and every AgentTerminal mount is a fresh launch, so
-// it reappears on every tab/project switch back to an already-running
-// agent, not just a genuine first launch. There's no CLI flag to suppress
+// every fresh launch. Reattachment replays main's output without launching
+// another CLI or masking its terminal. There's no CLI flag to suppress
 // it (checked `claude --help`/`codex --help` and the bundled CLI's own
 // known env vars). Hidden behind a loading overlay for a fixed delay, then
 // revealed. TICKET-0102: the reveal used to also wipe the screen with a
@@ -42,17 +77,8 @@ const XTERM_THEME = {
 const IS_MAC = window.ace?.platform === 'darwin'
 const LAUNCH_BANNER_HIDE_MS = IS_MAC ? 2000 : 1200
 
-// Mounted only while the agent is 'running' (see AgentView.jsx) -- unmount
-// (Stop, or Delete) disposes the PTY session in this effect's cleanup,
-// which actually ends the interactive CLI process, not just hides the
-// card. Re-mounting after Stop -> relaunch always starts a brand-new
-// session. Switching away from the project no longer unmounts this
-// component (TICKET-0030): AgentView.jsx keeps every agent's card mounted
-// across every visited project, hiding non-active ones with CSS instead of
-// unmounting them -- the same hide-not-unmount pattern TICKET-0027 already
-// used for tab switches. So an in-progress interactive session now
-// survives a project switch the same way it already survived a tab
-// switch; only Stop/Delete/app quit end it.
+// Main owns the PTY. Component cleanup only detaches listeners and xterm;
+// remount reattaches to the same session. Explicit Stop/Delete/app quit end it.
 export default function AgentTerminal({ agent, onStatusChange }) {
   const containerRef = useRef(null)
   const terminalRef = useRef(null)
@@ -77,11 +103,21 @@ export default function AgentTerminal({ agent, onStatusChange }) {
   // ptyHost.js acts on it immediately, no respawn needed, so a prompt
   // that's already on screen when this is toggled on gets answered too.
   const [autoAnswer, setAutoAnswer] = useState(false)
-  const [canBuild, setCanBuild] = useState(false)
   // Operation feedback state
-  const [pullStatus, setPullStatus] = useState(null)
-  const [buildStatus, setBuildStatus] = useState(null)
   const [pasteStatus, setPasteStatus] = useState(null) // For large paste feedback
+  const [showNotes, setShowNotes] = useState(false)
+  const [skills, setSkills] = useState({})
+  useEffect(() => {
+    if (status !== 'ready' || agent.provider !== 'claude') return
+    let cancelled = false
+    Promise.all(['push-update', 'calibrate-enhanced'].map(async name => {
+      const result = await window.ace.fs.readFile(agent.projectPath, `.claude/skills/${name}/SKILL.md`)
+      return [name, result.ok]
+    })).then(entries => { if (!cancelled) setSkills(Object.fromEntries(entries)) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [status, agent.provider, agent.projectPath])
+  const [imageBrief, setImageBrief] = useState('')
+  const [showImagePrompt, setShowImagePrompt] = useState(false)
 
   // TICKET-0052: chunked paste for large clipboard content. Pastes over
   // this threshold get split into chunks with small delays between them to
@@ -103,7 +139,6 @@ export default function AgentTerminal({ agent, onStatusChange }) {
     // Large paste - chunk it with feedback
     setPasteStatus({ type: 'loading' })
     try {
-      const chunks = Math.ceil(text.length / PASTE_CHUNK_SIZE)
       for (let i = 0; i < text.length; i += PASTE_CHUNK_SIZE) {
         const chunk = text.slice(i, i + PASTE_CHUNK_SIZE)
         window.ace.terminal.write(sessionIdRef.current, chunk)
@@ -120,40 +155,6 @@ export default function AgentTerminal({ agent, onStatusChange }) {
     }
   }
 
-  // Check if the project can build executables. fs.readFile resolves to
-  // { ok, content } (or { ok:false, reason } -- see FileService.readFile), NOT
-  // a raw string, so we read .content and check .ok. ACE keeps its own
-  // package.json under src/, so try there first, then the project root.
-  useEffect(() => {
-    async function readPkg(relPath) {
-      try {
-        const res = await window.ace.fs.readFile(agent.projectPath, relPath)
-        return res?.ok ? res.content : null
-      } catch (_) {
-        return null
-      }
-    }
-    async function checkBuildCapability() {
-      try {
-        const pkgContent = (await readPkg('src/package.json')) || (await readPkg('package.json'))
-        if (!pkgContent) {
-          setCanBuild(false)
-          return
-        }
-        const pkg = JSON.parse(pkgContent)
-        // Buildable = an Electron app with a win/mac build target and a package script.
-        setCanBuild(!!(
-          pkg.build &&
-          (pkg.build.win || pkg.build.mac) &&
-          pkg.scripts &&
-          (pkg.scripts.package || pkg.scripts.build)
-        ))
-      } catch (_) {
-        setCanBuild(false)
-      }
-    }
-    checkBuildCapability()
-  }, [agent.projectPath])
 
   useEffect(() => {
     let disposed = false
@@ -181,6 +182,58 @@ export default function AgentTerminal({ agent, onStatusChange }) {
     })
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
+
+    // Web links addon for URL detection
+    const webLinksAddon = new WebLinksAddon((e, uri) => {
+      e.preventDefault()
+      if (!e.altKey) return
+      window.ace.shell.openUrl(uri).then(result => {
+        if (!result.ok) window.alert(result.error)
+      }).catch(err => window.alert(`Failed to open URL: ${err.message}`))
+    }, {
+      hover: (event) => showLinkTooltip(event),
+      leave: () => hideLinkTooltip(),
+    })
+    term.loadAddon(webLinksAddon)
+
+    // Custom link provider for file paths
+    term.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        const line = term.buffer.active.getLine(bufferLineNumber - 1)
+        if (!line) return callback(undefined)
+
+        const lineText = line.translateToString(true)
+        const links = []
+
+        // Match file paths (absolute and relative)
+        // Windows: C:\path\to\file.ext or .\path\file.ext
+        // Unix: /path/to/file or ./path/file
+        const filePathRegex = /(?:[A-Za-z]:\\|\.?[\\/])[\w\s\-\\.\/\\]+\.[\w]+/g
+        let match
+
+        while ((match = filePathRegex.exec(lineText)) !== null) {
+          const filePath = match[0]
+          links.push({
+            range: {
+              start: { x: match.index + 1, y: bufferLineNumber },
+              end: { x: match.index + filePath.length + 1, y: bufferLineNumber }
+            },
+            text: filePath,
+            activate: (event) => {
+              if (!event.altKey) return
+              window.ace.shell.showInFolder(filePath).catch(err => {
+                console.error('Failed to show file in folder:', err)
+              })
+            },
+            hover: (event) => showLinkTooltip(event),
+            leave: () => hideLinkTooltip(),
+          })
+        }
+
+        callback(links.length > 0 ? links : undefined)
+      }
+    })
+
     term.open(containerRef.current)
     fitAddon.fit()
     // Store terminal instance for focus restoration
@@ -190,29 +243,45 @@ export default function AgentTerminal({ agent, onStatusChange }) {
 
     async function start() {
       const { cols, rows } = term
+      let pendingOutput = []
+      let lastSequence = 0
+      const acceptOutput = ({ id, chunk, sequence }) => {
+        if (id !== sessionIdRef.current || sequence <= lastSequence) return
+        term.write(chunk)
+        lastSequence = sequence
+      }
+      unsubData = window.ace.terminal.onData(message => {
+        if (message.agentId && message.agentId !== agent.agentId) return
+        if (pendingOutput) pendingOutput.push(message)
+        else acceptOutput(message)
+      })
       // Auto-answer starts off for every new session -- see the state
       // comment above. Use the 🛡️ Auto-approve pill to turn it on.
       const result = await window.ace.terminal.spawn({
+        agentId: agent.agentId,
         cols,
         rows,
         cwd: agent.projectPath,
       })
       if (disposed) return
       if (!result.success) {
+        unsubData()
         updateStatus('error')
         term.write(`\r\n\x1b[31mFailed to start terminal: ${result.error || 'unknown error'}\x1b[0m\r\n`)
         revealImmediately()
         return
       }
       sessionIdRef.current = result.id
+      term.write(result.output || '')
+      lastSequence = result.sequence || 0
+      pendingOutput.forEach(acceptOutput)
+      pendingOutput = null
+      setAutoAnswer(!!result.autoAnswer)
       updateStatus('ready')
 
-      unsubData = window.ace.terminal.onData(({ id, chunk }) => {
-        if (id === sessionIdRef.current) term.write(chunk)
-      })
       unsubExit = window.ace.terminal.onExit(({ id, exitCode }) => {
         if (id !== sessionIdRef.current) return
-        updateStatus('exited')
+          updateStatus(exitCode === 0 ? 'exited' : 'error')
         term.write(`\r\n\x1b[90m[process exited with code ${exitCode}]\x1b[0m\r\n`)
         revealImmediately()
       })
@@ -272,10 +341,28 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       // stopPropagation keeps the app-wide Copy/Paste context menu
       // (TICKET-0051, wired in App.jsx) from also firing over the terminal --
       // the terminal owns its own copy (Ctrl+C on a selection) and paste
-      // (right-click / Ctrl+V) behaviour.
-      handleContextMenu = (e) => {
+      // (right-click / Ctrl+V) behaviour. Also handles images.
+      handleContextMenu = async (e) => {
         e.preventDefault()
         e.stopPropagation()
+
+        // Try reading image first
+        try {
+          const items = await navigator.clipboard.read()
+          for (const item of items) {
+            if (item.types.some(t => t.startsWith('image/'))) {
+              const result = await window.ace.clipboard.saveImage(agent.projectPath)
+              if (result.success) {
+                window.ace.terminal.write(sessionIdRef.current, result.relativePath)
+                return
+              }
+            }
+          }
+        } catch (_) {
+          // No clipboard.read permission or no image, fall back to text
+        }
+
+        // No image, paste text
         navigator.clipboard.readText().then(pasteToTerminal).catch(err => {
           console.error('Paste failed:', err)
           term.write('\r\n\x1b[31mPaste failed\x1b[0m\r\n')
@@ -287,10 +374,36 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       // element. A bubble listener on our parent runs too late because the
       // textarea target handler has already emitted onData. Capture the event
       // first, stop it before xterm sees it, and route its payload through the
-      // single chunk-aware PTY writer.
-      handlePaste = (e) => {
+      // single chunk-aware PTY writer. Also handles pasted images.
+      handlePaste = async (e) => {
         e.preventDefault()
         e.stopImmediatePropagation()
+
+        // Check for image in clipboard first
+        const items = e.clipboardData?.items
+        if (items) {
+          for (const item of items) {
+            if (item.type.startsWith('image/')) {
+              try {
+                const result = await window.ace.clipboard.saveImage(agent.projectPath)
+                if (result.success) {
+                  // Insert the relative path into the terminal
+                  window.ace.terminal.write(sessionIdRef.current, result.relativePath)
+                  return
+                } else {
+                  term.write(`\r\n\x1b[31mFailed to save image: ${result.error}\x1b[0m\r\n`)
+                  return
+                }
+              } catch (err) {
+                console.error('Image paste failed:', err)
+                term.write('\r\n\x1b[31mImage paste failed\x1b[0m\r\n')
+                return
+              }
+            }
+          }
+        }
+
+        // No image, handle text paste
         readPasteText(e, navigator.clipboard).then(pasteToTerminal).catch(err => {
           console.error('Paste failed:', err)
           term.write('\r\n\x1b[31mPaste failed\x1b[0m\r\n')
@@ -303,27 +416,10 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       // in the Token Usage "By Agent" and "By Session" breakdowns. Codex has no
       // equivalent flag, so it keeps its own auto-generated session and stays
       // "Untracked" there.
-      const cliSessionId = agent.provider === 'codex' ? null : crypto.randomUUID()
-      if (cliSessionId) {
-        window.ace.recordAgentSession({
-          session_id: cliSessionId,
-          agent_id: agent.agentId,
-          project_id: agent.projectId,
-          agent_name: agent.agentName,
-          session_title: agent.sessionTitle,
-        })
+      if (result.reconnected) {
+        setShowBanner(false)
+        return
       }
-
-      // Boot straight into the real CLI instead of leaving an empty shell.
-      // The hook settings file drives the status badge (HookService.js); a
-      // failed lookup just means no live Running/Waiting for this agent.
-      const hookSettingsPath = cliSessionId
-        ? await window.ace.getHookSettingsPath().catch(() => null)
-        : null
-      window.ace.terminal.write(
-        sessionIdRef.current,
-        buildLaunchCommand(agent, cliSessionId, hookSettingsPath) + '\r',
-      )
 
       // See LAUNCH_BANNER_HIDE_MS above -- lift the overlay once the CLI has
       // had time to render its Welcome box. No term.clear() here: that wiped
@@ -348,7 +444,14 @@ export default function AgentTerminal({ agent, onStatusChange }) {
         }
       }, LAUNCH_BANNER_HIDE_MS)
     }
-    start()
+    start().catch(error => {
+      unsubData?.()
+      if (!disposed) {
+        updateStatus('error')
+        term.write(`\r\nFailed to start terminal: ${error.message}\r\n`)
+        revealImmediately()
+      }
+    })
 
     const resizeObserver = new ResizeObserver(() => {
       try {
@@ -368,7 +471,6 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       unsubHostRestarted?.()
       if (handleContextMenu) containerRef.current?.removeEventListener('contextmenu', handleContextMenu)
       if (handlePaste) containerRef.current?.removeEventListener('paste', handlePaste, true)
-      if (sessionIdRef.current) window.ace.terminal.dispose(sessionIdRef.current)
       term.dispose()
     }
     // Intentionally empty deps -- this effect owns one PTY session for the
@@ -391,10 +493,12 @@ export default function AgentTerminal({ agent, onStatusChange }) {
   // Image generation is provided by the signed-in Codex CLI session. This
   // does not swap the selected coding model or send an API key through ACE.
   function requestImageGeneration() {
-    const brief = window.prompt('Describe the image you want Codex to generate:')
-    const prompt = buildImageGenerationPrompt(brief)
+    const prompt = buildImageGenerationPrompt(imageBrief)
     if (!prompt || !sessionIdRef.current) return
     window.ace.terminal.write(sessionIdRef.current, `${prompt}\r`)
+    setShowImagePrompt(false)
+    setImageBrief('')
+    terminalRef.current?.focus()
   }
 
   return (
@@ -415,51 +519,34 @@ export default function AgentTerminal({ agent, onStatusChange }) {
                 : 'border-border text-muted hover:bg-border'}`}>
             {autoAnswer ? '🛡️ Auto-approve: On' : '🛡️ Auto-approve: Off'}
           </button>
+          <details className="relative">
+            <summary className="cursor-pointer text-sm px-2 py-1 rounded border border-border">Actions</summary>
+            <div className="absolute left-0 top-full z-20 bg-panel border border-border rounded p-2 flex flex-col gap-2 min-w-48">
           <button
             onClick={() => {
               if (sessionIdRef.current) {
-                window.ace.terminal.write(sessionIdRef.current, '/push-update\r')
+                if (skills['push-update']) window.ace.terminal.write(sessionIdRef.current, '/push-update\r')
               }
             }}
-            title="Run /push-update: open a ticket for the current change, branch, commit it locally, and raise a PR with a written-up title and description — one branch and PR per fix"
+            disabled={!skills['push-update']}
+            title={skills['push-update'] ? 'Prompt Claude to run /push-update' : 'Unavailable: requires the Claude project skill'}
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
             ⬆️ Push update
           </button>
           <button
-            disabled={pullStatus?.type === 'loading'}
-            onClick={() => runOperation(
-              pullStatus, setPullStatus, 'Pull',
-              () => window.ace.git.pull(agent.projectPath),
-            )}
-            title="Pull changes from remote (no AI)"
-            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            ⬇️ Pull
-          </button>
-          {canBuild && (
-            <button
-              disabled={buildStatus?.type === 'loading'}
-              onClick={() => runOperation(
-                buildStatus, setBuildStatus, 'Build',
-                () => window.ace.project.build(agent.projectPath),
-              )}
-              title="Build this project (runs its npm build script, no AI)"
-              className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              🔨 Build
-            </button>
-          )}
-          <button
             onClick={() => {
               if (sessionIdRef.current) {
-                window.ace.terminal.write(sessionIdRef.current, '/calibrate-enhanced\r')
+                if (skills['calibrate-enhanced']) window.ace.terminal.write(sessionIdRef.current, '/calibrate-enhanced\r')
               }
             }}
-            title="Run /calibrate-enhanced to review and improve session patterns"
+            disabled={!skills['calibrate-enhanced']}
+            title={skills['calibrate-enhanced'] ? 'Prompt Claude to run /calibrate-enhanced' : 'Unavailable: requires the Claude project skill'}
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
             🎯 Calibrate
           </button>
           {agent.provider === 'codex' && (
             <button
-              onClick={requestImageGeneration}
+              onClick={() => setShowImagePrompt(true)}
               title="Ask this signed-in Codex session to generate an image and save it under .ace/generated-images"
               className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
               Generate image
@@ -468,18 +555,43 @@ export default function AgentTerminal({ agent, onStatusChange }) {
           <button
             onClick={() => {
               if (sessionIdRef.current) {
-                window.ace.terminal.write(sessionIdRef.current, '/clear\r')
+                if (agent.provider === 'claude') window.ace.terminal.write(sessionIdRef.current, '/clear\r')
               }
             }}
-            title="Clear the conversation context"
+            disabled={agent.provider !== 'claude'}
+            title={agent.provider === 'claude' ? 'Clear the conversation context' : 'Use the Codex CLI menu to start a new conversation'}
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
             🧹 Clear
           </button>
+            </div>
+          </details>
+          <button
+            onClick={() => setShowNotes(true)}
+            title="Shared project notes -- write reminders/summaries here, or send one into this terminal's chat"
+            className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
+            📝 Notes
+          </button>
         </div>
       )}
+      <NotesPanel
+        isOpen={showNotes}
+        onClose={() => setShowNotes(false)}
+        projectPath={agent.projectPath}
+        onSend={(text) => {
+          if (!sessionIdRef.current || !terminalRef.current?.modes.bracketedPasteMode) {
+            throw new Error('This terminal is not accepting safe pasted input yet. Wait for the provider prompt and retry.')
+          }
+          terminalRef.current.paste(text)
+        }}
+      />
+      {showImagePrompt && <Modal title="Generate image" onClose={() => setShowImagePrompt(false)}>
+        <label className="text-sm">Image brief<textarea autoFocus className="input h-32" value={imageBrief} onChange={e => setImageBrief(e.target.value)} /></label>
+        <div className="flex justify-end gap-2 mt-3">
+          <button className="btn-ghost" onClick={() => setShowImagePrompt(false)}>Cancel</button>
+          <button className="btn-primary" disabled={!imageBrief.trim()} onClick={requestImageGeneration}>Generate</button>
+        </div>
+      </Modal>}
       {/* TICKET-0050: progress + success/fail feedback for the direct git/build actions */}
-      <OperationFeedback label="Pull" status={pullStatus} />
-      <OperationFeedback label="Build" status={buildStatus} />
       {/* TICKET-0052: feedback for large paste operations */}
       <OperationFeedback label="Pasting" status={pasteStatus} />
       <div

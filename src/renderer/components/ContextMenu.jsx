@@ -5,25 +5,39 @@ import React, { useEffect, useRef } from 'react'
 // optional `{ divider: true }` entry to separate groups.
 export default function ContextMenu({ x, y, items, onClose }) {
   const ref = useRef(null)
+  const previousFocus = useRef(document.activeElement)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
 
   useEffect(() => {
+    const buttons = () => [...ref.current.querySelectorAll('button:not(:disabled)')]
+    buttons()[0]?.focus()
     function handlePointerDown(e) {
-      if (ref.current && !ref.current.contains(e.target)) onClose()
+      if (ref.current && !ref.current.contains(e.target)) closeRef.current()
     }
     function handleKeyDown(e) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' || e.key === 'Tab') closeRef.current()
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const items = buttons()
+        const next = items.indexOf(document.activeElement) + (e.key === 'ArrowDown' ? 1 : -1)
+        items[(next + items.length) % items.length]?.focus()
+      }
     }
     document.addEventListener('mousedown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
+      if (previousFocus.current?.isConnected) previousFocus.current.focus()
     }
-  }, [onClose])
+  }, [])
 
   return (
     <div
       ref={ref}
+      role="menu"
+      aria-label="Actions"
       style={{ top: y, left: x }}
       // Right-clicking inside the menu shouldn't open another context menu on
       // top of it (App.jsx's app-wide Copy/Paste menu would otherwise fire).
@@ -36,8 +50,10 @@ export default function ContextMenu({ x, y, items, onClose }) {
         ) : (
           <button
             key={i}
+            role="menuitem"
             disabled={item.disabled}
             onClick={() => {
+              previousFocus.current?.focus()
               onClose()
               item.onClick()
             }}

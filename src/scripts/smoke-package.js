@@ -130,6 +130,21 @@ function main() {
     }
 
     console.log(`[smoke-package]   ok: ${result.stdout.trim()}`)
+    if (process.platform === 'win32' || process.platform === 'darwin') {
+      const resources = path.dirname(unpacked)
+      const archive = unpacked.slice(0, -'.unpacked'.length)
+      const executable = process.platform === 'win32'
+        ? path.join(resources, '..', 'Agent Command Engine.exe')
+        : path.join(resources, '..', 'MacOS', 'Agent Command Engine')
+      for (const [args, extraEnv] of [
+        [[path.join(__dirname, 'smoke-pty.js')], { ACE_PTY_HOST: path.join(archive, 'dist/main/ptyHost.js'), ACE_PTY_EXECUTABLE: executable }],
+        [[require.resolve('electron/cli.js'), path.join(__dirname, 'smoke-renderer.js')], { ACE_RENDERER_ENTRY: path.join(archive, 'dist/renderer/index.html') }],
+      ]) {
+        const check = spawnSync(process.execPath, args, { env: { ...process.env, ...extraEnv }, encoding: 'utf8', timeout: 45000, windowsHide: true })
+        if (check.status !== 0) fail(`packaged runtime check: ${check.error?.message || check.stderr || check.stdout}`)
+        console.log(`[smoke-package] ${check.stdout.trim()}`)
+      }
+    }
     spawned += 1
   }
 

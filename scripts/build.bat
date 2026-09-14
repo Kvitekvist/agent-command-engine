@@ -6,12 +6,6 @@ set "SRC=%ROOT%\src"
 set "RELEASES=%ROOT%\releases"
 
 echo Building Agent Command Engine...
-node "%~dp0bump-version.js"
-if errorlevel 1 (
-    echo ERROR: Version bump failed.
-    pause
-    exit /b 1
-)
 
 for /f "usebackq delims=" %%v in (`node -e "process.stdout.write(require('%SRC:\=/%/package.json').version)" 2^>nul`) do set "VERSION=%%v"
 if not defined VERSION (
