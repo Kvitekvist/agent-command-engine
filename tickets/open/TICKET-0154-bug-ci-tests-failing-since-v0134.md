@@ -82,8 +82,11 @@ anything.
 - `node scripts/smoke-pty.js`: passed.
 - `node node_modules/electron/cli.js scripts/smoke-main.js`: passed.
 - `npm run build`: renderer + main passed.
-- Pushed to `main`; `tests.yml` re-run pending confirmation across all
-  three OSes.
+- Pushed to `main` (commit 920d93a): `tests.yml` run 35337484905 passed on
+  all three OSes — windows-latest 1m10s, macos-latest 34s, ubuntu-latest
+  41s. First green run on this repo since v0.1.33 (2026-09-05); the
+  v0.1.34 push and this session's own initial push both reproduced the
+  same two failures.
 
 ---
 
