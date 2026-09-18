@@ -17,7 +17,14 @@ app.whenReady().then(async () => {
     }
     throw new Error('Missing renderer state: ' + expression)
   }
-  const click = label => evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)})?.click()`)
+  // Sidebar nav and project-list buttons render an icon glyph glued directly
+  // onto the label text (no separating space in textContent, e.g.
+  // "📊Usage (whole machine)"), so a strict equality match against the
+  // label never found them -- every nav click silently no-op'd and this
+  // script only noticed once forward progress genuinely depended on one
+  // (TICKET-0154). Substring match instead, same tolerant style the
+  // until() checks above already use.
+  const click = label => evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent.includes(${JSON.stringify(label)}))?.click()`)
   try {
     await win.loadFile(process.env.ACE_RENDERER_ENTRY || path.join(__dirname, '../dist/renderer/index.html'))
     await until(`document.body.textContent.includes('Smoke project')`)

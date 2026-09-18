@@ -35,7 +35,12 @@ test('editor conflicts preserve external bytes; successful snapshot save replace
 })
 
 test('build detection falls back from unrelated src package and supports ordinary npm', () => {
-  const root = makeTempDir('ace-build-audit-')
+  // detectBuild resolves through resolveWithinRoot, which realpaths for
+  // symlink-escape confinement (ProjectPath.js) -- on CI, os.tmpdir() can be
+  // a symlink (macOS's /var -> /private/var) or an 8.3 short name (Windows'
+  // RUNNER~1), so the raw mkdtemp path won't strictly-equal detectBuild's
+  // returned cwd unless it's realpathed the same way first.
+  const root = fs.realpathSync.native(makeTempDir('ace-build-audit-'))
   assert.equal(detectBuild(root).ok, false)
   fs.mkdirSync(path.join(root, 'src'))
   fs.writeFileSync(path.join(root, 'src/package.json'), '{}')
