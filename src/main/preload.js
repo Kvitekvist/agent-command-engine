@@ -50,16 +50,24 @@ contextBridge.exposeInMainWorld('ace', {
     ipcRenderer.on('agent:activity', l)
     return () => ipcRenderer.removeListener('agent:activity', l)
   },
+  // TICKET-0150: fired by the SessionStart hook (fresh session or `/clear`)
+  // -- { agentId, source: 'startup' | 'clear' }. AgentTerminal shows the
+  // optional first-prompt questionnaire popup in response.
+  onQuestionnaireRequest: (cb) => {
+    const l = (_e, data) => cb(data)
+    ipcRenderer.on('agent:questionnaireRequest', l)
+    return () => ipcRenderer.removeListener('agent:questionnaireRequest', l)
+  },
 
   // Shell operations
   shell: {
     openUrl: (url) => ipcRenderer.invoke('shell:openUrl', url),
-    showInFolder: (filePath) => ipcRenderer.invoke('shell:showInFolder', filePath),
+    showInFolder: (filePath, projectPath) => ipcRenderer.invoke('shell:showInFolder', { filePath, projectPath }),
   },
 
   // Clipboard operations
   clipboard: {
-    saveImage: (projectPath) => ipcRenderer.invoke('clipboard:saveImage', { projectPath }),
+    saveImage: (projectPath, imageBytes) => ipcRenderer.invoke('clipboard:saveImage', { projectPath, imageBytes }),
   },
 
   // Processes
@@ -68,6 +76,7 @@ contextBridge.exposeInMainWorld('ace', {
   // Token stats
   getProjectHistory: (projectId, projectPath) => ipcRenderer.invoke('tokens:getProjectHistory', { projectId, projectPath }),
   getLiveTokenUsage: () => ipcRenderer.invoke('tokens:getLiveUsage'),
+  getPromptScore: () => ipcRenderer.invoke('tokens:getPromptScore'),
 
   // Settings
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),

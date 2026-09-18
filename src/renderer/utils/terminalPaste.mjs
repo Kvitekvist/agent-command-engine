@@ -8,3 +8,11 @@ export async function readPasteText(event, clipboard) {
   }
   return clipboard.readText()
 }
+
+// Use the image belonging to this paste, even if the clipboard changes while IPC runs.
+export async function pasteImage(blob, clipboard, projectPath, terminal) {
+  const imageBytes = blob ? new Uint8Array(await blob.arrayBuffer()) : undefined
+  const result = await clipboard.saveImage(projectPath, imageBytes)
+  if (!result.success) throw new Error(result.error || 'Could not save image')
+  terminal.paste(result.relativePath)
+}

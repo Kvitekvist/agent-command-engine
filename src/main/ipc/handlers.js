@@ -4,7 +4,7 @@ const { FileService } = require('../services/FileService')
 const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
 const { ScreenshotService } = require('../services/ScreenshotService')
 const { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir } = require('../services/ProjectScaffoldService')
-const { ensureHookFiles, watchAgentStatus } = require('../services/HookService')
+const { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents } = require('../services/HookService')
 const fs = require('node:fs')
 const { resolveWithinRoot } = require('../services/ProjectPath')
 const { notesOperation } = require('../services/NotesService')
@@ -72,6 +72,8 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // this watcher forwards to the renderer as 'agent:status'.
   const { dir: hookDir, settingsPath: hookSettingsPath } = ensureHookFiles()
   watchAgentStatus(DB, getWindow)
+  // TICKET-0150: SessionStart-hook-driven first-prompt questionnaire popup.
+  watchQuestionnaireRequests(DB, getWindow)
 
   // TICKET-0075: every invoke/send below goes through a sender check.
   const handle = (channel, fn) =>
@@ -96,33 +98,49 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     } catch (error) { return { ok: false, error: error.message } }
   })
 
-  handle('shell:showInFolder', (_, filePath) => {
+  handle('shell:showInFolder', (_, { filePath, projectPath } = {}) => {
     const path = require('path')
     const fs = require('fs')
-    if (!fs.existsSync(filePath)) return { success: false, error: 'Path does not exist' }
-    shell.showItemInFolder(path.resolve(filePath))
+    // filePath comes from text printed in an agent's terminal -- often relative
+    // (e.g. "./src/index.js"), which previously got existsSync-checked against
+    // Electron main's own cwd instead of the project root, so it never resolved.
+    let resolved
+    try {
+      if (typeof filePath !== 'string' || !filePath.trim()) throw new Error('A file path is required')
+      if (/^file:/i.test(filePath)) filePath = require('node:url').fileURLToPath(filePath)
+      resolved = path.isAbsolute(filePath)
+        ? path.resolve(filePath)
+        : resolveWithinRoot(resolveProjectRoot(DB, projectPath), filePath)
+    } catch (error) { return { success: false, error: error.message } }
+    if (!fs.existsSync(resolved)) return { success: false, error: 'Path does not exist' }
+    shell.showItemInFolder(resolved)
     return { success: true }
   })
 
-  handle('clipboard:saveImage', (_, { projectPath }) => {
-    const { clipboard } = require('electron')
-    const path = require('path')
-    const fs = require('fs')
+  handle('clipboard:saveImage', (_, { projectPath, imageBytes } = {}) => {
+    try {
+      const { clipboard, nativeImage } = require('electron')
+      const path = require('path')
+      const fs = require('fs')
 
-    const resolvedPath = resolveProjectRoot(DB, projectPath)
-    const image = clipboard.readImage()
-    if (image.isEmpty()) return { success: false, error: 'No image in clipboard' }
+      const resolvedPath = resolveProjectRoot(DB, projectPath)
+      if (imageBytes !== undefined && (!(imageBytes instanceof Uint8Array) || !imageBytes.length || imageBytes.length > 32 * 1024 * 1024)) {
+        throw new Error('Image must contain between 1 byte and 32 MB of encoded image data')
+      }
+      const image = imageBytes === undefined ? clipboard.readImage() : nativeImage.createFromBuffer(Buffer.from(imageBytes))
+      if (image.isEmpty()) return { success: false, error: imageBytes === undefined ? 'No image in clipboard' : 'Could not decode pasted image' }
 
-    const folder = resolveWithinRoot(resolvedPath, 'assets/images/screenshots')
-    fs.mkdirSync(folder, { recursive: true })
+      const folder = resolveWithinRoot(resolvedPath, 'assets/images/screenshots')
+      fs.mkdirSync(folder, { recursive: true })
 
-    const iso = new Date().toISOString().replace(/[:.]/g, '-')
-    const filename = `pasted-${iso}.png`
-    const filePath = resolveWithinRoot(resolvedPath, path.join(folder, filename))
-    fs.writeFileSync(filePath, image.toPNG(), { flag: 'wx' })
+      const iso = new Date().toISOString().replace(/[:.]/g, '-')
+      const filename = `pasted-${iso}-${require('node:crypto').randomUUID()}.png`
+      const filePath = resolveWithinRoot(resolvedPath, path.join(folder, filename))
+      fs.writeFileSync(filePath, image.toPNG(), { flag: 'wx' })
 
-    const relativePath = path.relative(resolvedPath, filePath).split(path.sep).join('/')
-    return { success: true, path: filePath, relativePath }
+      const relativePath = path.relative(resolvedPath, filePath).split(path.sep).join('/')
+      return { success: true, path: filePath, relativePath }
+    } catch (error) { return { success: false, error: error.message } }
   })
 
   // ── Projects ────────────────────────────────────────────────────────────────
@@ -415,6 +433,47 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return result
   })
 
+  // TICKET-0151: Prompt Score tab (whole-machine, like Live Usage above,
+  // no active-project scoping). Merges tokscale's global per-session report
+  // with first-prompt-length events the UserPromptSubmit hook has recorded
+  // (only for sessions run through ACE since this shipped, see HookService).
+  handle('tokens:getPromptScore', async () => {
+    const sessionRows = await TokscaleService.getAllSessionsReport(['claude', 'codex'])
+    const events = readPromptEvents()
+
+    // First recorded prompt per session (lowest ts), by chars/words only --
+    // never the prompt text, which the hook never wrote to disk.
+    const firstPromptBySession = new Map()
+    let promptLengthTrackedSince = null
+    for (const e of events) {
+      if (promptLengthTrackedSince === null || e.ts < promptLengthTrackedSince) promptLengthTrackedSince = e.ts
+      const existing = firstPromptBySession.get(e.session_id)
+      if (!existing || e.ts < existing.ts) firstPromptBySession.set(e.session_id, e)
+    }
+
+    const rows = sessionRows.map((r) => {
+      const models = Array.isArray(r.models_used)
+        ? r.models_used.filter((m) => m && m !== '<synthetic>')
+        : []
+      const first = firstPromptBySession.get(r.session_id)
+      return {
+        sessionId: r.session_id,
+        client: r.client,
+        createdAt: r.created_at || null,
+        models: models.length ? models : ['unknown'],
+        input: Number(r.total_input_tokens) || 0,
+        output: Number(r.total_output_tokens) || 0,
+        cacheRead: Number(r.total_cache_read) || 0,
+        cost: Number(r.total_cost) || 0,
+        prompts: Number(r.message_count) || 0,
+        durationMinutes: Number(r.duration_minutes) || 0,
+        firstPromptChars: first ? first.chars : null,
+        firstPromptWords: first ? first.words : null,
+      }
+    })
+    return { rows, promptLengthTrackedSince }
+  })
+
   // ── Settings ────────────────────────────────────────────────────────────────
   // Path to the generated Claude settings JSON that wires the agent-status
   // hooks; the renderer passes it to `claude --settings` at launch.
@@ -434,6 +493,19 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
         try { fs.writeFileSync(marker, '') } catch (_) {}
       } else {
         try { fs.rmSync(marker, { force: true }) } catch (_) {}
+      }
+    }
+    // TICKET-0150: the SessionStart hook script runs standalone, outside
+    // Electron/DB -- it checks this marker file directly, same pattern as
+    // the mute marker above. Enabled by default, so the marker means "off".
+    if (key === 'first_prompt_questionnaire_enabled') {
+      const fs = require('fs')
+      const path = require('path')
+      const marker = path.join(hookDir, '.questionnaire-disabled')
+      if (value) {
+        try { fs.rmSync(marker, { force: true }) } catch (_) {}
+      } else {
+        try { fs.writeFileSync(marker, '') } catch (_) {}
       }
     }
     return { ok: true }

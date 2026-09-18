@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [0.1.35] - 2026-09-18
+
+### Added
+
+- Prompt Behavior tab: whole-machine analytics on prompting habits, token
+  spend and model choices over time, with a documented Token Efficiency
+  Score. First-prompt length is now tracked (going forward) via a new
+  privacy-conscious hook that records only its character/word count, never
+  the prompt text (TICKET-0151).
+- Optional first-prompt questionnaire popup on a fresh Claude session or
+  `/clear` (topic, description, things to avoid/include, done-looks-like),
+  driven by a real `SessionStart` hook; toggleable in Settings (TICKET-0150).
+
+### Fixed
+
+- Terminal image paste saves the captured image and inserts its path through
+  terminal paste handling. Alt-click handles explicit hyperlinks, file URLs and
+  relative file paths, and reports opening failures (TICKET-0149).
+- Alt-click link detection no longer splits a file/folder path at an embedded
+  space, whether it's wrapped in backticks or a `Tool(path)` call summary, or
+  printed as bare, unquoted prose the way Claude/Codex most often do
+  (TICKET-0152).
+- macOS/Linux: Setup no longer misreports a genuinely installed Node.js as
+  missing. A Finder/Dock launch inherited launchd's minimal PATH instead of
+  the login shell's, so Homebrew/nvm-installed Node was invisible to the
+  prereq check even though it worked fine in Terminal (TICKET-0153).
+
 ## [0.1.34] - 2026-09-14
 
 ### Added

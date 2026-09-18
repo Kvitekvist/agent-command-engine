@@ -5,7 +5,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { feedLineCapture, deriveTitle } from '../utils/firstLineCapture.mjs'
 import { buildImageGenerationPrompt } from '../utils/imageGenerationPrompt.mjs'
-import { readPasteText } from '../utils/terminalPaste.mjs'
+import { buildFirstPrompt } from '../utils/firstPromptQuestionnaire.mjs'
+import { readPasteText, pasteImage } from '../utils/terminalPaste.mjs'
+import { findFileLinks, openTerminalLink } from '../utils/terminalLinks.mjs'
 import OperationFeedback from './OperationFeedback'
 import NotesPanel from './NotesPanel'
 import Modal from './Modal'
@@ -119,6 +121,16 @@ export default function AgentTerminal({ agent, onStatusChange }) {
   const [imageBrief, setImageBrief] = useState('')
   const [showImagePrompt, setShowImagePrompt] = useState(false)
 
+  // TICKET-0150: optional first-prompt questionnaire, triggered by the
+  // SessionStart Claude Code hook (see HookService.js) on a fresh session or
+  // a `/clear`. Queued in state rather than shown the instant it arrives --
+  // a fresh launch can fire it while the launch banner is still up -- and
+  // rendered once the banner has lifted, below.
+  const [questionnaireSource, setQuestionnaireSource] = useState(null)
+  const [questionnaireFields, setQuestionnaireFields] = useState({
+    topic: '', description: '', avoidInclude: '', doneLooksLike: '',
+  })
+
   // TICKET-0052: chunked paste for large clipboard content. Pastes over
   // this threshold get split into chunks with small delays between them to
   // avoid overwhelming the PTY buffer.
@@ -161,15 +173,39 @@ export default function AgentTerminal({ agent, onStatusChange }) {
     let unsubData
     let unsubExit
     let unsubHostRestarted
+    let unsubQuestionnaire
     let hideBannerTimer
     let handleContextMenu
     let handlePaste
+
+    // TICKET-0150: settings:get returns null until the user ever touches the
+    // toggle, and stores booleans as the string '1'/'0' (sql.js has no real
+    // boolean column type) -- default is enabled, so only a stored '0' turns
+    // it off.
+    if (agent.provider === 'claude') {
+      window.ace.getSetting('first_prompt_questionnaire_enabled').then((enabled) => {
+        if (disposed || enabled === '0') return
+        unsubQuestionnaire = window.ace.onQuestionnaireRequest(({ agentId, source }) => {
+          if (agentId === agent.agentId) setQuestionnaireSource(source)
+        })
+      }).catch(() => {})
+    }
 
     // Used when the session errors or exits before the timed reveal fires --
     // don't leave the error/exit message hidden behind the overlay.
     function revealImmediately() {
       clearTimeout(hideBannerTimer)
       setShowBanner(false)
+    }
+
+    const linkHandler = {
+      allowNonHttpProtocols: true,
+      activate: (event, target) => {
+        openTerminalLink(event, target, window.ace.shell, agent.projectPath)
+          .catch(error => window.alert(`Failed to open link: ${error.message}`))
+      },
+      hover: showLinkTooltip,
+      leave: hideLinkTooltip,
     }
 
     const term = new Terminal({
@@ -179,21 +215,14 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       theme: XTERM_THEME,
       cursorBlink: true,
       scrollback: 5000,
+      altClickMovesCursor: false,
+      linkHandler,
     })
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
 
     // Web links addon for URL detection
-    const webLinksAddon = new WebLinksAddon((e, uri) => {
-      e.preventDefault()
-      if (!e.altKey) return
-      window.ace.shell.openUrl(uri).then(result => {
-        if (!result.ok) window.alert(result.error)
-      }).catch(err => window.alert(`Failed to open URL: ${err.message}`))
-    }, {
-      hover: (event) => showLinkTooltip(event),
-      leave: () => hideLinkTooltip(),
-    })
+    const webLinksAddon = new WebLinksAddon(linkHandler.activate, linkHandler)
     term.loadAddon(webLinksAddon)
 
     // Custom link provider for file paths
@@ -205,28 +234,16 @@ export default function AgentTerminal({ agent, onStatusChange }) {
         const lineText = line.translateToString(true)
         const links = []
 
-        // Match file paths (absolute and relative)
-        // Windows: C:\path\to\file.ext or .\path\file.ext
-        // Unix: /path/to/file or ./path/file
-        const filePathRegex = /(?:[A-Za-z]:\\|\.?[\\/])[\w\s\-\\.\/\\]+\.[\w]+/g
-        let match
-
-        while ((match = filePathRegex.exec(lineText)) !== null) {
-          const filePath = match[0]
+        for (const { path, label, index } of findFileLinks(lineText)) {
           links.push({
             range: {
-              start: { x: match.index + 1, y: bufferLineNumber },
-              end: { x: match.index + filePath.length + 1, y: bufferLineNumber }
+              start: { x: index + 1, y: bufferLineNumber },
+              end: { x: index + label.length, y: bufferLineNumber },
             },
-            text: filePath,
-            activate: (event) => {
-              if (!event.altKey) return
-              window.ace.shell.showInFolder(filePath).catch(err => {
-                console.error('Failed to show file in folder:', err)
-              })
-            },
-            hover: (event) => showLinkTooltip(event),
-            leave: () => hideLinkTooltip(),
+            text: path,
+            activate: (event) => linkHandler.activate(event, path),
+            hover: showLinkTooltip,
+            leave: hideLinkTooltip,
           })
         }
 
@@ -346,20 +363,19 @@ export default function AgentTerminal({ agent, onStatusChange }) {
         e.preventDefault()
         e.stopPropagation()
 
-        // Try reading image first
-        try {
-          const items = await navigator.clipboard.read()
-          for (const item of items) {
-            if (item.types.some(t => t.startsWith('image/'))) {
-              const result = await window.ace.clipboard.saveImage(agent.projectPath)
-              if (result.success) {
-                window.ace.terminal.write(sessionIdRef.current, result.relativePath)
-                return
-              }
-            }
+        // Clipboard permission failures may fall back to text; image save failures must stay visible.
+        let items = []
+        try { items = await navigator.clipboard.read() } catch (_) { /* text fallback below */ }
+        for (const item of items) {
+          const type = item.types.find(type => type.startsWith('image/'))
+          if (!type) continue
+          try {
+            await pasteImage(await item.getType(type), window.ace.clipboard, agent.projectPath, term)
+            setPasteStatus(null)
+          } catch (error) {
+            setPasteStatus({ type: 'error', message: `Image paste failed: ${error.message}` })
           }
-        } catch (_) {
-          // No clipboard.read permission or no image, fall back to text
+          return
         }
 
         // No image, paste text
@@ -379,28 +395,15 @@ export default function AgentTerminal({ agent, onStatusChange }) {
         e.preventDefault()
         e.stopImmediatePropagation()
 
-        // Check for image in clipboard first
-        const items = e.clipboardData?.items
-        if (items) {
-          for (const item of items) {
-            if (item.type.startsWith('image/')) {
-              try {
-                const result = await window.ace.clipboard.saveImage(agent.projectPath)
-                if (result.success) {
-                  // Insert the relative path into the terminal
-                  window.ace.terminal.write(sessionIdRef.current, result.relativePath)
-                  return
-                } else {
-                  term.write(`\r\n\x1b[31mFailed to save image: ${result.error}\x1b[0m\r\n`)
-                  return
-                }
-              } catch (err) {
-                console.error('Image paste failed:', err)
-                term.write('\r\n\x1b[31mImage paste failed\x1b[0m\r\n')
-                return
-              }
-            }
+        const imageItem = Array.from(e.clipboardData?.items || []).find(item => item.type.startsWith('image/'))
+        if (imageItem) {
+          try {
+            await pasteImage(imageItem.getAsFile(), window.ace.clipboard, agent.projectPath, term)
+            setPasteStatus(null)
+          } catch (error) {
+            setPasteStatus({ type: 'error', message: `Image paste failed: ${error.message}` })
           }
+          return
         }
 
         // No image, handle text paste
@@ -469,8 +472,10 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       unsubData?.()
       unsubExit?.()
       unsubHostRestarted?.()
+      unsubQuestionnaire?.()
       if (handleContextMenu) containerRef.current?.removeEventListener('contextmenu', handleContextMenu)
       if (handlePaste) containerRef.current?.removeEventListener('paste', handlePaste, true)
+      hideLinkTooltip()
       term.dispose()
     }
     // Intentionally empty deps -- this effect owns one PTY session for the
@@ -488,6 +493,24 @@ export default function AgentTerminal({ agent, onStatusChange }) {
     const next = !autoAnswer
     setAutoAnswer(next)
     window.ace.terminal.setAutoAnswer(sessionIdRef.current, next)
+  }
+
+  // TICKET-0150: Send composes the four fields and submits them as the first
+  // prompt; Skip just dismisses. Uses the same bracketed-paste path as
+  // NotesPanel (multi-line safe -- a raw PTY write would submit early on
+  // every embedded newline), then a separate real Enter to actually submit.
+  function submitQuestionnaire() {
+    const prompt = buildFirstPrompt(questionnaireFields)
+    if (prompt && sessionIdRef.current && terminalRef.current?.modes.bracketedPasteMode) {
+      terminalRef.current.paste(prompt)
+      window.ace.terminal.write(sessionIdRef.current, '\r')
+    }
+    dismissQuestionnaire()
+  }
+  function dismissQuestionnaire() {
+    setQuestionnaireSource(null)
+    setQuestionnaireFields({ topic: '', description: '', avoidInclude: '', doneLooksLike: '' })
+    terminalRef.current?.focus()
   }
 
   // Image generation is provided by the signed-in Codex CLI session. This
@@ -591,6 +614,39 @@ export default function AgentTerminal({ agent, onStatusChange }) {
           <button className="btn-primary" disabled={!imageBrief.trim()} onClick={requestImageGeneration}>Generate</button>
         </div>
       </Modal>}
+      {questionnaireSource && !showBanner && (
+        <Modal title="What are we working on?" wide onClose={dismissQuestionnaire}>
+          <p className="text-xs text-muted -mt-2 mb-3">
+            Optional -- helps shape the first prompt. Fill in as much or as little as you like, or skip it.
+          </p>
+          <div className="space-y-3">
+            <label className="text-sm block">One-line summary
+              <input autoFocus className="input" placeholder="e.g. Add dark mode to Settings"
+                value={questionnaireFields.topic}
+                onChange={e => setQuestionnaireFields(f => ({ ...f, topic: e.target.value }))} />
+            </label>
+            <label className="text-sm block">General description
+              <textarea className="input h-20" placeholder="What is this, and why does it matter?"
+                value={questionnaireFields.description}
+                onChange={e => setQuestionnaireFields(f => ({ ...f, description: e.target.value }))} />
+            </label>
+            <label className="text-sm block">Things to avoid or include
+              <textarea className="input h-20" placeholder="Constraints, files to leave alone, must-haves..."
+                value={questionnaireFields.avoidInclude}
+                onChange={e => setQuestionnaireFields(f => ({ ...f, avoidInclude: e.target.value }))} />
+            </label>
+            <label className="text-sm block">What does "done" look like?
+              <textarea className="input h-20" placeholder="How will we know this is finished?"
+                value={questionnaireFields.doneLooksLike}
+                onChange={e => setQuestionnaireFields(f => ({ ...f, doneLooksLike: e.target.value }))} />
+            </label>
+          </div>
+          <div className="flex justify-end gap-2 mt-3">
+            <button className="btn-ghost" onClick={dismissQuestionnaire}>Skip</button>
+            <button className="btn-primary" onClick={submitQuestionnaire}>Send</button>
+          </div>
+        </Modal>
+      )}
       {/* TICKET-0050: progress + success/fail feedback for the direct git/build actions */}
       {/* TICKET-0052: feedback for large paste operations */}
       <OperationFeedback label="Pasting" status={pasteStatus} />

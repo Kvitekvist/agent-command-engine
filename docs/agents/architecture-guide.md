@@ -27,6 +27,18 @@ React renderer
   Electron's `userData` directory.
 - File operations must continue to enforce the selected project root.
 
+## Terminal clipboard and link contracts
+
+- `clipboard:saveImage` receives `{ projectPath, imageBytes? }`. Paste events
+  supply encoded image bytes (Uint8Array, up to 32 MB); main validates and decodes
+  them, writes a PNG inside the registered project, and returns
+  `{ success, path, relativePath }` or `{ success: false, error }`. Omitting bytes
+  uses Electron's native clipboard. Renderer inserts the path with xterm paste.
+- `shell:showInFolder` receives `{ filePath, projectPath }`. Relative paths resolve
+  within the registered project; absolute paths and file URLs reveal existing
+  files. It returns `{ success, error? }`. Explicit terminal hyperlinks and
+  detected text links share Alt-click routing; web URLs use `shell:openUrl`.
+
 ## Audit boundary contracts (2026-09-14)
 
 - Registration consumes a canonical folder chosen by the native dialog or

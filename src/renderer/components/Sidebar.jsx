@@ -10,6 +10,7 @@ const NAV = [
   { id: 'skills', icon: '🧩', label: 'Project Skills' },
   { id: 'processes', icon: '🔧', label: 'Diagnostics: Processes' },
   { id: 'tokens', icon: '📊', label: 'Usage (whole machine)' },
+  { id: 'prompt-score', icon: '🧠', label: 'Prompt Score' },
   { id: 'settings', icon: '⚙️', label: 'Settings' },
 ]
 

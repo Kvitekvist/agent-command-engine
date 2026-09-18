@@ -3,6 +3,7 @@ import useStore from './store/useStore'
 import Sidebar from './components/Sidebar'
 import AgentView from './views/AgentView'
 import TokenView from './views/TokenView'
+import PromptScoreView from './views/PromptScoreView'
 import SettingsView from './views/SettingsView'
 const EditorView = lazy(() => import('./views/EditorView'))
 import ProcessesView from './views/ProcessesView'
@@ -210,6 +211,7 @@ export default function App() {
         </div>
         {activeView === 'processes' && <ProcessesView />}
         {activeView === 'tokens'    && <TokenView />}
+        {activeView === 'prompt-score' && <PromptScoreView />}
         {activeView === 'settings'  && <SettingsView />}
         {activeView === 'editor'    && <Suspense fallback={<p className="p-4">Loading editor...</p>}><EditorView /></Suspense>}
       </main>

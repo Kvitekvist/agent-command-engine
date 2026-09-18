@@ -25,15 +25,21 @@ export default function SettingsView() {
 
   const [enabledClaude, setEnabledClaude] = useState(new Set())
   const [enabledCodex, setEnabledCodex] = useState(new Set())
+  // TICKET-0150: null (unset) means enabled -- see HookService.js's
+  // .questionnaire-disabled marker, which only exists once explicitly off.
+  // getSetting stores booleans as '1'/'0' (sql.js has no boolean column).
+  const [questionnaireEnabled, setQuestionnaireEnabled] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const [m, p, ec, ex] = await Promise.all([
+      const [m, p, ec, ex, qe] = await Promise.all([
         window.ace.getSetting('default_model'),
         window.ace.getSetting('default_provider'),
         window.ace.getSetting('enabled_models_claude'),
         window.ace.getSetting('enabled_models_codex'),
+        window.ace.getSetting('first_prompt_questionnaire_enabled'),
       ])
+      setQuestionnaireEnabled(qe !== '0')
       let nextProvider = p === 'codex' ? 'codex' : 'claude'
       if (p === 'auto') {
         const available = await window.ace.prereqs.check()
@@ -173,6 +179,29 @@ export default function SettingsView() {
             <button disabled={saving} onClick={saveSettings} className="btn-primary text-xs">
               {saved ? '✓ Saved' : 'Save Settings'}
             </button>
+          </section>
+
+          {/* TICKET-0150 */}
+          <section className="card space-y-2">
+            <h2 className="text-sm font-semibold">First-prompt questionnaire</h2>
+            <p className="text-xs text-muted">
+              On a fresh Claude session or after running <code>/clear</code>, offer an
+              optional popup to help compose the first prompt (topic, description, things to
+              avoid or include, and what "done" looks like). Always skippable in the moment.
+            </p>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={questionnaireEnabled}
+                onChange={async (e) => {
+                  const next = e.target.checked
+                  setQuestionnaireEnabled(next)
+                  await window.ace.setSetting('first_prompt_questionnaire_enabled', next)
+                }}
+                className="accent-accent"
+              />
+              <span className="text-sm">Show the questionnaire popup</span>
+            </label>
           </section>
         </>
       )}

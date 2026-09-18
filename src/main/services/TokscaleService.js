@@ -299,6 +299,27 @@ const TokscaleService = {
     return perClient.flat()
   },
 
+  // TICKET-0151: same per-session rows as getWorkspaceReport, but across
+  // every workspace tokscale knows about -- the source for the Prompt
+  // Behavior tab, which (like the Live Usage card above) is a whole-machine
+  // view, not scoped to ACE's currently active project.
+  async getAllSessionsReport(clients) {
+    const perClient = await Promise.all(
+      clients.map(async (client) => {
+        try {
+          const rows = await runTokscale([
+            'report', '--json', '--no-summarize', '--client', client,
+          ], 30000)
+          return Array.isArray(rows) ? rows.map((r) => ({ ...r, client })) : []
+        } catch (error) {
+          console.warn(`[tokscale] report failed for client "${client}": ${error.message}`)
+          return []
+        }
+      })
+    )
+    return perClient.flat()
+  },
+
   sessionKey,
   pathToWorkspaceKey,
 }

@@ -51,6 +51,7 @@ test('registered IPC rejects unauthorized projects, terminals and external schem
   electronStub.dialog = { showOpenDialog: async () => ({ canceled: false, filePaths: [root] }), showMessageBox: async () => ({ response: 0 }) }
   hooks.ensureHookFiles = () => ({ dir: root, settingsPath: path.join(root, 'hooks.json') })
   hooks.watchAgentStatus = () => {}
+  hooks.watchQuestionnaireRequests = () => {}
   require('../main/services/ProviderExecutable').providerExecutable = () => ['test-provider']
   const { registerHandlers } = require('../main/ipc/handlers')
   const handlers = new Map()
@@ -66,6 +67,26 @@ test('registered IPC rejects unauthorized projects, terminals and external schem
   electronStub.dialog = { showOpenDialog: async () => ({ canceled: false, filePaths: [root] }) }
   registerHandlers(ipc, () => currentWindow, DB, Agent, Terminal)
   const call = (channel, ...args) => handlers.get(channel)(event, ...args)
+  const png = Buffer.from('encoded image')
+  electronStub.clipboard = { readImage: () => { throw new Error('Clipboard changed') } }
+  electronStub.nativeImage = { createFromBuffer: bytes => {
+    assert.deepEqual(bytes, png)
+    return { isEmpty: () => false, toPNG: () => png }
+  } }
+  const saved = call('clipboard:saveImage', { projectPath: root, imageBytes: new Uint8Array(png) })
+  assert.equal(saved.success, true)
+  assert.deepEqual(fs.readFileSync(saved.path), png)
+  assert.equal(call('clipboard:saveImage', { projectPath: root, imageBytes: 'invalid' }).success, false)
+  assert.equal(call('clipboard:saveImage', { projectPath: path.dirname(root), imageBytes: new Uint8Array(png) }).success, false)
+  assert.match(call('clipboard:saveImage', { projectPath: root }).error, /Clipboard changed/)
+  electronStub.nativeImage.createFromBuffer = () => ({ isEmpty: () => true })
+  assert.equal(call('clipboard:saveImage', { projectPath: root, imageBytes: new Uint8Array([0]) }).success, false)
+  const revealed = []
+  t.mock.method(electronStub.shell, 'showItemInFolder', file => revealed.push(file))
+  assert.equal(call('shell:showInFolder', { filePath: saved.relativePath, projectPath: root }).success, true)
+  assert.equal(call('shell:showInFolder', { filePath: require('node:url').pathToFileURL(saved.path).href, projectPath: root }).success, true)
+  assert.deepEqual(revealed, [saved.path, saved.path])
+  assert.equal(call('shell:showInFolder', { filePath: 'missing.js', projectPath: root }).success, false)
   await assert.rejects(call('terminal:spawn', {}), /project path/)
   await assert.rejects(call('terminal:spawn', { cwd: path.dirname(root) }), /registered project/)
   await assert.rejects(call('terminal:spawn', { cwd: root, agentId: 'agent', shell: 'malicious' }), /shell/)

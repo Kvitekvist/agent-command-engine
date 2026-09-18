@@ -67,6 +67,65 @@ try {
 process.exit(0)
 `
 
+// TICKET-0150: optional popup that helps the user compose their first
+// prompt (topic / description / avoid-include / done-looks-like) on a fresh
+// Claude session or a `/clear`. Fired from a real `SessionStart` hook rather
+// than app-side guessing (e.g. only catching a dedicated Clear button) so it
+// also catches the user typing `/clear` by hand. No `matcher` here -- pipe
+// alternation on the `source`/`session_start_reason` field isn't reliably
+// documented across CLI versions, so every SessionStart runs the script and
+// it filters itself. Fire-and-forget: writes a marker and exits immediately,
+// never blocking the CLI on the popup being answered.
+const SESSION_START_SCRIPT = `const fs = require('fs')
+const path = require('path')
+const [, , requestDir, disabledMarker] = process.argv
+let input = ''
+process.stdin.on('data', (d) => { input += d })
+process.stdin.on('end', () => {
+  if (disabledMarker && fs.existsSync(disabledMarker)) process.exit(0)
+  let sessionId, source
+  try {
+    const parsed = JSON.parse(input)
+    sessionId = parsed.session_id
+    source = parsed.source || parsed.session_start_reason
+  } catch (_) {}
+  if (sessionId && requestDir && (source === 'startup' || source === 'clear')) {
+    try {
+      fs.mkdirSync(requestDir, { recursive: true })
+      fs.writeFileSync(
+        path.join(requestDir, sessionId + '.json'),
+        JSON.stringify({ source, ts: Date.now() }),
+      )
+    } catch (_) {}
+  }
+  process.exit(0)
+})
+`
+
+// TICKET-0151: Prompt Behavior tab needs first-prompt length, which nothing
+// in ACE captures -- tokscale reports token counts, never prompt text. This
+// hook reads the submitted prompt from stdin and appends ONLY its character
+// and word counts to a JSONL file, never the text itself. Runs alongside the
+// existing status hook on UserPromptSubmit; fire-and-forget like the others.
+const PROMPT_LENGTH_SCRIPT = `const fs = require('fs')
+const [, , eventsPath] = process.argv
+let input = ''
+process.stdin.on('data', (d) => { input += d })
+process.stdin.on('end', () => {
+  try {
+    const parsed = JSON.parse(input)
+    const sessionId = parsed.session_id
+    const prompt = typeof parsed.prompt === 'string' ? parsed.prompt : ''
+    if (sessionId && eventsPath) {
+      const words = prompt.trim() ? prompt.trim().split(/\\s+/).length : 0
+      const line = JSON.stringify({ session_id: sessionId, chars: prompt.length, words, ts: Date.now() })
+      fs.appendFileSync(eventsPath, line + '\\n')
+    }
+  } catch (_) {}
+  process.exit(0)
+})
+`
+
 let cached = null
 
 // MSIX packages virtualize AppData writes — ACE sees one path, Claude sees
@@ -82,14 +141,22 @@ function ensureHookFiles() {
   if (cached) return cached
   const dir = getHookDir()
   const statusDir = path.join(dir, 'status')
+  const questionnaireDir = path.join(dir, 'questionnaire')
   const scriptPath = path.join(dir, 'agent-status.js')
   const soundScriptPath = path.join(dir, 'play-notification.js')
+  const sessionStartScriptPath = path.join(dir, 'session-start.js')
+  const promptLengthScriptPath = path.join(dir, 'prompt-length.js')
+  const promptEventsPath = path.join(dir, 'prompt-events.jsonl')
   const audioPath = path.join(dir, 'notification.wav')
   const muteMarker = path.join(dir, '.muted')
+  const questionnaireDisabledMarker = path.join(dir, '.questionnaire-disabled')
   const settingsPath = path.join(dir, 'settings.json')
   fs.mkdirSync(statusDir, { recursive: true })
+  fs.mkdirSync(questionnaireDir, { recursive: true })
   fs.writeFileSync(scriptPath, HOOK_SCRIPT)
   fs.writeFileSync(soundScriptPath, SOUND_SCRIPT)
+  fs.writeFileSync(sessionStartScriptPath, SESSION_START_SCRIPT)
+  fs.writeFileSync(promptLengthScriptPath, PROMPT_LENGTH_SCRIPT)
 
   // Bundled via electron-builder extraResources (packaged) or read straight
   // from the repo (dev). Missing audio just makes the sound hook a silent
@@ -115,17 +182,50 @@ function ensureHookFiles() {
   const entry = (state, withSound) => [
     { hooks: withSound ? [statusCmd(state), soundCmd] : [statusCmd(state)] },
   ]
+  const sessionStartCmd = {
+    type: 'command',
+    command: `node "${fwd(sessionStartScriptPath)}" "${fwd(questionnaireDir)}" "${fwd(questionnaireDisabledMarker)}"`,
+  }
+  const promptLengthCmd = {
+    type: 'command',
+    command: `node "${fwd(promptLengthScriptPath)}" "${fwd(promptEventsPath)}"`,
+  }
   fs.writeFileSync(settingsPath, JSON.stringify({
     hooks: {
-      UserPromptSubmit: entry('working'),
+      UserPromptSubmit: [{ hooks: [statusCmd('working'), promptLengthCmd] }],
       PreToolUse: entry('working'),
       Notification: entry('waiting', true),
       Stop: entry('waiting', true),
+      SessionStart: [{ hooks: [sessionStartCmd] }],
     },
   }, null, 2))
 
-  cached = { dir, statusDir, scriptPath, settingsPath, soundScriptPath, audioPath, muteMarker }
+  cached = {
+    dir, statusDir, scriptPath, settingsPath, soundScriptPath, audioPath, muteMarker,
+    questionnaireDir, sessionStartScriptPath, questionnaireDisabledMarker,
+    promptLengthScriptPath, promptEventsPath,
+  }
   return cached
+}
+
+// TICKET-0151: reads the prompt-length JSONL file for the Prompt Behavior
+// tab. Pull-based (called on demand from the IPC handler) rather than
+// tailed like the status/questionnaire watchers -- there's no live UI
+// element waiting on individual events, just an analytics view refreshed on
+// open. Tolerant of a torn last line (the hook can be killed mid-append).
+function readPromptEvents() {
+  const { promptEventsPath } = ensureHookFiles()
+  let text
+  try { text = fs.readFileSync(promptEventsPath, 'utf8') } catch (_) { return [] }
+  const events = []
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const e = JSON.parse(line)
+      if (e && typeof e.session_id === 'string') events.push(e)
+    } catch (_) { /* torn last line -- skip */ }
+  }
+  return events
 }
 
 // Tail <statusDir> and push { agentId, state } to the renderer whenever a hook
@@ -156,8 +256,39 @@ function watchAgentStatus(DB, getWindow) {
   }
 }
 
+// Tail <questionnaireDir> and push { agentId, source } to the renderer
+// whenever the SessionStart hook drops a one-shot request file. Unlike
+// status files (repeatedly overwritten, one per session for its whole
+// life), a questionnaire request is consumed once -- delete it right after
+// forwarding so a stray extra fs.watch event doesn't re-fire it.
+function watchQuestionnaireRequests(DB, getWindow) {
+  const { questionnaireDir } = ensureHookFiles()
+  for (const f of safeReaddir(questionnaireDir)) {
+    try { fs.unlinkSync(path.join(questionnaireDir, f)) } catch (_) {}
+  }
+  const emit = (file) => {
+    if (!file || !file.endsWith('.json')) return
+    const filePath = path.join(questionnaireDir, file)
+    const sessionId = file.slice(0, -5)
+    let source
+    try {
+      source = JSON.parse(fs.readFileSync(filePath, 'utf8')).source
+    } catch (_) { return }
+    try { fs.unlinkSync(filePath) } catch (_) {}
+    const agentId = DB.getAgentIdBySession(sessionId)
+    if (!agentId) return
+    const win = getWindow()
+    if (win && !win.isDestroyed()) win.webContents.send('agent:questionnaireRequest', { agentId, source })
+  }
+  try {
+    fs.watch(questionnaireDir, (_evt, file) => emit(file))
+  } catch (err) {
+    console.error('questionnaire-request watch failed:', err)
+  }
+}
+
 function safeReaddir(dir) {
   try { return fs.readdirSync(dir) } catch (_) { return [] }
 }
 
-module.exports = { ensureHookFiles, watchAgentStatus }
+module.exports = { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents }

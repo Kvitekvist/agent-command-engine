@@ -59,6 +59,17 @@ try {
   console.error('GitPath fallback failed:', err)
 }
 
+// TICKET-0153: a macOS/Linux GUI launch inherits launchd's minimal default
+// PATH, not the login shell's -- so a genuinely installed Node.js can be
+// invisible to prereqs:check even though it resolves fine in Terminal. Same
+// spot/pattern as GitPath above: mutate process.env.PATH once, before
+// anything spawns a child process.
+try {
+  require('./services/ShellPath').ensureShellPath()
+} catch (err) {
+  console.error('ShellPath fallback failed:', err)
+}
+
 let DBService, AgentService, TerminalService, registerHandlers
 
 try {
