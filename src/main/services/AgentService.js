@@ -67,11 +67,21 @@ const TITLE_MODELS = {
 const TITLE_TIMEOUT_MS = 12000
 const TITLE_MAX_LENGTH = 60
 
-function buildTitleCommand(provider = 'claude') {
+// Windows: Codex's "elevated" sandbox runs every shell command as a separate
+// sandbox user via a service, and each one opens its own visible console
+// window; a `notify` hook (the Codex desktop app writes one into
+// ~/.codex/config.toml) opens more on every turn end. Title calls must stay
+// hidden, so use the unelevated sandbox, which keeps commands in the hidden console, and drop
+// notify for these sessions only.
+function codexPlatformArgs(platform) {
+  return platform === 'win32' ? ['-c', 'windows.sandbox=unelevated', '-c', 'notify=[]'] : []
+}
+
+function buildTitleCommand(provider = 'claude', platform = process.platform) {
   if (provider === 'codex') {
     return {
       command: 'codex',
-      args: ['exec', '--model', TITLE_MODELS.codex, ...buildCodexArgs('safe')],
+      args: ['exec', '--model', TITLE_MODELS.codex, ...buildCodexArgs('safe'), ...codexPlatformArgs(platform)],
     }
   }
   return {
@@ -228,5 +238,6 @@ module.exports = {
   buildPermissionArgs,
   buildCodexArgs,
   buildTitleCommand,
+  buildChildEnv,
   sanitizeTitle,
 }

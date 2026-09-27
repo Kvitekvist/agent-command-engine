@@ -176,6 +176,7 @@ class TerminalService {
           cwd: opts.cwd,
           cols: opts.cols,
           rows: opts.rows,
+          path: process.env.PATH,
         })
       } catch (error) {
         clearTimeout(timer)

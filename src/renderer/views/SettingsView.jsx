@@ -4,7 +4,7 @@ import PrereqChecklist from '../components/PrereqChecklist'
 import useStore from '../store/useStore'
 import {
   DEFAULT_MODEL_BY_PROVIDER,
-  MODEL_GROUPS_BY_PROVIDER,
+  getModelGroups,
   getAllModelIds,
   filterGroupsByEnabled,
 } from '../utils/modelCatalog'
@@ -25,6 +25,7 @@ export default function SettingsView() {
 
   const [enabledClaude, setEnabledClaude] = useState(new Set())
   const [enabledCodex, setEnabledCodex] = useState(new Set())
+  const [discovered, setDiscovered] = useState(null)
   // TICKET-0150: null (unset) means enabled -- see HookService.js's
   // .questionnaire-disabled marker, which only exists once explicitly off.
   // getSetting stores booleans as '1'/'0' (sql.js has no boolean column).
@@ -32,13 +33,16 @@ export default function SettingsView() {
 
   useEffect(() => {
     async function load() {
-      const [m, p, ec, ex, qe] = await Promise.all([
+      const [m, p, ec, ex, qe, dm] = await Promise.all([
         window.ace.getSetting('default_model'),
         window.ace.getSetting('default_provider'),
         window.ace.getSetting('enabled_models_claude'),
         window.ace.getSetting('enabled_models_codex'),
         window.ace.getSetting('first_prompt_questionnaire_enabled'),
+        window.ace.getSetting('discovered_models'),
       ])
+      const disc = dm ? JSON.parse(dm) : null
+      setDiscovered(disc)
       setQuestionnaireEnabled(qe !== '0')
       let nextProvider = p === 'codex' ? 'codex' : 'claude'
       if (p === 'auto') {
@@ -47,8 +51,8 @@ export default function SettingsView() {
       }
       setProvider(nextProvider)
       setDefaultModel(p === 'auto' ? DEFAULT_MODEL_BY_PROVIDER[nextProvider] : m || DEFAULT_MODEL_BY_PROVIDER[nextProvider])
-      setEnabledClaude(ec ? new Set(JSON.parse(ec)) : new Set(getAllModelIds('claude')))
-      setEnabledCodex(ex ? new Set(JSON.parse(ex)) : new Set(getAllModelIds('codex')))
+      setEnabledClaude(ec ? new Set(JSON.parse(ec)) : new Set(getAllModelIds('claude', disc)))
+      setEnabledCodex(ex ? new Set(JSON.parse(ex)) : new Set(getAllModelIds('codex', disc)))
     }
     load().then(() => setError('')).catch(error => setError(error.message))
   }, [retry])
@@ -95,13 +99,13 @@ export default function SettingsView() {
   }
 
   const filteredGroups = filterGroupsByEnabled(
-    MODEL_GROUPS_BY_PROVIDER[provider],
+    getModelGroups(provider, discovered),
     provider === 'claude' ? enabledClaude : enabledCodex
   )
   useEffect(() => {
     const options = filteredGroups.flatMap(group => group.options)
     if (!options.some(option => option.id === defaultModel)) setDefaultModel(options[0]?.id || '')
-  }, [provider, enabledClaude, enabledCodex, defaultModel])
+  }, [provider, enabledClaude, enabledCodex, discovered, defaultModel])
 
   return (
     <div className="p-6 max-w-2xl space-y-6 overflow-y-auto h-full">
@@ -223,7 +227,7 @@ export default function SettingsView() {
                   {prov === 'claude' ? '🟣 Claude' : '🟢 Codex'}
                 </h3>
                 <div className="space-y-3">
-                  {MODEL_GROUPS_BY_PROVIDER[prov].map(group => (
+                  {getModelGroups(prov, discovered).map(group => (
                     <div key={group.label}>
                       <div className="text-xs text-muted mb-1">{group.label}</div>
                       <div className="space-y-1">
@@ -236,7 +240,7 @@ export default function SettingsView() {
                               className="accent-accent"
                             />
                             <span className="text-sm">{opt.label}</span>
-                            <span className="text-xs text-muted">— {opt.description}</span>
+                            {opt.description && <span className="text-xs text-muted">— {opt.description}</span>}
                           </label>
                         ))}
                       </div>

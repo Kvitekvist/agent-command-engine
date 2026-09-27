@@ -2,7 +2,7 @@
 
 **Status**
 
-Awaiting verification
+Open
 
 **Type**
 
@@ -46,6 +46,14 @@ a manual click per CLI even when a one-shot setup was wanted.
 
 ## Implementation Plan
 
+Fresh-VM regression reported 2026-09-25: setup repeatedly installs Node and
+relaunches with an inherited stale PATH. Reopened for this observed failure.
+
+* [x] Refresh Windows machine/user PATH before prerequisite checks, preserving bundled Git.
+* [x] Remove automatic relaunch and verify Node/npm after the installer exits; leave failures visible for manual retry.
+* [x] Pass main's refreshed PATH to new PTY sessions without stopping existing terminals.
+* [x] Add regression checks and run the full tests/build. Fresh-VM package verification remains a manual check.
+
 * [x] `GitPath.js` — prepend bundled MinGit's `cmd/` dir to `process.env.PATH`
   once at startup, only when git isn't already resolvable. Every git spawn
   (`git:pull`, `prereqs:check`, and every agent terminal via
@@ -77,6 +85,17 @@ a manual click per CLI even when a one-shot setup was wanted.
 
 ## Files Modified
 
+2026-09-25 regression fix also changes:
+
+- `src/main/services/ShellPath.js`
+- `src/main/services/TerminalService.js`
+- `src/main/ptyHost.js`
+- `src/tests/shell-path.test.js`
+- `src/tests/prereq-install.test.js` (new)
+- `src/tests/terminal-lifecycle.test.js`
+- `docs/agents/architecture-guide.md`
+- `CHANGELOG.md`
+
 - `src/main/services/GitPath.js` — new
 - `src/main/index.js`
 - `src/main/ipc/handlers.js`
@@ -91,6 +110,23 @@ a manual click per CLI even when a one-shot setup was wanted.
 ---
 
 ## Testing
+
+2026-09-25: `npm test` passes (128 passed, 1 skipped), `npm run build`
+passes. Regression checks cover saved Windows PATH merging, missing Node/npm
+following both successful and already-installed installer exits, and forwarding
+main's PATH to new PTYs. A live check with a deliberately reduced environment
+recovered the installed Node/npm through the real Windows registry, then ran
+both version commands successfully. This developer-machine check does not
+replace a fresh-VM AppX install. The ticket stays Open because this follow-up
+is uncommitted and fresh-VM verification is still outstanding.
+
+Built `releases/prereq-fix/ACE-prereq-fix.appx` (test build, version 0.1.35),
+applied the existing build script's TargetDeviceFamily range, and signed with
+the existing ACE sideload test certificate. `signtool verify /pa` passed.
+The matching public certificate is alongside it as `ace-test-cert.cer`.
+Inspected the packaged app.asar to confirm the prerequisite fix is included.
+
+Earlier verification:
 
 `npm test` (103 tests, 1 skipped Windows-only case) passes, including the new
 `git-path.test.js` covering: git already on PATH (no-op), git missing with a
@@ -110,9 +146,10 @@ exact change — do that before closing.
 
 ## Result
 
-A fresh machine with nothing installed gets git for free (bundled), and
-Node.js + the CLIs auto-install and self-recover from a Node install via a
-managed relaunch, without requiring a click through Setup.
+Setup refreshes Windows PATH and verifies Node.js and npm without restarting
+ACE. Failures remain visible for manual retry. New terminals receive the
+refreshed PATH even when their host started before Node was installed.
+The former automatic relaunch items above describe the superseded implementation.
 
 ---
 

@@ -5,6 +5,26 @@ const os = require('node:os')
 const path = require('node:path')
 const child_process = require('node:child_process')
 const { ensureShellPath, loginShellPath, isOnPath } = require('../main/services/ShellPath')
+const { refreshWindowsPath } = require('../main/services/ShellPath')
+
+test('Windows refresh recovers installed paths without losing MinGit or duplicating Path keys', t => {
+  const env = { Path: 'C:\\ACE\\mingit;C:\\Windows' }
+  const probe = t.mock.method(child_process, 'spawnSync', () => ({
+    status: 0, stdout: 'C:\\WINDOWS;C:\\Program Files\\nodejs\r\nC:\\Users\\VM\\AppData\\Roaming\\npm\r\n',
+  }))
+  assert.equal(refreshWindowsPath({ env, platform: 'win32' }), true)
+  assert.equal(env.Path, 'C:\\ACE\\mingit;C:\\Windows;C:\\Program Files\\nodejs;C:\\Users\\VM\\AppData\\Roaming\\npm')
+  assert.equal(env.PATH, undefined)
+  assert.equal(refreshWindowsPath({ env, platform: 'win32' }), false)
+  assert.equal(probe.mock.calls[0].arguments[2].windowsHide, true)
+  probe.mock.mockImplementation(() => ({ status: 1, stdout: 'bad' }))
+  const previous = env.Path
+  assert.equal(refreshWindowsPath({ env, platform: 'win32' }), false)
+  assert.equal(env.Path, previous)
+  probe.mock.mockImplementation(() => { throw new Error('unavailable') })
+  assert.equal(refreshWindowsPath({ env, platform: 'win32' }), false)
+  assert.equal(refreshWindowsPath({ env, platform: 'darwin' }), false)
+})
 
 function makeFakeNodeDir(root, rel) {
   const dir = path.join(root, rel)

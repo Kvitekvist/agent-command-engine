@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld('ace', {
   // Settings
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+  discoverModels: () => ipcRenderer.invoke('models:discover'),
 
   // File explorer / editor (TICKET-0021)
   fs: {
@@ -120,7 +121,6 @@ contextBridge.exposeInMainWorld('ace', {
     check: () => ipcRenderer.invoke('prereqs:check'),
     install: (name) => ipcRenderer.invoke('prereqs:install', name),
     installNode: () => ipcRenderer.invoke('prereqs:installNode'),
-    relaunch: () => ipcRenderer.invoke('prereqs:relaunch'),
     uninstall: name => ipcRenderer.invoke('prereqs:uninstall', name),
     openNodeDownload: () => ipcRenderer.invoke('prereqs:openNodeDownload'),
     openGitDownload: () => ipcRenderer.invoke('prereqs:openGitDownload'),

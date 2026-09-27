@@ -30,6 +30,7 @@ test('reconnect does not spawn or launch twice, and stop disposes only its own P
   const first = service.spawn({ agentId: 'a', command: 'claude', cwd: process.cwd() })
   const reconnect = service.spawn({ agentId: 'a', command: 'claude', cwd: process.cwd() })
   const id = sent[0].id
+  assert.equal(sent[0].path, process.env.PATH, 'new sessions receive main PATH after setup')
   service.pendingSpawns.get(id).resolve({ success: true, pid: 100 })
   assert.equal((await first).success, true)
   assert.equal((await reconnect).reconnected, true)

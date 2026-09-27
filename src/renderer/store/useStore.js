@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 
+let usageInFlight = null
+let usageRefreshQueued = false
+
 const useStore = create((set, get) => ({
   // ── Active view ────────────────────────────────────────────────────────────
   // Restore the last view; new installs start with project work.
@@ -111,22 +114,36 @@ const useStore = create((set, get) => ({
 
   // ── Live token usage (TICKET-0022, shared TICKET-0023) ────────────────────
   // Whole-machine subscription quota from tokscale -- not scoped to the
-  // active ACE project. Polled once here (started from App.jsx) rather than
-  // per-view, so the Agents tab's compact UsageBar and the Token Usage tab's
-  // full UsageCard pair both read the same data without each spawning their
-  // own tokscale subprocess call on its own timer.
+  // active ACE project. Agent activity and manual refresh share one request;
+  // activity during a fetch queues one follow-up so the final usage isn't lost.
   liveUsage: {
     claude: { plan: null, quota: [], models: [], projects: [], totalTokens: 0, totalCost: 0 },
     codex: { plan: null, quota: [], models: [], projects: [], totalTokens: 0, totalCost: 0 },
   },
   liveUsageLoading: true,
+  // Refreshes keep showing the last known usage; only the first load has
+  // nothing to show yet.
+  liveUsageLoaded: false,
   liveUsageError: null,
-  loadLiveUsage: async () => {
-    try {
-      const usage = await window.ace.getLiveTokenUsage()
-      set({ liveUsage: usage, liveUsageError: null })
-    } catch (error) { set({ liveUsageError: error.message }) }
-    finally { set({ liveUsageLoading: false }) }
+  loadLiveUsage: () => {
+    if (usageInFlight) {
+      usageRefreshQueued = true
+      return usageInFlight
+    }
+    set({ liveUsageLoading: true })
+    usageInFlight = (async () => {
+      do {
+        usageRefreshQueued = false
+        try {
+          const usage = await window.ace.getLiveTokenUsage()
+          set({ liveUsage: usage, liveUsageError: null })
+        } catch (error) { set({ liveUsageError: error.message }) }
+      } while (usageRefreshQueued)
+    })().finally(() => {
+      usageInFlight = null
+      set({ liveUsageLoading: false, liveUsageLoaded: true })
+    })
+    return usageInFlight
   },
 
   // ── Settings ───────────────────────────────────────────────────────────────

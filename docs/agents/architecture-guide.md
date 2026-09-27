@@ -23,11 +23,23 @@ React renderer
   test updates.
 - A terminal change can involve `AgentTerminal.jsx`, `TerminalService`, and
   `ptyHost.js`; preserve session cleanup and host-restart behavior.
+- Windows prerequisite checks merge the saved machine/user PATH into main's
+  environment. Node installation verifies both node and npm without relaunching.
+  The main-to-PTY-host `spawn` message carries main's current `path` for new
+  terminals; the renderer cannot supply this value. Existing terminals keep
+  their environment.
 - Database changes require a forward migration because user data persists in
   Electron's `userData` directory.
 - File operations must continue to enforce the selected project root.
 
 ## Terminal clipboard and link contracts
+
+Live usage loads once at startup, then refreshes three seconds after terminal
+output or agent activity settles, and on explicit Refresh. There is no idle
+usage interval. Requests are serialized with one pending follow-up so activity
+during a fetch is retained. Usage from sessions outside ACE requires manual
+Refresh. Tokscale runs through its native binary only; missing native packages
+produce an error rather than falling back to the console-flashing JS launcher.
 
 - `clipboard:saveImage` receives `{ projectPath, imageBytes? }`. Paste events
   supply encoded image bytes (Uint8Array, up to 32 MB); main validates and decodes

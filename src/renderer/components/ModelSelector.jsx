@@ -15,7 +15,7 @@ export default function ModelSelector({ groups, value, onChange, className = '' 
         <optgroup key={group.label} label={group.label}>
           {group.options.map((model) => (
             <option key={model.id} value={model.id} title={model.description}>
-              {model.label} — {model.description}
+              {model.description ? `${model.label} — ${model.description}` : model.label}
             </option>
           ))}
         </optgroup>

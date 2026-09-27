@@ -26,8 +26,8 @@ const path = require('path')
 // require.resolve returns the binary path itself.
 
 // Maps the current platform+arch to tokscale's native binary package. Exported
-// for unit testing. Returns null for a platform/arch tokscale doesn't ship, so
-// runTokscale can fall back to the JS shim. Linux resolves the glibc (gnu)
+// for unit testing. Returns null for a platform/arch tokscale doesn't ship.
+// Linux resolves the glibc (gnu)
 // build: ACE packages and runs against glibc (electron-builder default, CI
 // ubuntu); the musl variants aren't bundled.
 function nativePackageFor(platform, arch) {
@@ -62,26 +62,12 @@ function runTokscale(args, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const nativeBinary = resolveNativeBinary()
 
-    let child
-    if (nativeBinary) {
-      child = spawn(nativeBinary, args, { windowsHide: true })
-    } else {
-      // Fallback for a platform/arch with no native package, or a dev machine
-      // that skipped optional deps: go through the JS shim via the
-      // ELECTRON_RUN_AS_NODE trick. (Inside a packaged app this is the broken
-      // path above, but we only reach it when there's no native binary to run.)
-      let binPath
-      try {
-        binPath = require.resolve('tokscale/bin.js')
-      } catch (error) {
-        reject(error)
-        return
-      }
-      child = spawn(process.execPath, [binPath, ...args], {
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-        windowsHide: true,
-      })
+    if (!nativeBinary) {
+      reject(new Error('The native usage tool is missing. Reinstall ACE (or install optional dependencies in development).'))
+      return
     }
+    // Never fall back to the vendor shim: its nested spawn can flash a console.
+    const child = spawn(nativeBinary, args, { windowsHide: true })
 
     let stdout = ''
     let stderr = ''

@@ -49,4 +49,29 @@ function ensureShellPath({ env = process.env, platform = process.platform } = {}
   return true
 }
 
-module.exports = { ensureShellPath, loginShellPath, isOnPath }
+// A restarted child still inherits its parent's stale PATH. Read the saved
+// Windows values directly and retain process-only entries such as MinGit.
+function refreshWindowsPath({ env = process.env, platform = process.platform } = {}) {
+  if (platform !== 'win32') return false
+  let result
+  try {
+    result = child_process.spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Environment]::GetEnvironmentVariable('Path', 'Machine'); [Environment]::GetEnvironmentVariable('Path', 'User')",
+    ], { windowsHide: true, timeout: 5000, encoding: 'utf8' })
+  } catch (_) { return false }
+  if (result.error || result.status !== 0 || !result.stdout?.trim()) return false
+  const key = Object.keys(env).find(key => key.toLowerCase() === 'path') || 'PATH'
+  const entries = [env[key] || '', result.stdout.trim().replace(/\r?\n/g, ';')].join(';').split(';').filter(Boolean)
+  const seen = new Set()
+  const updated = entries.filter(entry => {
+    const normalized = entry.toLowerCase()
+    if (seen.has(normalized)) return false
+    seen.add(normalized)
+    return true
+  }).join(';')
+  const changed = updated !== env[key]
+  env[key] = updated
+  return changed
+}
+
+module.exports = { ensureShellPath, loginShellPath, isOnPath, refreshWindowsPath }

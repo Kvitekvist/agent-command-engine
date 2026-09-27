@@ -39,11 +39,7 @@ export default function PrereqChecklist({ allowUninstall = false, autoInstall = 
   }
 
   async function installNode() {
-    const result = await runOperation(nodeStatus, setNodeStatus, 'Node.js', () => window.ace.prereqs.installNode())
-    // This process's PATH can't pick up the new npm without a restart. Only
-    // SetupView (autoInstall) relaunches for you -- Settings' inline re-run
-    // may have agent terminals open, so it keeps the manual "restart ACE" copy.
-    if (result?.ok && autoInstall) { window.ace.prereqs.relaunch(); return }
+    await runOperation(nodeStatus, setNodeStatus, 'Node.js', () => window.ace.prereqs.installNode())
     check()
   }
 

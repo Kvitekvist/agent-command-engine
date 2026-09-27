@@ -53,8 +53,28 @@ export const MODEL_GROUPS_BY_PROVIDER = {
   ],
 }
 
-export function getAllModelIds(provider) {
-  return MODEL_GROUPS_BY_PROVIDER[provider]?.flatMap(g => g.options.map(o => o.id)) ?? []
+// Models read from the CLIs' own caches (models:discover) that this static
+// catalog doesn't know yet go in a leading "New from CLI" group.
+export function withDiscovered(groups, discovered) {
+  const known = new Set((groups || []).flatMap(g => g.options.map(o => o.id)))
+  const extra = (discovered || []).filter(o => !known.has(o.id))
+  return extra.length ? [{ label: 'New from CLI', options: extra }, ...(groups || [])] : groups || []
+}
+
+export function getModelGroups(provider, discovered) {
+  return withDiscovered(MODEL_GROUPS_BY_PROVIDER[provider], discovered?.[provider])
+}
+
+export function getAllModelIds(provider, discovered) {
+  return getModelGroups(provider, discovered).flatMap(g => g.options.map(o => o.id))
+}
+
+// Per provider, the dropdown options `next` adds that `prev` didn't have.
+export function newModels(prev, next) {
+  return Object.fromEntries(Object.keys(MODEL_GROUPS_BY_PROVIDER).map(provider => {
+    const before = new Set(getAllModelIds(provider, prev))
+    return [provider, getModelGroups(provider, next).flatMap(g => g.options).filter(o => !before.has(o.id))]
+  }))
 }
 
 export function filterGroupsByEnabled(groups, enabledSet) {

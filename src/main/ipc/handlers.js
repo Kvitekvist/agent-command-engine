@@ -10,6 +10,7 @@ const { resolveWithinRoot } = require('../services/ProjectPath')
 const { notesOperation } = require('../services/NotesService')
 const { detectBuild } = require('../services/ProjectBuild')
 const { providerExecutable } = require('../services/ProviderExecutable')
+const { refreshAndDiscoverModels } = require('../services/ModelDiscovery')
 
 // TICKET-0075: the renderer hands main a filesystem path for every fs / git /
 // build / screenshot / agent-spawn call. Trusting that string verbatim lets a
@@ -511,6 +512,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     return { ok: true }
   })
 
+  // Have each CLI silently refresh its own model cache, then re-read both
+  // (ModelDiscovery.js). The renderer merges the result into the catalog and
+  // saves it as the discovered_models setting.
+  handle('models:discover', () => refreshAndDiscoverModels())
+
   // ── File explorer / editor (TICKET-0021) ────────────────────────────────────
   // `root` comes from the renderer but is only honoured if it matches one of
   // main's registered project paths (TICKET-0075); FileService then refuses
@@ -683,17 +689,14 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // agent launch with no useful guidance. Checks presence/version of node,
   // npm, and both CLIs, and can install the CLIs via their official npm
   // packages -- confirmed against this project's own working install via
-  // `npm ls -g` (@anthropic-ai/claude-code, @openai/codex). Deliberately does
-  // NOT attempt to install Node.js itself (see prereqs:openNodeDownload) --
-  // that's a much bigger system change than two CLI packages, so the setup
-  // UI links out and lets the user handle it, the same as any other
-  // dev-tool prerequisite.
+  // `npm ls -g`. Windows setup also installs Node.js through winget.
   const PREREQ_PACKAGES = {
     claude: '@anthropic-ai/claude-code',
     codex: '@openai/codex',
   }
 
-  handle('prereqs:check', async () => {
+  async function checkPrereqs(names) {
+    require('../services/ShellPath').refreshWindowsPath()
     const { spawn } = require('child_process')
     // node/git resolve to real .exe's on Windows (shell:false, same reasoning
     // as git:pull above); npm/claude/codex are .cmd shims there and
@@ -707,7 +710,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
       { name: 'codex', cmd: 'codex', args: ['--version'], shell: process.platform === 'win32' },
     ]
     const results = {}
-    await Promise.all(checks.map(({ name, cmd, args, shell: useShell }) => new Promise((resolve) => {
+    await Promise.all(checks.filter(check => !names || names.includes(check.name)).map(({ name, cmd, args, shell: useShell }) => new Promise((resolve) => {
       let stdout = ''
       const proc = spawn(cmd, args, { windowsHide: true, shell: useShell })
       let settled = false
@@ -731,7 +734,8 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
       })
     })))
     return results
-  })
+  }
+  handle('prereqs:check', () => checkPrereqs())
 
   handle('prereqs:install', async (_, name) => {
     const pkg = PREREQ_PACKAGES[name]
@@ -764,52 +768,33 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // so a clean PC isn't stuck: the CLI install buttons need npm and stay
   // disabled until it exists. Other platforms keep linking out
   // (openNodeDownload) -- brew/apt/nvm isn't ours to choose. winget runs its
-  // own UAC prompt; a machine-scope Node install needs it. PATH in this
-  // already-running process won't pick up the new npm, so the result asks for
-  // an ACE restart rather than trying to chain the CLI installs here.
+  // own UAC prompt; verify the refreshed PATH before continuing setup.
   handle('prereqs:installNode', async () => {
     if (process.platform !== 'win32') return { ok: false, error: 'unsupported' }
     const { spawn } = require('child_process')
     return new Promise((resolve) => {
       const proc = spawn('winget', [
-        'install', '--id', 'OpenJS.NodeJS.LTS', '--silent',
+        'install', '--id', 'OpenJS.NodeJS.LTS', '--exact', '--source', 'winget', '--silent',
         '--accept-package-agreements', '--accept-source-agreements',
       ], { windowsHide: true, shell: true })
       let out = ''
       proc.stdout?.on('data', (d) => { out += d })
       proc.stderr?.on('data', (d) => { out += d })
       proc.on('error', (err) => resolve({ ok: false, error: err.message }))
-      proc.on('close', (code) => {
-        // winget exits non-zero here when Node is already installed and there's
-        // no newer version to upgrade to -- a benign outcome (Node IS present),
-        // not a failure. Misreading it as an error left prereqs:check's stale
-        // PATH unexplained and skipped the relaunch that would actually detect it.
-        const alreadyInstalled = /No available upgrade found|already installed/i.test(out)
-        if (code === 0 || alreadyInstalled) {
-          resolve({
-            ok: true,
-            message: alreadyInstalled
-              ? 'Node.js is already installed — restart ACE to pick it up on PATH'
-              : 'Node.js installed — restart ACE, then install the CLIs',
-          })
+      proc.on('close', async (code) => {
+        // Installer text alone is not proof that node and npm can run.
+        const detected = await checkPrereqs(['node', 'npm'])
+        if (detected.node.present && detected.npm.present) {
+          resolve({ ok: true, message: 'Node.js and npm are ready' })
           return
         }
         const tail = out.split('\n').filter(Boolean).slice(-5).join('\n')
         const hint = /No package found|not recognized|APPINSTALLER/i.test(out)
           ? '\n\nwinget (App Installer) may be missing — install Node from https://nodejs.org instead.'
           : ''
-        resolve({ ok: false, error: (tail || `winget exited with code ${code}`) + hint })
+        resolve({ ok: false, error: `Node.js/npm are still unavailable after setup. ${tail || `winget exited with code ${code}`}. Use Download Node.js, then Recheck or retry the install.` + hint })
       })
     })
-  })
-
-  // SetupView only: after a Node install, this process's PATH is stale (see
-  // above), so relaunch instead of asking the user to do it. Not wired into
-  // the Settings re-run path -- that can run with agent terminals already
-  // open, and killing those without asking would be destructive.
-  handle('prereqs:relaunch', () => {
-    app.relaunch()
-    app.exit(0)
   })
 
   // Symmetrical opposite of prereqs:install, for testing a clean setup

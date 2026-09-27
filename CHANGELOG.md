@@ -2,6 +2,43 @@
 
 ## [Unreleased]
 
+## [0.1.39] - 2026-09-27
+
+### Added
+
+- 🔄 Models button in the launch bar. It has the installed Claude and Codex
+  CLIs refresh their own model lists in the background (no model call),
+  adds any model ACE doesn't know yet to the dropdown under "New from CLI",
+  and shows a popup listing what was added. Picks up Claude Opus 5.5 and
+  GPT-6 Sol/Luna without an ACE update. Works the same on macOS (TICKET-0156).
+
+- Hyper-V install-test runner for a signed ACE AppX, restoring the selected
+  clean Windows VM checkpoint before every run,
+  with first-run setup checks, restart detection and saved reports (TICKET-0086).
+
+### Fixed
+
+- AppX install: `npm install -g` from inside the package was redirected into
+  its private AppData copy, so agent terminals couldn't find the Claude/Codex
+  CLIs on a clean machine. The package now writes to the real AppData, which
+  raises the minimum Windows version to 10 2004. CLIs installed by an earlier
+  AppX build need reinstalling from Setup (TICKET-0157).
+
+- Windows setup no longer stops at "Please specify one of them using the
+  --source option" when installing Node.js on a fresh machine (TICKET-0158).
+
+- The usage bar no longer disappears while usage refreshes, which made the
+  whole window jump. The last known values stay visible until new ones
+  arrive (TICKET-0159).
+
+- Usage refreshes after agent activity settles instead of polling every minute
+  while ACE is idle. Concurrent refreshes are combined, and the usage tool no
+  longer falls back to a launcher that can flash console windows (TICKET-0155).
+
+- Windows setup refreshes PATH and verifies Node.js/npm after installation
+  instead of repeatedly restarting ACE on a fresh machine. New agent terminals
+  receive the updated PATH (TICKET-0148).
+
 ## [0.1.35] - 2026-09-18
 
 ### Added

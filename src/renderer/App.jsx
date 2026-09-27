@@ -12,13 +12,12 @@ import ContextMenu from './components/ContextMenu'
 import Modal from './components/Modal'
 import NotesPanel from './components/NotesPanel'
 import ProjectSkillsPanel from './components/ProjectSkillsPanel'
+import { watchUsageActivity } from './utils/usageActivity.mjs'
 
 // TICKET-0022/0023: live subscription quota is whole-machine data (not
 // scoped to whichever ACE project is active), and both the Agents tab's
 // compact UsageBar and the Token Usage tab's full UsageCard pair read the
-// same store slice -- polled once here so they never spawn two independent
-// tokscale subprocess calls on their own timers.
-const LIVE_USAGE_POLL_MS = 60_000
+// same store slice, refreshed on agent activity rather than an idle timer.
 
 export default function App() {
   const { activeView, addAgent, updateAgentStatus, loadLiveUsage, setActiveView } = useStore()
@@ -116,11 +115,7 @@ export default function App() {
     return items
   }
 
-  useEffect(() => {
-    loadLiveUsage()
-    const interval = setInterval(loadLiveUsage, LIVE_USAGE_POLL_MS)
-    return () => clearInterval(interval)
-  }, [])
+  useEffect(() => watchUsageActivity(window.ace, loadLiveUsage), [loadLiveUsage])
 
   // TICKET-0119: honour the application menu's "Settings…" (Ctrl/Cmd+,) item.
   useEffect(() => window.ace.onMenuNavigate(setActiveView), [])

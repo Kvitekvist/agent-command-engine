@@ -39,6 +39,16 @@ function buildCodexArgs(permissionMode) {
   return ['--sandbox', 'read-only', '--ask-for-approval', 'never']
 }
 
+// Windows: Codex's "elevated" sandbox runs every shell command as a separate
+// sandbox user via a service, and each one opens its own visible console
+// window; a `notify` hook (the Codex desktop app writes one into
+// ~/.codex/config.toml) opens more on every turn end. ACE's agents live in an
+// embedded terminal, so use the unelevated sandbox, which keeps commands in
+// that terminal, and drop notify for these sessions only.
+function codexPlatformArgs(platform) {
+  return platform === 'win32' ? ['-c', 'windows.sandbox=unelevated', '-c', 'notify=[]'] : []
+}
+
 export function quoteArg(arg, platform) {
   if (typeof arg !== 'string' || /[\r\n\0]/.test(arg)) throw new Error('Invalid launch argument')
   if (/^[A-Za-z0-9_.-]+$/.test(arg)) return arg
@@ -59,7 +69,7 @@ export function quoteArg(arg, platform) {
 // Claude settings; Codex has no equivalent, so it's skipped there.
 export function buildLaunchCommand({ provider, model, permissionMode }, sessionId, settingsPath, platform = process.platform, executable = [provider]) {
   const args = provider === 'codex'
-    ? [...executable, '--model', model, ...buildCodexArgs(permissionMode)]
+    ? [...executable, '--model', model, ...buildCodexArgs(permissionMode), ...codexPlatformArgs(platform)]
     : [
         ...executable, '--model', model,
         ...(sessionId ? ['--session-id', sessionId] : []),

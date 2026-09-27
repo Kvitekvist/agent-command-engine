@@ -54,7 +54,7 @@ if ((Test-Cmd node) -and (Test-Cmd npm)) {
     throw "winget not found. Install 'App Installer' from the Microsoft Store, or Node from https://nodejs.org, then re-run."
   }
   Write-Host "[1/2] Installing Node.js LTS via winget..." -ForegroundColor Cyan
-  winget install --id OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements
+  winget install --id OpenJS.NodeJS.LTS --exact --source winget --silent --accept-package-agreements --accept-source-agreements
   if ($LASTEXITCODE -ne 0) { throw "winget install of Node failed (exit $LASTEXITCODE)." }
   Update-SessionPath
   if (-not (Test-Cmd npm)) {

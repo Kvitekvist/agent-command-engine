@@ -15,13 +15,17 @@ test('title generation uses the economical model for each provider', () => {
       '--allowedTools', 'Read', 'Edit', 'Write', 'Glob', 'Grep',
     ],
   })
-  assert.deepEqual(buildTitleCommand('codex'), {
+  assert.deepEqual(buildTitleCommand('codex', 'linux'), {
     command: 'codex',
     args: [
       'exec', '--model', 'gpt-5.6-luna',
       '--sandbox', 'read-only', '--ask-for-approval', 'never',
     ],
   })
+  // Windows: no console window per sandboxed command or per turn-end notify.
+  assert.deepEqual(buildTitleCommand('codex', 'win32').args.slice(-4), [
+    '-c', 'windows.sandbox=unelevated', '-c', 'notify=[]',
+  ])
 })
 
 test('permission modes are conservative by default', () => {

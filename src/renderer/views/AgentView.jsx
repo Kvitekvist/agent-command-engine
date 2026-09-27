@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import useStore from '../store/useStore'
 import ModelSelector from '../components/ModelSelector'
+import Modal from '../components/Modal'
 import AgentTerminal from '../components/AgentTerminal'
 import UsageBar from '../components/UsageBar'
 import ProjectSkillsPanel from '../components/ProjectSkillsPanel'
@@ -9,9 +10,9 @@ import OperationFeedback from '../components/OperationFeedback'
 import { generateAgentName } from '../utils/agentNames'
 import {
   DEFAULT_MODEL_BY_PROVIDER,
-  MODEL_GROUPS_BY_PROVIDER,
-  getAllModelIds,
+  getModelGroups,
   filterGroupsByEnabled,
+  newModels,
 } from '../utils/modelCatalog'
 
 // TICKET-0039: the Safe/Guarded/Auto selector was removed from the launch
@@ -46,8 +47,34 @@ export default function AgentView() {
   useEffect(() => { setFocusedAgent(null) }, [activeProject?.id])
   const settingsRevision = useStore(s => s.settingsRevision)
   const launchSelectionEdited = useRef(false)
-  const [enabledClaude, setEnabledClaude] = useState(() => new Set(getAllModelIds('claude')))
-  const [enabledCodex, setEnabledCodex]   = useState(() => new Set(getAllModelIds('codex')))
+  // null = no saved Settings → Models subset, so show every model including
+  // ones discovered later. A Set of the static ids here hid discovered models.
+  const [enabledClaude, setEnabledClaude] = useState(null)
+  const [enabledCodex, setEnabledCodex]   = useState(null)
+  const [discovered, setDiscovered]       = useState(null)
+  const [discovering, setDiscovering]     = useState(false)
+  const [refreshResult, setRefreshResult] = useState(null)
+  async function refreshModels() {
+    setDiscovering(true)
+    try {
+      const next = await window.ace.discoverModels()
+      const added = newModels(discovered, next)
+      await window.ace.setSetting('discovered_models', JSON.stringify(next))
+      // A saved Settings → Models subset would hide the new ids; tick them.
+      for (const provider of ['claude', 'codex']) {
+        const key = `enabled_models_${provider}`
+        const saved = await window.ace.getSetting(key)
+        if (saved && added[provider].length) {
+          await window.ace.setSetting(key, JSON.stringify([...new Set([...JSON.parse(saved), ...added[provider].map(m => m.id)])]))
+        }
+      }
+      setDiscovered(next)
+      setRefreshResult(added)
+      useStore.getState().settingsUpdated()
+    } catch (error) {
+      setLaunchError(`Couldn't refresh models: ${error.message}`)
+    } finally { setDiscovering(false) }
+  }
 
   // Agent card layout: '2' is the default responsive grid (1 col, 2 cols at
   // xl); '1' forces a single full-width column so one card gets the whole
@@ -67,14 +94,16 @@ export default function AgentView() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [savedProvider, savedModel, ec, ex] = await Promise.all([
+      const [savedProvider, savedModel, ec, ex, dm] = await Promise.all([
         window.ace.getSetting('default_provider'),
         window.ace.getSetting('default_model'),
         window.ace.getSetting('enabled_models_claude'),
         window.ace.getSetting('enabled_models_codex'),
+        window.ace.getSetting('discovered_models'),
         loadSoundsMuted(),
       ])
       if (cancelled) return
+      if (dm) setDiscovered(JSON.parse(dm))
       if (ec) setEnabledClaude(new Set(JSON.parse(ec)))
       if (ex) setEnabledCodex(new Set(JSON.parse(ex)))
       let nextProvider = ['claude', 'codex'].includes(savedProvider)
@@ -199,13 +228,13 @@ export default function AgentView() {
   }, [activeProject?.id])
 
   const modelGroups = filterGroupsByEnabled(
-        MODEL_GROUPS_BY_PROVIDER[provider],
+        getModelGroups(provider, discovered),
         provider === 'claude' ? enabledClaude : enabledCodex
       )
   useEffect(() => {
     const options = (modelGroups || []).flatMap(group => group.options)
     if (!options.some(option => option.id === model)) setModel(options[0]?.id || '')
-  }, [provider, enabledClaude, enabledCodex, model])
+  }, [provider, enabledClaude, enabledCodex, discovered, model])
 
   // One return, one tree shape, always. Removing a project (active or not)
   // used to flip AgentView between two structurally different `return`s;
@@ -219,6 +248,26 @@ export default function AgentView() {
   return (
     <div className="flex flex-col h-full">
       <UsageBar />
+      {refreshResult && (
+        <Modal title="Model refresh" onClose={() => setRefreshResult(null)}>
+          {refreshResult.claude.length + refreshResult.codex.length === 0 ? (
+            <p className="text-sm">No new models found.</p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm">Added to the model dropdown:</p>
+              {['claude', 'codex'].filter(p => refreshResult[p].length).map(p => (
+                <div key={p}>
+                  <div className="text-xs text-muted mb-1">{p === 'claude' ? '🟣 Claude' : '🟢 Codex'}</div>
+                  <ul className="text-sm space-y-0.5">
+                    {refreshResult[p].map(m => <li key={m.id}>{m.label} <span className="text-xs text-muted">{m.id}</span></li>)}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+          <button className="btn-primary text-xs mt-4" onClick={() => setRefreshResult(null)}>OK</button>
+        </Modal>
+      )}
       {activeProject && (
         <div className="flex items-center gap-3 px-5 py-3 border-b border-border bg-panel shrink-0 flex-wrap">
           <div className="text-sm font-semibold text-gray-100 mr-2 truncate max-w-xs">{activeProject.name}</div>
@@ -238,6 +287,10 @@ export default function AgentView() {
             ))}
           </div>
           <ModelSelector groups={modelGroups} value={model} onChange={value => { launchSelectionEdited.current = true; setModel(value) }} className="w-72" />
+          <button className="btn-ghost text-xs" disabled={discovering} onClick={refreshModels}
+            title="Check the installed Claude and Codex CLIs for new models and add them to this dropdown">
+            {discovering ? '⏳ Checking…' : '🔄 Models'}
+          </button>
           <button
             onClick={toggleSoundsMuted}
             className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"

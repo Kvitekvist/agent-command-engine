@@ -16,10 +16,8 @@ const PROVIDER_COLOR = { claude: '#d97757', codex: '#3b82f6' }
 
 export default function TokenView() {
   // liveUsage/liveUsageLoading/loadLiveUsage (TICKET-0022, shared TICKET-0023):
-  // polled once from App.jsx so this tab and the Agents tab's compact
-  // UsageBar read the same data instead of each spawning their own
-  // tokscale subprocess call on its own timer.
-  const { activeProject, tokenStats, setTokenStats, liveUsage, liveUsageLoading, loadLiveUsage } = useStore()
+  // refreshed on agent activity from App.jsx, shared with the Agents usage bar.
+  const { activeProject, tokenStats, setTokenStats, liveUsage, liveUsageLoaded, loadLiveUsage } = useStore()
   const [loading, setLoading] = useState(false)
   const liveUsageError = useStore(s => s.liveUsageError)
   const requestId = useRef(0)
@@ -119,7 +117,7 @@ export default function TokenView() {
         <h2 className="text-base font-semibold">Usage</h2>
         <button onClick={loadLiveUsage} className="btn-ghost text-xs">↻ Refresh</button>
       </div>
-      {liveUsageLoading ? (
+      {!liveUsageLoaded ? (
         <div className="text-xs text-muted">Loading live usage…</div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

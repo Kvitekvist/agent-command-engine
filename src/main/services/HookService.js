@@ -49,7 +49,7 @@ const os = require('os')
 const [, , audioFile, muteMarker] = process.argv
 if (muteMarker && existsSync(muteMarker)) process.exit(0)
 if (!audioFile || !existsSync(audioFile)) process.exit(0)
-const opt = { stdio: 'ignore', timeout: 15000 }
+const opt = { stdio: 'ignore', timeout: 15000, windowsHide: true }
 try {
   if (os.platform() === 'darwin') {
     spawnSync('afplay', [audioFile], opt)

@@ -88,9 +88,47 @@ test('nativePackageFor maps every shipped platform/arch to its tokscale binary (
   assert.equal(nativePackageFor('win32', 'x64'), '@tokscale/cli-win32-x64-msvc')
   assert.equal(nativePackageFor('linux', 'arm64'), '@tokscale/cli-linux-arm64-gnu')
   assert.equal(nativePackageFor('linux', 'x64'), '@tokscale/cli-linux-x64-gnu')
-  // An unshipped platform falls back to the JS shim rather than spawning junk.
+  // An unshipped platform has no supported native executable.
   assert.equal(nativePackageFor('aix', 'ppc64'), null)
   assert.equal(nativePackageFor('freebsd', 'x64'), null)
+})
+
+test('usage launches only the hidden native executable and fails without spawning a wrapper when missing', async () => {
+  const fs = require('node:fs')
+  const path = require('node:path')
+  const vm = require('node:vm')
+  const { EventEmitter } = require('node:events')
+  const source = fs.readFileSync(path.join(__dirname, '../main/services/TokscaleService.js'), 'utf8')
+  for (const missing of [false, true]) {
+    const calls = []
+    const mockRequire = name => name === 'child_process' ? { spawn: (command, args, options) => {
+      calls.push({ command, args, options })
+      const child = new EventEmitter()
+      child.stdout = new EventEmitter()
+      child.stderr = new EventEmitter()
+      queueMicrotask(() => { child.stdout.emit('data', '[]'); child.emit('close', 0) })
+      return child
+    } } : require(name)
+    const binary = path.join('native', 'tokscale.exe')
+    mockRequire.resolve = name => {
+      assert.equal(name, '@tokscale/cli-win32-x64-msvc')
+      if (missing) throw new Error('package missing')
+      return binary
+    }
+    const context = { require: mockRequire, module: { exports: {} }, process: { platform: 'win32', arch: 'x64' }, setTimeout, clearTimeout }
+    vm.runInNewContext(source, context)
+    const result = context.module.exports.TokscaleService.getQuota()
+    if (missing) {
+      await assert.rejects(result, /native usage tool is missing/)
+      assert.equal(calls.length, 0)
+    } else {
+      assert.equal((await result).length, 0)
+      assert.equal(calls.length, 1)
+      assert.equal(calls[0].command, binary)
+      assert.equal(calls[0].options.windowsHide, true)
+      assert.equal(calls[0].options.shell, undefined)
+    }
+  }
 })
 
 test('redirectAsarToUnpacked rewrites packed paths and no-ops elsewhere (TICKET-0100)', () => {

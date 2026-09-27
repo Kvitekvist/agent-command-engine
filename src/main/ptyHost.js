@@ -181,7 +181,7 @@ function describeSpawnError(message, platform = process.platform) {
 // afterward via setAutoAnswer(), through the per-agent 🛡️ Auto-approve
 // pill. Silently auto-confirming every permission prompt shouldn't be the
 // default for a freshly launched agent.
-function spawnSession({ id, shell, cwd, cols, rows }) {
+function spawnSession({ id, shell, cwd, cols, rows, path: currentPath }) {
   if (sessions.has(id)) {
     return { success: false, error: `Session ${id} already exists` }
   }
@@ -189,6 +189,8 @@ function spawnSession({ id, shell, cwd, cols, rows }) {
     return { success: false, error: 'node-pty is not available' }
   }
   try {
+    // The host predates first-run installs; new terminals need main's current PATH.
+    if (typeof currentPath === 'string') process.env.PATH = currentPath
     const proc = pty.spawn(shell || defaultShell(), [], {
       name: 'xterm-color',
       cols: cols > 0 ? cols : 80,

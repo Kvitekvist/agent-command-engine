@@ -18,6 +18,13 @@
 // MinVersion / MaxVersionTested = 10.0.14316.0 (a 2016 build) with no config
 // hook. Store certification wants a real, recent tested range, so after the
 // pack we unpack the .appx, rewrite that one line, and repack.
+//
+// The same pass turns off AppData/HKCU write virtualization. ACE installs the
+// Claude/Codex CLIs with `npm install -g`, which writes %APPDATA%\npm. With
+// virtualization on, those writes land in the package's private LocalCache:
+// ACE sees claude.exe, but the agent's PowerShell (and every other app)
+// doesn't -- "claude.exe is not recognized" on a clean machine. desktop6
+// needs Windows 10 2004, hence MIN_VERSION.
 
 const { execFileSync } = require('child_process')
 const path = require('path')
@@ -42,7 +49,7 @@ if (!fs.existsSync(appx)) {
 }
 
 // --- post-process: fix the TargetDeviceFamily version range -------------
-const MIN_VERSION = '10.0.17763.0' // Windows 10 1809 -- Electron's real floor
+const MIN_VERSION = '10.0.19041.0' // Windows 10 2004 -- floor for desktop6 (below)
 const MAX_TESTED = '10.0.19041.0' // Windows 10 2004
 
 function findMakeAppx() {
@@ -73,8 +80,15 @@ const patched = fs
   .readFileSync(manifestPath, 'utf8')
   .replace(/MinVersion="10\.0\.14316\.0"/, `MinVersion="${MIN_VERSION}"`)
   .replace(/MaxVersionTested="10\.0\.14316\.0"/, `MaxVersionTested="${MAX_TESTED}"`)
+  .replace(/(xmlns:rescap="[^"]+")/, '$1\n   xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"\n   IgnorableNamespaces="desktop6"')
+  .replace(/(<\/Logo>)/, '$1\n    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>\n    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>')
+  .replace(/(<rescap:Capability Name="runFullTrust"\/>)/, '$1\n  <rescap:Capability Name="unvirtualizedResources"/>')
 if (!patched.includes(`MaxVersionTested="${MAX_TESTED}"`)) {
   console.error('\nManifest patch did not apply -- electron-builder changed its TargetDeviceFamily default?')
+  process.exit(1)
+}
+if (!patched.includes('unvirtualizedResources') || !patched.includes('<desktop6:FileSystemWriteVirtualization>')) {
+  console.error('\nVirtualization patch did not apply -- electron-builder changed its manifest template?')
   process.exit(1)
 }
 fs.writeFileSync(manifestPath, patched)

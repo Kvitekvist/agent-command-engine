@@ -6,7 +6,7 @@ import codexIcon from '../assets/icons/codex.svg?raw'
 
 // TICKET-0023: compact second presentation of the same live quota data
 // UsageCard.jsx shows in full on the Token Usage tab -- same tokscale-backed
-// `liveUsage` store slice (polled once, from App.jsx), just the primary
+// `liveUsage` store slice (updated on agent activity), just the primary
 // quota metric (Claude: 5-hour rolling, Codex: Weekly -- whichever
 // getLiveTokenUsage() returns first) rendered as one slim row per provider
 // instead of a whole card.
@@ -18,7 +18,7 @@ const PROVIDERS = [
 const STORAGE_KEY = 'ace-usage-show-tokens'
 
 export default function UsageBar() {
-  const { liveUsage, liveUsageLoading } = useStore()
+  const { liveUsage, liveUsageLoaded } = useStore()
   const [showRemaining, setShowRemaining] = useState(() => {
     try { return localStorage.getItem(STORAGE_KEY) === 'true' } catch { return false }
   })
@@ -29,18 +29,18 @@ export default function UsageBar() {
     try { localStorage.setItem(STORAGE_KEY, String(next)) } catch {}
   }
 
-  if (liveUsageLoading) return null
-
+  // Always rendered, even mid-refresh: unmounting it while a fetch ran made
+  // the whole window jump up and down on every usage update.
   return (
-    <div className="flex items-center gap-6 px-5 py-2 border-b border-border bg-panel text-xs flex-wrap">
+    <div className="flex items-center gap-6 px-5 py-2 min-h-[2.25rem] border-b border-border bg-panel text-xs flex-wrap">
       {PROVIDERS.map((p) => (
-        <ProviderUsage key={p.key} {...p} data={liveUsage?.[p.key]} showRemaining={showRemaining} onToggle={toggle} />
+        <ProviderUsage key={p.key} {...p} data={liveUsage?.[p.key]} loaded={liveUsageLoaded} showRemaining={showRemaining} onToggle={toggle} />
       ))}
     </div>
   )
 }
 
-function ProviderUsage({ name, icon, color, data, showRemaining, onToggle }) {
+function ProviderUsage({ name, icon, color, data, loaded, showRemaining, onToggle }) {
   const primary = data?.quota?.[0]
   const used = primary ? Math.max(0, Math.min(100, Number(primary.used_percent) || 0)) : null
   const available = primary
@@ -64,7 +64,9 @@ function ProviderUsage({ name, icon, color, data, showRemaining, onToggle }) {
         title="Click to toggle used/remaining"
       />
       <span className="font-medium text-gray-300 shrink-0">{name}</span>
-      {data?.quotaError ? (
+      {!loaded ? (
+        <span className="text-muted">loading…</span>
+      ) : data?.quotaError ? (
         <span className="text-muted">no quota data</span>
       ) : isUnlimited ? (
         <>
