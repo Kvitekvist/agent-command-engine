@@ -66,6 +66,7 @@ try {
 // anything spawns a child process.
 try {
   require('./services/ShellPath').ensureShellPath()
+  require('./services/ShellPath').ensureAceNpmOnPath()
 } catch (err) {
   console.error('ShellPath fallback failed:', err)
 }

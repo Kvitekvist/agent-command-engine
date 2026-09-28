@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.1.40] - 2026-09-27
+
+### Changed
+
+- Windows: Setup installs the Claude and Codex CLIs into
+  `%USERPROFILE%\.ace\npm` and adds that folder to your PATH, instead of npm's
+  global folder in AppData. The Store build no longer needs the restricted
+  `unvirtualizedResources` capability, and the minimum Windows version is back
+  to Windows 10 1809. CLIs you installed yourself are still found through
+  PATH (TICKET-0160).
+
 ## [0.1.39] - 2026-09-27
 
 ### Added

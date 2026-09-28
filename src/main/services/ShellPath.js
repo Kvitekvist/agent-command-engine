@@ -74,4 +74,47 @@ function refreshWindowsPath({ env = process.env, platform = process.platform } =
   return changed
 }
 
-module.exports = { ensureShellPath, loginShellPath, isOnPath, refreshWindowsPath }
+// TICKET-0160: on Windows ACE installs the Claude/Codex CLIs into its own npm
+// prefix instead of npm's global %APPDATA%\npm. The Store (MSIX) build
+// redirects a packaged app's AppData writes into a private copy that agent
+// terminals can't see; the user profile and HKCU\Environment are not
+// redirected, so this folder works for both the packaged and .exe builds.
+function aceNpmPrefix({ env = process.env, platform = process.platform } = {}) {
+  if (platform !== 'win32') return null
+  return path.join(env.USERPROFILE || require('node:os').homedir(), '.ace', 'npm')
+}
+
+// Appends the prefix to this process's PATH so prereq checks, providerExecutable
+// and agent terminals find CLIs installed there. Returns whether it changed.
+function ensureAceNpmOnPath({ env = process.env, platform = process.platform } = {}) {
+  const prefix = aceNpmPrefix({ env, platform })
+  if (!prefix) return false
+  const key = Object.keys(env).find(key => key.toLowerCase() === 'path') || 'PATH'
+  const entries = (env[key] || '').split(';').filter(Boolean)
+  if (entries.some(entry => entry.toLowerCase() === prefix.toLowerCase())) return false
+  env[key] = [...entries, prefix].join(';')
+  return true
+}
+
+// Persists a folder on the user's saved PATH so the user's own terminals find
+// the CLIs too. Keeps the value's REG_EXPAND_SZ form and unexpanded %VARS%,
+// and broadcasts the change so newly opened terminals pick it up.
+function addToUserPath(dir, { platform = process.platform } = {}) {
+  if (platform !== 'win32') return false
+  const script = [
+    "$k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)",
+    "$v = [string]$k.GetValue('Path', '', [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)",
+    "if (($v -split ';') -contains $env:ACE_PATH_DIR) { exit 0 }",
+    "$parts = @($v.TrimEnd(';'), $env:ACE_PATH_DIR) | Where-Object { $_ }",
+    "$k.SetValue('Path', ($parts -join ';'), [Microsoft.Win32.RegistryValueKind]::ExpandString)",
+    "[Environment]::SetEnvironmentVariable('ACE_PATH_BROADCAST', '1', 'User'); [Environment]::SetEnvironmentVariable('ACE_PATH_BROADCAST', $null, 'User')",
+  ].join('; ')
+  try {
+    const result = child_process.spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      windowsHide: true, timeout: 10000, env: { ...process.env, ACE_PATH_DIR: dir },
+    })
+    return !result.error && result.status === 0
+  } catch (_) { return false }
+}
+
+module.exports = { ensureShellPath, loginShellPath, isOnPath, refreshWindowsPath, aceNpmPrefix, ensureAceNpmOnPath, addToUserPath }

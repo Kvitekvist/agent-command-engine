@@ -694,6 +694,12 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     claude: '@anthropic-ai/claude-code',
     codex: '@openai/codex',
   }
+  // TICKET-0160: Windows installs go to ACE's own prefix (ShellPath.aceNpmPrefix),
+  // never the MSIX-redirected %APPDATA%\npm. npm_config_prefix avoids quoting a
+  // profile path with spaces through the shell.
+  const ShellPath = require('../services/ShellPath')
+  const npmEnv = (prefix = ShellPath.aceNpmPrefix()) =>
+    prefix ? { ...process.env, npm_config_prefix: prefix } : process.env
 
   async function checkPrereqs(names) {
     require('../services/ShellPath').refreshWindowsPath()
@@ -743,7 +749,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     const { spawn } = require('child_process')
 
     return new Promise((resolve) => {
-      const proc = spawn('npm', ['install', '-g', pkg], { windowsHide: true, shell: true })
+      const proc = spawn('npm', ['install', '-g', pkg], { windowsHide: true, shell: true, env: npmEnv() })
       let stdout = ''
       let stderr = ''
       proc.stdout?.on('data', (d) => { stdout += d })
@@ -751,6 +757,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
       proc.on('error', (err) => resolve({ ok: false, error: err.message }))
       proc.on('close', (code) => {
         if (code === 0) {
+          const prefix = ShellPath.aceNpmPrefix()
+          if (prefix) {
+            ShellPath.ensureAceNpmOnPath()
+            ShellPath.addToUserPath(prefix)
+          }
           resolve({ ok: true, message: `${pkg} installed` })
           return
         }
@@ -811,8 +822,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     })
     if (confirmation.response !== 1) return { ok: false, error: 'Removal cancelled' }
 
+    // Remove ACE's own copy when there is one; otherwise npm's global install.
+    const prefix = ShellPath.aceNpmPrefix()
+    const fromAcePrefix = prefix && fs.existsSync(require('node:path').join(prefix, 'node_modules', ...pkgs[0].split('/')))
     return new Promise((resolve) => {
-      const proc = spawn('npm', ['uninstall', '-g', ...pkgs], { windowsHide: true, shell: true })
+      const proc = spawn('npm', ['uninstall', '-g', ...pkgs], { windowsHide: true, shell: true, env: fromAcePrefix ? npmEnv(prefix) : process.env })
       let stdout = ''
       let stderr = ''
       proc.stdout?.on('data', (d) => { stdout += d })

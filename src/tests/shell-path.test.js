@@ -81,3 +81,14 @@ test('is a no-op off Windows when the shell produced nothing', (t) => {
   assert.equal(ensureShellPath({ env, platform: 'darwin' }), false)
   assert.equal(env.PATH, path.join(root, 'nowhere'))
 })
+
+test('ACE npm prefix is a Windows user-profile folder appended to PATH once', () => {
+  const { aceNpmPrefix, ensureAceNpmOnPath } = require('../main/services/ShellPath')
+  const env = { USERPROFILE: 'C:\Users\A B', Path: 'C:\Windows' }
+  assert.equal(aceNpmPrefix({ env, platform: 'win32' }), path.join('C:\Users\A B', '.ace', 'npm'))
+  assert.equal(aceNpmPrefix({ env, platform: 'darwin' }), null)
+  assert.equal(ensureAceNpmOnPath({ env, platform: 'win32' }), true)
+  assert.equal(env.Path, 'C:\Windows;' + path.join('C:\Users\A B', '.ace', 'npm'))
+  assert.equal(ensureAceNpmOnPath({ env, platform: 'win32' }), false)
+  assert.equal(ensureAceNpmOnPath({ env: { PATH: '/usr/bin' }, platform: 'darwin' }), false)
+})

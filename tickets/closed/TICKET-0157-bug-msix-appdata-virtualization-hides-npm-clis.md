@@ -67,6 +67,9 @@ Fixed in v0.1.38. Partner Center will ask for a justification of
 
 ## Notes
 
+Superseded in v0.1.40 by TICKET-0160: the manifest patch was reverted and the
+CLIs install to `%USERPROFILE%\.ace\npm` instead.
+
 Installs made by earlier AppX builds stay in the old LocalCache; reinstall
 the CLIs from Setup after upgrading.
 
