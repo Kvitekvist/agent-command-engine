@@ -95,7 +95,10 @@ app.whenReady().then(async () => {
     await click('Agents')
     await until(`document.querySelector('select[aria-label="Model"]').value === 'gpt-5.6-terra'`)
     await click('Settings')
-    await click('Models')
+    // Exact match: the launch bar's "🔄 Models" button (TICKET-0156) stays
+    // mounted behind Settings and would win a substring match.
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'Models')?.click()`)
+    await until(`document.body.textContent.includes('Save Model Visibility')`)
     await until(`document.querySelectorAll('input[type="checkbox"]:checked').length > 0`)
     await evaluate(`document.querySelectorAll('input[type="checkbox"]:checked').forEach(input => input.click())`)
     await click('Save Model Visibility')
