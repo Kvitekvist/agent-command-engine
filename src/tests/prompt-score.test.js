@@ -97,3 +97,29 @@ test('firstPromptStats only counts sessions with recorded prompt-length data', a
   assert.equal(stats.count, 1)
   assert.equal(stats.medianChars, 40)
 })
+
+test('modelCostTiers splits 10 models 20/50/30 by reference cost', async () => {
+  const { modelCostTiers } = await load()
+  const rows = Array.from({ length: 10 }, (_, i) => row({ models: [`m${i}`], input: 1000, output: 0, cacheRead: 0, cost: (i + 1) * 0.001 }))
+  const count = (t) => modelCostTiers(rows).filter((m) => m.tier === t).length
+  assert.deepEqual([count('economy'), count('balanced'), count('premium')], [2, 5, 3])
+})
+
+test('modelCostTiers uses list prices, not the observed blended rate', async () => {
+  const { modelCostTiers, listPrice } = await load()
+  assert.deepEqual(listPrice('claude-opus-4-5-20251101'), [5, 25])
+  assert.deepEqual(listPrice('claude-opus-5-5'), [4, 20])
+  assert.deepEqual(listPrice('haiku-4.5'), [1, 5])
+  assert.deepEqual(listPrice('anthropic/claude-sonnet-4.6'), [3, 15])
+  assert.deepEqual(listPrice('gpt-5.6-terra'), [2, 12])
+  assert.equal(listPrice('gpt-4o'), null)
+  // Opus is heavily cached here, so its observed rate is lowest; list price still ranks it top.
+  const rows = [
+    row({ models: ['claude-haiku-4-5'], input: 1000, output: 0, cacheRead: 0, cost: 0.01 }),
+    row({ models: ['claude-sonnet-5'], input: 1000, output: 0, cacheRead: 0, cost: 0.01 }),
+    row({ models: ['claude-opus-4-5'], input: 10, output: 0, cacheRead: 990, cost: 0.0001 }),
+  ]
+  const tier = (id) => modelCostTiers(rows).find((m) => m.model === id).tier
+  assert.equal(tier('claude-haiku-4-5'), 'economy')
+  assert.equal(tier('claude-opus-4-5'), 'premium')
+})

@@ -91,24 +91,70 @@ export function modelTotals(rows) {
   return [...map.values()].sort((a, b) => b.tokens - a.tokens)
 }
 
-// Cost tier per model, from the user's OWN observed blended $/1K tokens (not a
-// hardcoded price table, since the catalog's model lineup and prices churn too
-// often for a static table to stay honest). Models are ranked by their own rate
-// and split into terciles; with fewer than 3 distinct models the split degrades
-// to a simple low/high (or everyone 'balanced' for just one).
+// List prices, $ per 1M tokens [input, output]. Update when Anthropic's
+// pricing changes. Matched by the longest key contained in the id, so ids like
+// claude-opus-4-5-20251101 resolve and claude-opus-5-5 doesn't hit
+// claude-opus-5. ponytail: current Claude + GPT-6/5.6 only; others fall back to their
+// observed blended rate, which swings with cache use (cheap reads pull it
+// down; cache writes aren't counted as tokens but are in the cost, pushing it up).
+const LIST_PRICES = {
+  'claude-fable-5-1': [10, 50],
+  'claude-fable-5': [10, 50],
+  'claude-opus-5-5': [4, 20],
+  'claude-opus-5': [5, 25],
+  'claude-opus-4-8': [5, 25],
+  'claude-opus-4-7': [5, 25],
+  'claude-opus-4-6': [5, 25],
+  'claude-opus-4-5': [5, 25],
+  'claude-sonnet-5': [2, 10],
+  'claude-sonnet-4-6': [3, 15],
+  'claude-sonnet-4-5': [3, 15],
+  'claude-haiku-4-5': [1, 5],
+  // OpenAI (Codex). Dots become dashes before matching: gpt-5.6-terra -> gpt-5-6-terra.
+  'gpt-6-astra': [10, 50],
+  'gpt-6-sol': [2, 10],
+  'gpt-6-luna': [0.1, 0.5],
+  'gpt-5-6-sol': [4, 20],
+  'gpt-5-6-terra': [2, 12],
+  'gpt-5-6-luna': [0.2, 1.2],
+}
+
+// The standard workload each model is priced on: 100k in + 700 out.
+const REFERENCE_IN = 100_000
+const REFERENCE_OUT = 700
+
+export function listPrice(model) {
+  // Tolerate tokscale-style spellings: "haiku-4.5", "anthropic/claude-haiku-4-5".
+  const id = String(model).toLowerCase().replace(/\./g, '-')
+  const key = Object.keys(LIST_PRICES)
+    .filter((k) => id.includes(k.replace(/^claude-/, '')))
+    .sort((a, b) => b.length - a.length)[0]
+  return key ? LIST_PRICES[key] : null
+}
+
+// Tiers are relative: ranked by reference cost, the cheapest 20% are economy,
+// the priciest 30% premium, the rest balanced. Equal prices share a tier.
 export function modelCostTiers(rows) {
-  const totals = modelTotals(rows).map((m) => ({ ...m, rate: m.tokens > 0 ? m.cost / (m.tokens / 1000) : 0 }))
-  const ranked = [...totals].sort((a, b) => a.rate - b.rate)
-  const n = ranked.length
-  const tierOf = (i) => {
-    if (n <= 1) return 'balanced'
-    if (n === 2) return i === 0 ? 'economy' : 'premium'
-    if (i < n / 3) return 'economy'
-    if (i >= (2 * n) / 3) return 'premium'
-    return 'balanced'
+  const totals = modelTotals(rows).map((m) => {
+    const rate = m.tokens > 0 ? m.cost / (m.tokens / 1000) : 0
+    const price = listPrice(m.model)
+    const referenceCost = price
+      ? (REFERENCE_IN * price[0] + REFERENCE_OUT * price[1]) / 1e6
+      : rate * ((REFERENCE_IN + REFERENCE_OUT) / 1000)
+    return { ...m, rate, referenceCost }
+  })
+  // Counting strictly cheaper / strictly pricier models keeps a price tie
+  // (e.g. every $5/$25 Opus) in one tier instead of splitting it by sort order.
+  const n = totals.length
+  const tierOf = (m) => {
+    const cheaper = totals.filter((o) => o.referenceCost < m.referenceCost).length
+    const pricier = totals.filter((o) => o.referenceCost > m.referenceCost).length
+    const economy = cheaper < 0.2 * n
+    const premium = pricier < 0.3 * n
+    return economy === premium ? 'balanced' : economy ? 'economy' : 'premium'
   }
-  const tierByModel = new Map(ranked.map((m, i) => [m.model, tierOf(i)]))
-  return totals.map((m) => ({ ...m, tier: tierByModel.get(m.model) || 'balanced' }))
+  const tierByModel = new Map(totals.map((m) => [m.model, tierOf(m)]))
+  return totals.map((m) => ({ ...m, tier: tierByModel.get(m.model) }))
 }
 
 export function modelMixByTier(rows) {

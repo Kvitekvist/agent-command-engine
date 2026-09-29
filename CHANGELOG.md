@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.1.41] - 2026-09-29
+
+### Fixed
+
+- Prompt Score: the Models Used cost tiers follow list price. Each model is
+  priced on a 100k-in / 700-out job from a built-in price list (current
+  Claude models, GPT-6 and GPT-5.6); the cheapest 20% are Lower-cost, the
+  priciest 30% Higher-cost, the rest Balanced. Before, tiers came from each
+  model's observed cost per token, which caching skewed, so every model could
+  show as Lower-cost or Haiku could rank above Sonnet (TICKET-0162).
+
 ## [0.1.40] - 2026-09-27
 
 ### Changed
