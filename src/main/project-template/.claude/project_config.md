@@ -1,4 +1,4 @@
-project_name:
+project_name: {{PROJECT_NAME}}
 
 language:
 

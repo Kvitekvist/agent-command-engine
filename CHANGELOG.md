@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+### Added
+
+- Skills / Plugins / MCP panel (replaces Project Skills): switch each project
+  skill, `.mcp.json` server and registered plugin on or off for yourself. ACE
+  writes `.claude/settings.local.json`, never the shared settings file.
+  Claude only (TICKET-0169).
+- Memories panel: list and edit the project's `.claude/memory/*.md` files
+  (TICKET-0169).
+- New-project wizard: pick the parent folder first, then give the folder name
+  and a required description, with the full destination shown before Create.
+  Errors appear in the dialog and keep what you typed, and a name collision
+  can be retried without picking the folder again (TICKET-0164).
+
+### Changed
+
+- Sidebar: adds Memories, "Usage (whole machine)" is now "Usage", and
+  Settings moved to the application menu only (Ctrl/Cmd+,) (TICKET-0169).
+- New projects start clean: version 0.1.0, no inherited tickets, ticket
+  history or someone else's preferences. The name and description from the
+  wizard are written into the README, AGENTS.md, changelog and project memory,
+  and `/project-setup` confirms them instead of asking again (TICKET-0165).
+
+### Fixed
+
+- Toggling a skill, plugin or MCP server no longer wipes the rest of
+  `.claude/settings.local.json` when that file is malformed or unreadable, and
+  no longer overwrites a settings file another tool created meanwhile
+  (TICKET-0166).
+- Memories: clicking two files quickly can no longer show the first file's
+  text under the second file's name, and switching views from the menu asks
+  before discarding unsaved memory edits (TICKET-0167).
+
 ## [0.1.41] - 2026-09-29
 
 ### Fixed

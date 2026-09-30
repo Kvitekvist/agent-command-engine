@@ -5,30 +5,85 @@ const test = require('node:test')
 const { makeTempDir } = require('./helpers/temp-dir')
 const { createProjectFromScaffold, ensureBundledSkills } = require('../main/services/ProjectScaffoldService')
 
-test('new projects copy the bundled scaffold without overwriting existing folders', async (t) => {
+const TEMPLATE_DIR = path.join(__dirname, '..', 'main', 'project-template')
+const read = (...parts) => fs.readFileSync(path.join(...parts), 'utf8')
+function filesUnder(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true, recursive: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath ?? entry.path, entry.name))
+}
+
+test('new projects copy the bundled template and seed its identity', async (t) => {
   const root = makeTempDir('ace-project-scaffold-')
   t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  // Replacement patterns and a placeholder inside the description must be
+  // copied literally, and CRLF normalised.
+  const firstLine = 'Tracks $& invoices for {{PROJECT_NAME}} freelancers.'
+  const description = `  ${firstLine}\r\nSecond line: <b>not html</b>.  `
+  const literal = `${firstLine}\nSecond line: <b>not html</b>.`
 
-  const scaffoldDir = path.join(root, 'scaffold')
+  const result = await createProjectFromScaffold({ name: 'My Project', description, parentDir: root, scaffoldDir: TEMPLATE_DIR, createdDate: '2026-09-30' })
+  assert.equal(result.error, undefined)
+  const project = result.path
+
+  // Required files and folders survive the copy.
+  for (const file of ['AGENTS.md', '.claude/CLAUDE.md', '.claude/PROJECT_RULES.md', '.claude/skills/project-setup/SKILL.md', 'tickets/TEMPLATE.md', 'LICENSE']) {
+    assert.equal(fs.existsSync(path.join(project, file)), true, file)
+  }
+  assert.equal(fs.existsSync(path.join(project, 'tickets', 'open', 'bugs', '.gitkeep')), true)
+  assert.equal(filesUnder(project).some((file) => file.endsWith('.ace-gitkeep')), false)
+  assert.equal(fs.existsSync(path.join(project, 'build', '.gitkeep')), true)
+  assert.equal(fs.existsSync(path.join(project, 'releases', '.gitkeep')), true)
+  // One-shot marker that triggers the guided /project-setup interview.
+  assert.equal(fs.existsSync(path.join(project, '.claude', '.needs-setup')), true)
+
+  // Seeded identity.
+  assert.equal(read(project, 'README.md').startsWith(`# My Project\n\n${literal}\n`), true)
+  assert.equal(read(project, '.claude', 'project_config.md').startsWith('project_name: My Project\n'), true)
+  assert.equal(read(project, '.claude', 'memory', 'project_memory.md').includes(`## Project Vision\n\n${literal}\n`), true)
+  assert.equal(read(project, 'docs', 'agents', 'current-state.md').includes(`- Product: My Project - ${firstLine}\n`), true)
+  assert.equal(read(project, 'CHANGELOG.md').includes('## [0.1.0] - 2026-09-30'), true)
+  assert.equal(read(project, 'AGENTS.md').startsWith('# My Project Agent Guide'), true)
+  const placeholder = /\{\{(PROJECT_NAME|PROJECT_DESCRIPTION|PROJECT_SUMMARY|CREATED_DATE)\}\}/
+  const leftover = filesUnder(project).filter((file) => placeholder.test(read(file).replaceAll(firstLine, '')))
+  assert.deepEqual(leftover, [])
+
+  // Neutral history: version 0.1.0, no inherited tickets or ticket history.
+  assert.equal(read(project, 'version.txt').trim(), '0.1.0')
+  assert.equal(read(project, '.claude', 'memory', 'project_status.md').includes('## Current Version\n\n0.1.0\n'), true)
+  assert.doesNotMatch(read(project, '.claude', 'memory', 'ticket_memory.md'), /TICKET-\d/)
+  assert.deepEqual(filesUnder(path.join(project, 'tickets', 'open')).filter((file) => file.endsWith('.md')), [])
+
+  // An existing folder is never touched.
+  const existing = path.join(root, 'Existing')
+  fs.mkdirSync(existing)
+  fs.writeFileSync(path.join(existing, 'README.md'), 'mine')
+  assert.match((await createProjectFromScaffold({ name: 'Existing', description, parentDir: root, scaffoldDir: TEMPLATE_DIR })).error, /already exists/)
+  assert.deepEqual(fs.readdirSync(existing), ['README.md'])
+  assert.equal(read(existing, 'README.md'), 'mine')
+
+  assert.match((await createProjectFromScaffold({ name: '..', parentDir: root, scaffoldDir: TEMPLATE_DIR })).error, /must not contain a path/)
+  assert.match((await createProjectFromScaffold({ name: 42, parentDir: root, scaffoldDir: TEMPLATE_DIR })).error, /Missing project name/)
+})
+
+test('a missing description is seeded as an explicit placeholder', async (t) => {
+  const root = makeTempDir('ace-project-scaffold-')
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const result = await createProjectFromScaffold({ name: 'Blank', description: '   ', parentDir: root, scaffoldDir: TEMPLATE_DIR })
+  assert.equal(read(result.path, 'README.md').startsWith('# Blank\n\nNot described yet.\n'), true)
+})
+
+test('a failed copy removes the half-created project folder', async (t) => {
+  const root = makeTempDir('ace-project-scaffold-')
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  // A scaffold missing the seeded files fails during seeding, after the copy.
+  const scaffoldDir = path.join(root, 'broken-scaffold')
   fs.mkdirSync(path.join(scaffoldDir, '.claude'), { recursive: true })
   fs.writeFileSync(path.join(scaffoldDir, 'AGENTS.md'), 'agent guide')
-  fs.writeFileSync(path.join(scaffoldDir, '.claude', 'PROJECT_RULES.md'), 'rules')
-  fs.writeFileSync(path.join(scaffoldDir, '.claude', '.ace-gitkeep'), '')
 
-  const result = await createProjectFromScaffold({ name: 'My Project', parentDir: root, scaffoldDir })
-  assert.equal(fs.readFileSync(path.join(result.path, 'AGENTS.md'), 'utf8'), 'agent guide')
-  assert.equal(fs.readFileSync(path.join(result.path, '.claude', 'PROJECT_RULES.md'), 'utf8'), 'rules')
-  assert.equal(fs.existsSync(path.join(result.path, '.claude', '.gitkeep')), true)
-  assert.equal(fs.existsSync(path.join(result.path, '.claude', '.ace-gitkeep')), false)
-  assert.equal(fs.existsSync(path.join(result.path, 'build', '.gitkeep')), true)
-  assert.equal(fs.existsSync(path.join(result.path, 'releases', '.gitkeep')), true)
-  // One-shot marker that triggers the guided /project-setup interview.
-  assert.equal(fs.existsSync(path.join(result.path, '.claude', '.needs-setup')), true)
-
-  const collision = await createProjectFromScaffold({ name: 'My Project', parentDir: root, scaffoldDir })
-  assert.match(collision.error, /already exists/)
-  assert.match((await createProjectFromScaffold({ name: '..', parentDir: root, scaffoldDir })).error, /must not contain a path/)
-  assert.match((await createProjectFromScaffold({ name: 42, parentDir: root, scaffoldDir })).error, /Missing project name/)
+  const result = await createProjectFromScaffold({ name: 'Half', description: 'x', parentDir: root, scaffoldDir })
+  assert.match(result.error, /ENOENT/)
+  assert.equal(fs.existsSync(path.join(root, 'Half')), false)
 })
 
 test('bundled skills (including third-party ones) are copied into a project that lacks them, own copies are kept', (t) => {

@@ -27,7 +27,12 @@ requirements, play back a summary for agreement, propose a tech stack for
 confirmation or adjustment, then rewrite the scaffold's own `.md` files so
 they describe the real project instead of the ACE template.
 
-The trigger is one-shot per project and Claude-only.
+The initial implementation is Claude-only. The 2026-09-29 follow-up extends
+initialization to Claude and Codex, using the project description captured by
+TICKET-0164 and the initial memory written by TICKET-0165. After the user's
+first prompt, record confirmed requirements and decisions in project memory
+without waiting for the entire setup interview to finish. Keep unresolved
+questions explicit and preserve the user's original task.
 
 ---
 
@@ -71,6 +76,9 @@ executes.
 
 ## Files Modified
 
+The list below describes the initial implementation. The 2026-09-29 follow-up
+is planned only; this ticket is the only file changed for that follow-up.
+
 - `src/main/project-template/.claude/skills/project-setup/SKILL.md` (new)
 - `src/main/project-template/.claude/prompts/project_init.md` (deleted)
 - `src/main/project-template/.claude/prompts/project_questionnaire.md` (deleted)
@@ -90,6 +98,12 @@ executes.
 
 ## Testing
 
+The results below are from the initial implementation, not verification of
+the follow-up. Follow-up checks must cover both providers, first-prompt
+memory updates, interrupted startup, failed delivery, restart/retry and two
+agents opening the same project. Run `npm test` and `npm run build` from
+`src/`, and verify the real provider flow manually.
+
 - `node --test tests/*.test.js` (from `src/`): 69 passed, 1 skipped
   (POSIX-only), 0 failed. `project-scaffold.test.js` now also asserts
   `.claude/.needs-setup` is created.
@@ -101,6 +115,9 @@ executes.
 ---
 
 ## Result
+
+The initial implementation described below exists. Reliable first-prompt
+initialization for both providers remains unimplemented.
 
 Creating a project through `✨ New` drops a one-shot `.claude/.needs-setup`
 marker. The first Claude `AgentTerminal` for that project consumes it
@@ -117,8 +134,32 @@ are removed.
 ready" signal rather than content-matching the prompt. If a cold start races
 the keystroke, the upgrade is a prompt-string match before writing.
 
-Codex agents are out of scope — slash-command skills are a Claude Code
-feature. The skill is still runnable by hand in any provider.
+The original Claude-only scope is superseded by the 2026-09-29 request.
+Keep the existing interview work; extend the initialization path rather
+than replacing it. Codex must receive provider-appropriate instructions
+instead of assuming that Claude's slash command works there.
+
+## Follow-up Implementation Plan (2026-09-29)
+
+* [ ] Reuse the saved project brief and seeded memory from TICKET-0164 and
+  TICKET-0165. Do not ask again for facts the user already supplied.
+* [ ] Establish a provider-neutral instruction path that updates memory
+  after the first user prompt. Capture confirmed purpose, constraints and
+  decisions; leave unknowns explicit. Keep subsequent memory updates part
+  of the documented agent workflow.
+* [ ] Replace destructive consume-before-delivery behavior. Keep pending
+  initialization until successful memory initialization is acknowledged;
+  a terminal write alone is not proof that the agent updated the files.
+* [ ] Define the IPC request/response contract and main-owned coordination
+  needed for retries and concurrent agents. Preserve registered-project
+  path checks and PTY execution.
+* [ ] Do not rely on the banner timeout as proof of CLI readiness. Prevent
+  setup delivery from racing startup, the user's prompt or the optional
+  first-prompt questionnaire.
+* [ ] Recover from interrupted or failed initialization without losing
+  the pending state or duplicating completed work. Preserve existing memory.
+* [ ] Add regression coverage and complete the manual checks listed above.
+  Update the changelog and relevant agent docs when implemented.
 
 ---
 

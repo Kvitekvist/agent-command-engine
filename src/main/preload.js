@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('ace', {
   // TICKET-0057: replaces createFromTemplate (dead code -- copied from a
   // hardcoded, no-longer-existing, Windows-only template path).
   getDefaultParentDir: () => ipcRenderer.invoke('projects:getDefaultParentDir'),
-  createNewProject: (name, parentDir) => ipcRenderer.invoke('projects:createNew', { name, parentDir }),
+  createNewProject: (name, description, parentDir) => ipcRenderer.invoke('projects:createNew', { name, description, parentDir }),
   // Returns { needsSetup } and clears the one-shot marker; see handlers.js.
   consumeProjectSetupFlag: (projectPath) => ipcRenderer.invoke('projects:consumeSetupFlag', projectPath),
 

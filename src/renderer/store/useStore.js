@@ -11,6 +11,10 @@ const useStore = create((set, get) => ({
     try { localStorage.setItem('ace:view', view) } catch (_) {}
     set({ activeView: view })
   },
+  // TICKET-0167: set by a modal panel (Memories) while it holds unsaved text,
+  // so view navigation that bypasses the modal (the app menu) asks first.
+  panelDirty: false,
+  setPanelDirty: (panelDirty) => set({ panelDirty }),
 
   // ── Projects ───────────────────────────────────────────────────────────────
   projects: [],

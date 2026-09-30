@@ -2,16 +2,17 @@ import React, { useEffect, useState } from 'react'
 import useStore from '../store/useStore'
 import FileTree from './FileTree'
 import Modal from './Modal'
+import NewProjectWizard from './NewProjectWizard'
 
 const NAV = [
   { id: 'agents', icon: '⚡', label: 'Agents' },
   { id: 'editor', icon: '📝', label: 'Files / Editor' },
   { id: 'notes', icon: '🗒️', label: 'Project Notes' },
-  { id: 'skills', icon: '🧩', label: 'Project Skills' },
+  { id: 'skills', icon: '🧩', label: 'Skills / Plugins / MCP' },
+  { id: 'memories', icon: '🧠', label: 'Memories' },
   { id: 'processes', icon: '🔧', label: 'Diagnostics: Processes' },
-  { id: 'tokens', icon: '📊', label: 'Usage (whole machine)' },
-  { id: 'prompt-score', icon: '🧠', label: 'Prompt Score' },
-  { id: 'settings', icon: '⚙️', label: 'Settings' },
+  { id: 'tokens', icon: '📊', label: 'Usage' },
+  { id: 'prompt-score', icon: '💯', label: 'Prompt Score' },
 ]
 
 // TICKET-0104: draggable width, persisted per machine. 224px == the old w-56.
@@ -53,12 +54,9 @@ export default function Sidebar() {
     document.body.style.cursor = 'col-resize'
   }
 
-  // TICKET-0057: name comes from a real popup (Electron doesn't implement
-  // window.prompt()), then the location comes from the native OS folder
-  // picker -- two popups, no inline text field in the sidebar itself.
-  const [nameModalOpen, setNameModalOpen] = useState(false)
-  const [pendingName, setPendingName] = useState('')
-  const [nameError, setNameError] = useState('')
+  // TICKET-0164: the parent folder is picked natively first; while set, the
+  // NewProjectWizard asks for the folder name and description.
+  const [newProjectParent, setNewProjectParent] = useState(null)
 
   useEffect(() => {
     window.ace.getProjects().then(projects => {
@@ -90,34 +88,17 @@ export default function Sidebar() {
     setAdding(false)
   }
 
-  function openNameModal() {
-    setPendingName('')
-    setNameError('')
-    setNameModalOpen(true)
+  // Defaults to ACE's own parent folder but is fully navigable. Cancelling
+  // keeps whichever folder (and form) the wizard already had.
+  async function pickNewProjectParent() {
+    const parentDir = await window.ace.pickFolder(await window.ace.getDefaultParentDir())
+    if (parentDir) setNewProjectParent(parentDir)
   }
 
-  // Popup 1 (name) confirmed -> popup 2 is the native OS folder picker,
-  // defaulting to ACE's own parent folder but fully navigable -- then the
-  // folder is actually created there.
-  async function handleNameConfirmed() {
-    const name = pendingName.trim()
-    if (!name) {
-      setNameError('Please enter a project name')
-      return
-    }
-    setNameModalOpen(false)
-
-    const defaultParent = await window.ace.getDefaultParentDir()
-    const parentDir = await window.ace.pickFolder(defaultParent)
-    if (!parentDir) return // user canceled the location picker
-
-    const result = await window.ace.createNewProject(name, parentDir)
-    if (result?.error) {
-      alert(`Error: ${result.error}`)
-      return
-    }
-    await window.ace.addProject(name, result.path)
+  async function handleNewProjectCreated(name, projectPath) {
+    await window.ace.addProject(name, projectPath)
     await refreshProjects()
+    setNewProjectParent(null)
     setAdding(false)
   }
 
@@ -197,29 +178,20 @@ export default function Sidebar() {
               <button onClick={handlePickFolder} className="btn-primary flex-1 text-xs" title="Connect to an existing folder">
                 📁 Existing
               </button>
-              <button onClick={openNameModal} className="btn-primary flex-1 text-xs" title="Create a new project folder">
+              <button onClick={pickNewProjectParent} className="btn-primary flex-1 text-xs" title="Create a new project folder">
                 ✨ New
               </button>
             </div>
           </div>
         )}
 
-        {nameModalOpen && (
-          <Modal title="New project" onClose={() => setNameModalOpen(false)}>
-            <input
-              className="input text-xs"
-              placeholder="Project name"
-              value={pendingName}
-              onChange={(e) => { setPendingName(e.target.value); setNameError('') }}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleNameConfirmed() }}
-              autoFocus
-            />
-            {nameError && <p className="text-xs text-danger mt-1.5">{nameError}</p>}
-            <div className="flex justify-end gap-1.5 mt-3">
-              <button onClick={() => setNameModalOpen(false)} className="btn-ghost text-xs">Cancel</button>
-              <button onClick={handleNameConfirmed} className="btn-primary text-xs">OK</button>
-            </div>
-          </Modal>
+        {newProjectParent && (
+          <NewProjectWizard
+            parentDir={newProjectParent}
+            onChangeFolder={pickNewProjectParent}
+            onCreated={handleNewProjectCreated}
+            onClose={() => setNewProjectParent(null)}
+          />
         )}
 
         <input className="input" type="search" aria-label="Search projects" placeholder="Search projects" value={query} onChange={e => setQuery(e.target.value)} />

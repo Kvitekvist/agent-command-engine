@@ -7,9 +7,9 @@ const test = require('node:test')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 
-test('node map finds current Notes and Project Skills components near the top', () => {
+test('node map finds current Notes and Skills / Plugins / MCP components near the top', () => {
   const root = path.resolve(__dirname, '../..')
-  for (const [query, expected] of [['notes', 'NotesPanel.jsx'], ['project skills', 'ProjectSkillsPanel.jsx']]) {
+  for (const [query, expected] of [['notes', 'NotesPanel.jsx'], ['skills plugins mcp', 'ProjectSkillsPanel.jsx'], ['memories', 'MemoriesPanel.jsx']]) {
     const result = spawnSync(process.execPath, [path.join(root, '.claude/skills/node-map/assets/brain.js'), query, path.join(root, 'docs/node-map.html'), '--json'], { encoding: 'utf8', windowsHide: true })
     assert.equal(result.status, 0, result.stderr)
     assert.equal(JSON.parse(result.stdout).results.some(row => row.path.endsWith(expected)), true)

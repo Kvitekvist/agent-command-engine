@@ -6,20 +6,19 @@
 
 ## Snapshot
 
-- Product: <one line - what this project is>
-- Current version: **<x.y.z>**. `version.txt` is the only authoritative
+- Product: {{PROJECT_NAME}} - {{PROJECT_SUMMARY}}
+- Current version: **0.1.0**. `version.txt` is the only authoritative
   source; this line is a convenience copy, so trust that file if it drifts.
-- Stack: see `.claude/project_config.md`.
-- Validation: `bash scripts/run_tests.sh`. Last full run: <result>.
+- Stack: not decided yet; see `.claude/project_config.md` once it is.
+- Validation: `bash scripts/run_tests.sh`. Last full run: none yet.
 
 ## Active priorities
 
-1. <the milestone in progress>
-2. <what must not regress while it lands>
+1. Project setup: confirm requirements and choose the tech stack (`/project-setup`).
 
 ## Known operational constraints
 
-- <environment limitations, flaky areas, things that look like bugs but are not>
+- None recorded yet.
 
 ## Where to look next
 

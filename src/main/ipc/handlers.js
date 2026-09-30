@@ -3,7 +3,7 @@ const { resolveLaunchPolicy } = require('../services/LaunchPolicy')
 const { FileService } = require('../services/FileService')
 const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
 const { ScreenshotService } = require('../services/ScreenshotService')
-const { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir } = require('../services/ProjectScaffoldService')
+const { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir, validateNewProject } = require('../services/ProjectScaffoldService')
 const { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents } = require('../services/HookService')
 const fs = require('node:fs')
 const { resolveWithinRoot } = require('../services/ProjectPath')
@@ -217,11 +217,20 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     }
   })
 
-  handle('projects:createNew', async (_, { name, parentDir } = {}) => {
+  // TICKET-0164: the wizard sends name + description after the parent was
+  // picked natively. Validation failures come back as { error } so the form
+  // keeps its values; the parent stays authorized until a create succeeds, so
+  // retrying after a name collision needs no second trip to the picker.
+  handle('projects:createNew', async (_, { name, description, parentDir } = {}) => {
+    const error = validateNewProject(name, description)
+    if (error) return { error }
     const canonical = canonicalDirectory(parentDir)
-    if (!selectedFolders.delete(canonical)) throw new Error('Select the parent folder in the native dialog first')
-    const result = await createProjectFromScaffold({ name, parentDir: canonical, scaffoldDir: getScaffoldDir() })
-    if (result.path) selectedFolders.add(canonicalDirectory(result.path))
+    if (!selectedFolders.has(canonical)) return { error: 'Choose the parent folder again.' }
+    const result = await createProjectFromScaffold({ name: name.trim(), description: description.trim(), parentDir: canonical, scaffoldDir: getScaffoldDir() })
+    if (result.path) {
+      selectedFolders.delete(canonical)
+      selectedFolders.add(canonicalDirectory(result.path))
+    }
     return result
   })
 
@@ -533,7 +542,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     try {
       return FileService.readFile(resolveProjectRoot(DB, root), filePath)
     } catch (error) {
-      return { ok: false, error: error.message }
+      return { ok: false, error: error.message, code: error.code }
     }
   })
 

@@ -12,6 +12,7 @@ import ContextMenu from './components/ContextMenu'
 import Modal from './components/Modal'
 import NotesPanel from './components/NotesPanel'
 import ProjectSkillsPanel from './components/ProjectSkillsPanel'
+import MemoriesPanel from './components/MemoriesPanel'
 import { watchUsageActivity } from './utils/usageActivity.mjs'
 
 // TICKET-0022/0023: live subscription quota is whole-machine data (not
@@ -118,7 +119,10 @@ export default function App() {
   useEffect(() => watchUsageActivity(window.ace, loadLiveUsage), [loadLiveUsage])
 
   // TICKET-0119: honour the application menu's "Settings…" (Ctrl/Cmd+,) item.
-  useEffect(() => window.ace.onMenuNavigate(setActiveView), [])
+  useEffect(() => window.ace.onMenuNavigate((view) => {
+    if (useStore.getState().panelDirty && !window.confirm('Discard unsaved changes?')) return
+    setActiveView(view)
+  }), [])
 
   useEffect(() => {
     window.ace.onAgentStatus((data) => {
@@ -189,6 +193,7 @@ export default function App() {
       </Modal>}
       {activeProject && activeView === 'notes' && <NotesPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
       {activeProject && activeView === 'skills' && <ProjectSkillsPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
+      {activeProject && activeView === 'memories' && <MemoriesPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
       <main className="flex-1 overflow-auto">
         {!activeProject && ['notes', 'skills'].includes(activeView) && <p className="p-5 text-muted">Select a project to open {activeView}.</p>}
         {/* TICKET-0027: unlike the other views, AgentView stays mounted at

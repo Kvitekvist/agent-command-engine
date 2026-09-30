@@ -120,6 +120,18 @@ test('registered IPC rejects unauthorized projects, terminals and external schem
   const selected = await call('projects:pickFolder')
   call('projects:add', 'selected', selected)
   assert.equal(projects.length, 2)
+  // TICKET-0164: bad input and a name collision come back as inline errors
+  // and keep the picked parent authorized, so the retry needs no new pick.
+  const parent = await call('projects:pickFolder')
+  assert.match((await call('projects:createNew', { name: 'bad:name', description: 'A tool.', parentDir: parent })).error, /can't contain/)
+  assert.match((await call('projects:createNew', { name: 'CON', description: 'A tool.', parentDir: parent })).error, /reserved/)
+  assert.match((await call('projects:createNew', { name: 'Wizard', description: '  ', parentDir: parent })).error, /Describe the project/)
+  fs.mkdirSync(path.join(parent, 'Taken'))
+  assert.match((await call('projects:createNew', { name: 'Taken', description: 'A tool.', parentDir: parent })).error, /already exists/)
+  const created = await call('projects:createNew', { name: ' Wizard ', description: 'A tool.', parentDir: parent })
+  assert.equal(created.path, path.join(parent, 'Wizard'))
+  assert.match(fs.readFileSync(path.join(created.path, 'README.md'), 'utf8'), /^# Wizard\n\nA tool\.\n/)
+  assert.match((await call('projects:createNew', { name: 'Again', description: 'A tool.', parentDir: parent })).error, /Choose the parent folder again/)
   const { EventEmitter } = require('node:events')
   let probes = 0
   let killed = 0

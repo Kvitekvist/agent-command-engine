@@ -25,7 +25,67 @@ async function restoreGitkeepFiles(dir) {
   }
 }
 
-async function createProjectFromScaffold({ name, parentDir, scaffoldDir } = {}) {
+// TICKET-0165: template files that carry the project's identity. Each holds
+// {{PLACEHOLDER}} tokens that seedProjectIdentity fills in once, right after
+// the copy, so a new project starts out describing itself rather than the
+// template.
+const SEEDED_FILES = [
+  'README.md',
+  'AGENTS.md',
+  'CHANGELOG.md',
+  '.claude/project_config.md',
+  '.claude/memory/project_memory.md',
+  '.claude/memory/project_status.md',
+  'docs/agents/current-state.md',
+]
+const SUMMARY_MAX = 120
+
+// First line of the description, cut at a word boundary, for one-line slots.
+function summarize(description) {
+  const firstLine = description.split('\n')[0].trim()
+  if (firstLine.length <= SUMMARY_MAX) return firstLine
+  const cut = firstLine.slice(0, SUMMARY_MAX)
+  return `${cut.slice(0, cut.lastIndexOf(' ') > 40 ? cut.lastIndexOf(' ') : SUMMARY_MAX).trimEnd()}…`
+}
+
+// The description is user text written into markdown, never interpreted.
+// One regex pass, so a description that itself contains "{{PROJECT_NAME}}"
+// or "$&" is copied literally instead of being substituted again.
+async function seedProjectIdentity(projectPath, { name, description, createdDate }) {
+  const text = description.replace(/\r\n?/g, '\n').trim() || 'Not described yet.'
+  const values = {
+    PROJECT_NAME: name,
+    PROJECT_DESCRIPTION: text,
+    PROJECT_SUMMARY: summarize(text),
+    CREATED_DATE: createdDate,
+  }
+  for (const file of SEEDED_FILES) {
+    const target = path.join(projectPath, file)
+    const content = await fs.promises.readFile(target, 'utf8')
+    await fs.promises.writeFile(target, content.replace(/\{\{(PROJECT_NAME|PROJECT_DESCRIPTION|PROJECT_SUMMARY|CREATED_DATE)\}\}/g, (_, key) => values[key]))
+  }
+}
+
+const NAME_MAX = 100
+const DESCRIPTION_MAX = 4000
+
+// TICKET-0164: checks on the wizard's input, run in main before anything is
+// created. Returns an error message, or null when the input is usable. The
+// character rules are Windows' (the strictest of the supported platforms), so
+// a project created on macOS can still be opened there.
+function validateNewProject(name, description) {
+  if (typeof name !== 'string' || !name.trim()) return 'Enter a folder name.'
+  const trimmed = name.trim()
+  if (trimmed.length > NAME_MAX) return `Keep the folder name under ${NAME_MAX} characters.`
+  if (/[<>:"/\\|?*\x00-\x1f]/.test(trimmed)) return 'The folder name can\'t contain < > : " / \\ | ? * or control characters.'
+  if (/[. ]$/.test(trimmed) || trimmed === '.' || trimmed === '..') return 'The folder name can\'t end with a dot or a space.'
+  if (/^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(trimmed)) return `"${trimmed}" is a reserved name on Windows.`
+  if (typeof description !== 'string' || !description.trim()) return 'Describe the project.'
+  if (description.trim().length > DESCRIPTION_MAX) return `Keep the description under ${DESCRIPTION_MAX} characters.`
+  return null
+}
+
+async function createProjectFromScaffold({ name, description = '', parentDir, scaffoldDir, createdDate = new Date().toISOString().slice(0, 10) } = {}) {
   if (typeof name !== 'string' || typeof parentDir !== 'string' || !name.trim() || !parentDir) {
     return { error: 'Missing project name or location' }
   }
@@ -54,6 +114,7 @@ async function createProjectFromScaffold({ name, parentDir, scaffoldDir } = {}) 
       force: false,
     })
     await restoreGitkeepFiles(projectPath)
+    await seedProjectIdentity(projectPath, { name: projectName, description: typeof description === 'string' ? description : '', createdDate })
     for (const emptyDir of ['build', 'releases']) {
       const dir = path.join(projectPath, emptyDir)
       await fs.promises.mkdir(dir, { recursive: true })
@@ -112,4 +173,4 @@ function ensureBundledSkills(projectPath, scaffoldDir) {
   return installed
 }
 
-module.exports = { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir }
+module.exports = { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir, validateNewProject }

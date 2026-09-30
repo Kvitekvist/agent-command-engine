@@ -6,9 +6,11 @@ version: 1.0.0
 
 # Guided project setup
 
-This project was just copied from the ACE template. Every identity file in it
-still describes the template, not this project. Your job is to fix that
-through a short interview, not to start building features.
+This project was just created from the ACE template. ACE filled in its name
+and the description the user gave (see `README.md` and the Project Vision in
+`.claude/memory/project_memory.md`); the stack, architecture and workflow are
+still unset. Your job is to settle those through a short interview, not to
+start building features.
 
 Do not write application code during this skill. Do not create feature
 tickets. The only files you touch are the ones in the **Apply** section.
@@ -27,7 +29,8 @@ Never assume — if something is ambiguous, ask.
 Cover every field below. Skip a question only if the user has already
 answered it.
 
-**Product**
+**Product** (name and description are already recorded: read them back and
+confirm or correct them rather than asking from scratch)
 - Project name
 - One-line description
 - Main purpose / problem it solves

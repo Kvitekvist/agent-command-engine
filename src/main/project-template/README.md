@@ -1,50 +1,9 @@
-# AI Project Bootstrap Template
+# {{PROJECT_NAME}}
 
-## Overview
+{{PROJECT_DESCRIPTION}}
 
-This is a copy-pasteable starting point for new AI-assisted software projects.
-It provides a standardized structure, workflow, and long-term memory system so
-that any project built from it stays maintainable over months of AI-assisted
-development, rather than accumulating undocumented, untracked changes.
-
----
-
-## Quick Start
-
-### Creating a New Project from This Template
-
-**Prerequisites**: Git and [GitHub CLI](https://cli.github.com/) installed
-
-```bash
-# Step 1: Create from template
-gh repo create my-new-project --template Kvitekvist/claude_project_framework --private --clone
-cd my-new-project
-
-# Step 2: Initialize your project
-.\scripts\init_project.bat
-
-# Step 3: Start building!
-```
-
-The initialization script will prompt you for project details and customize the template
-for your specific language, framework, and workflow.
-
-**See [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for complete setup instructions.**
-
----
-
-## Manual Setup (Alternative)
-
-If you prefer to set up manually:
-
-1. Copy this entire folder to a new location and rename it for the new project.
-2. Open the project in Claude Code.
-3. Run `/project-setup`. It interviews you about the project, agrees a
-   summary and a tech stack, then rewrites `.claude/project_config.md`, the
-   memory files, and the root documentation to match. (Projects created
-   through ACE's `✨ New` button start this automatically.)
-4. Start requesting features and bug fixes — every change is tracked through
-   the ticket system described below.
+The stack, build steps and run commands are not decided yet. They are agreed
+in the first agent session (`/project-setup`), which rewrites this README.
 
 ---
 
@@ -68,7 +27,7 @@ If you prefer to set up manually:
   (architecture, tech stack, coding conventions, project status,
   ticket history). Read at the start of every session.
 * **`.claude/prompts/`** — step-by-step workflows for features, bug fixes,
-  refactors, releases, and initializing a brand-new project.
+  refactors, and releases.
 * **`.claude/templates/`** — reusable templates for README, CHANGELOG, and
   ticket files.
 * **`tickets/`** — every feature and bug fix is tracked as a ticket,
@@ -95,40 +54,6 @@ See `.claude/PROJECT_SKELETON.md` for the full, authoritative layout.
   alongside the code change, not after the fact.
 * Commits follow the format `[TICKET-####] Short description`.
 * Memory files are the source of truth for project context across sessions.
-
----
-
-## Version
-
-Framework Version: 1.1.0
-
-See `.claude/framework_version.md` for framework-level version history and
-migration rules.
-
-### What's New in 1.1.0
-
-* **Ticket Decomposition** - Automatically break large requests into parent/child
-  tickets with dependency tracking
-* **Enhanced Ticket Template** - Support for parent tickets, child tickets, and
-  dependencies
-* **Decomposition Workflow** - Comprehensive guide in
-  `.claude/prompts/decomposition.md` for managing complex multi-part features
-
----
-
-## For Repository Administrators
-
-### Enable GitHub Template Feature
-
-To make this repository usable as a template:
-
-1. Go to **Settings** in this GitHub repository
-2. Under **General**, check ✅ **Template repository**
-3. Save changes
-
-Users can then create new projects using the Quick Start commands above.
-
-See [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) for administration details.
 
 ---
 

@@ -2,13 +2,13 @@
 
 ## Current Version
 
-1.2.0
+0.1.0
 
 ---
 
 ## Current Milestone
 
-Not Started
+Project setup
 
 ---
 
@@ -38,7 +38,7 @@ main
 
 ## Completed Tickets
 
-4
+0
 
 ---
 
@@ -56,16 +56,16 @@ Unknown
 
 ## Last Commit
 
-cdc29b5 - [TICKET-0003] Add GitHub Template distribution system
+None
 
 ---
 
 ## Next Priority
 
-Define first feature.
+Confirm requirements and choose the tech stack (`/project-setup`).
 
 ---
 
 ## Notes
 
-Template framework enhanced with FlowGrid's second brain system. Now includes smart context loading, safe ticket management, decomposition workflows, and comprehensive development tools.
+Created {{CREATED_DATE}} from the ACE template.

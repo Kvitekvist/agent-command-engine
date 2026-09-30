@@ -301,9 +301,9 @@ export default function AgentView() {
           <button
             onClick={() => setShowSkills(true)}
             className="px-2 py-1.5 text-xs rounded border border-border hover:bg-border transition-colors"
-            title="See the skills available to agents in this project"
+            title="See and toggle the skills, plugins, and MCP servers available to agents in this project"
           >
-            🧩 Skills
+            🧩 Skills / Plugins / MCP
           </button>
           <button
             onClick={toggleGridCols}

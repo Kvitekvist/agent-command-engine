@@ -1,12 +1,12 @@
-# Agent Guide
+# {{PROJECT_NAME}} Agent Guide
 
 Entry point for every coding agent working in this repository — Claude Code,
 Codex, or anything else. This file is provider-neutral and is the only
 document you must read before changing the repository.
 
-Replace the placeholders below (project name, stack, validation commands) when
-this template is initialised for a real project. `.claude/project_config.md`
-holds the machine-readable copy of the same facts.
+The stack and validation commands below are placeholders until
+`/project-setup` records the real ones. `.claude/project_config.md` holds the
+machine-readable copy of the same facts.
 
 ## Start here
 
