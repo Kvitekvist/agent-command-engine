@@ -130,7 +130,7 @@ test('registered IPC rejects unauthorized projects, terminals and external schem
   assert.match((await call('projects:createNew', { name: 'Taken', description: 'A tool.', parentDir: parent })).error, /already exists/)
   const created = await call('projects:createNew', { name: ' Wizard ', description: 'A tool.', parentDir: parent })
   assert.equal(created.path, path.join(parent, 'Wizard'))
-  assert.match(fs.readFileSync(path.join(created.path, 'README.md'), 'utf8'), /^# Wizard\n\nA tool\.\n/)
+  assert.match(fs.readFileSync(path.join(created.path, 'README.md'), 'utf8'), /^# Wizard\r?\n\r?\nA tool\.\r?\n/)
   assert.match((await call('projects:createNew', { name: 'Again', description: 'A tool.', parentDir: parent })).error, /Choose the parent folder again/)
   const { EventEmitter } = require('node:events')
   let probes = 0

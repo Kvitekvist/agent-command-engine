@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.1.43] - 2026-09-30
+
+### Fixed
+
+- New projects created on Windows no longer mix line endings: the
+  description ACE writes into the README and project memory now uses the
+  same line ending as the rest of the file. The project-creation tests also
+  failed on any Windows checkout, which stopped the v0.1.42 release build
+  (TICKET-0165).
+
 ## [0.1.42] - 2026-09-30
 
 ### Added

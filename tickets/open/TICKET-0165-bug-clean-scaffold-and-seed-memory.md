@@ -70,6 +70,15 @@ The `/project-setup` skill now confirms the pre-filled name and description; rec
 
 Coordinates with TICKET-0164 for input and TICKET-0120 for subsequent agent updates. Do not overwrite memory in projects that already exist.
 
+2026-09-30, v0.1.43: a Windows checkout (`core.autocrlf=true`) ships the
+template with CRLF. Seeding inserted the description with LF, so seeded files
+mixed line endings, and the tests (written against the LF working tree)
+failed on the clean checkout the release build uses. Seeding now uses each
+file's own line ending; the tests normalise line endings and assert no seeded
+file mixes them (fails on the old code against a CRLF checkout).
+
+---
+
 ## Closed
 
 Pending.

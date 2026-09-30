@@ -62,7 +62,10 @@ async function seedProjectIdentity(projectPath, { name, description, createdDate
   for (const file of SEEDED_FILES) {
     const target = path.join(projectPath, file)
     const content = await fs.promises.readFile(target, 'utf8')
-    await fs.promises.writeFile(target, content.replace(/\{\{(PROJECT_NAME|PROJECT_DESCRIPTION|PROJECT_SUMMARY|CREATED_DATE)\}\}/g, (_, key) => values[key]))
+    // A Windows checkout (core.autocrlf) ships the template with CRLF; keep
+    // the inserted description on the same line ending as the file.
+    const eol = content.includes('\r\n') ? '\r\n' : '\n'
+    await fs.promises.writeFile(target, content.replace(/\{\{(PROJECT_NAME|PROJECT_DESCRIPTION|PROJECT_SUMMARY|CREATED_DATE)\}\}/g, (_, key) => values[key].replace(/\n/g, eol)))
   }
 }
 

@@ -6,7 +6,9 @@ const { makeTempDir } = require('./helpers/temp-dir')
 const { createProjectFromScaffold, ensureBundledSkills } = require('../main/services/ProjectScaffoldService')
 
 const TEMPLATE_DIR = path.join(__dirname, '..', 'main', 'project-template')
-const read = (...parts) => fs.readFileSync(path.join(...parts), 'utf8')
+const raw = (...parts) => fs.readFileSync(path.join(...parts), 'utf8')
+// Line-ending agnostic: a Windows checkout (core.autocrlf) has a CRLF template.
+const read = (...parts) => raw(...parts).replace(/\r\n/g, '\n')
 function filesUnder(dir) {
   return fs.readdirSync(dir, { withFileTypes: true, recursive: true })
     .filter((entry) => entry.isFile())
@@ -36,6 +38,13 @@ test('new projects copy the bundled template and seed its identity', async (t) =
   assert.equal(fs.existsSync(path.join(project, 'releases', '.gitkeep')), true)
   // One-shot marker that triggers the guided /project-setup interview.
   assert.equal(fs.existsSync(path.join(project, '.claude', '.needs-setup')), true)
+
+  // Seeded files keep one line ending, whichever the template was checked
+  // out with, even around the multi-line description.
+  for (const file of ['README.md', '.claude/memory/project_memory.md']) {
+    const text = raw(project, file)
+    assert.equal(text.includes('\r\n') && /[^\r]\n/.test(text), false, `${file} mixes line endings`)
+  }
 
   // Seeded identity.
   assert.equal(read(project, 'README.md').startsWith(`# My Project\n\n${literal}\n`), true)
