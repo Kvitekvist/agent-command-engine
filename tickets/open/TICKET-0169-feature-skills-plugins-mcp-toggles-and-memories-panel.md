@@ -94,6 +94,12 @@ Plugins are not auto-discovered: the Plugins tab lists ids already in
 
 ---
 
+2026-09-30 follow-up: "Files / Editor" removed from the sidebar NAV at the
+user's request; opening a file from the tree already switches to the editor
+(`FileTree.jsx`), and the renderer smoke still opens a file into Monaco.
+
+---
+
 ## Closed
 
 Pending.

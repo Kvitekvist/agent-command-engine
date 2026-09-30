@@ -6,7 +6,6 @@ import NewProjectWizard from './NewProjectWizard'
 
 const NAV = [
   { id: 'agents', icon: '⚡', label: 'Agents' },
-  { id: 'editor', icon: '📝', label: 'Files / Editor' },
   { id: 'notes', icon: '🗒️', label: 'Project Notes' },
   { id: 'skills', icon: '🧩', label: 'Skills / Plugins / MCP' },
   { id: 'memories', icon: '🧠', label: 'Memories' },

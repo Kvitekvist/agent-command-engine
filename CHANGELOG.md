@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.44] - 2026-09-30
+
+### Changed
+
+- Sidebar: the "Files / Editor" entry is gone. Clicking a file in the tree
+  still opens the editor (TICKET-0169).
+
 ## [0.1.43] - 2026-09-30
 
 ### Fixed
