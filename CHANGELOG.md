@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.42] - 2026-09-30
+
 ### Added
 
 - Skills / Plugins / MCP panel (replaces Project Skills): switch each project
