@@ -54,9 +54,9 @@ export default function Sidebar() {
     document.body.style.cursor = 'col-resize'
   }
 
-  // TICKET-0164: the parent folder is picked natively first; while set, the
-  // NewProjectWizard asks for the folder name and description.
-  const [newProjectParent, setNewProjectParent] = useState(null)
+  // TICKET-0164: "✨ New" opens the NewProjectWizard, which asks for the
+  // location (native picker), folder name and description.
+  const [newProjectOpen, setNewProjectOpen] = useState(false)
 
   useEffect(() => {
     window.ace.getProjects().then(projects => {
@@ -88,17 +88,10 @@ export default function Sidebar() {
     setAdding(false)
   }
 
-  // Defaults to ACE's own parent folder but is fully navigable. Cancelling
-  // keeps whichever folder (and form) the wizard already had.
-  async function pickNewProjectParent() {
-    const parentDir = await window.ace.pickFolder(await window.ace.getDefaultParentDir())
-    if (parentDir) setNewProjectParent(parentDir)
-  }
-
   async function handleNewProjectCreated(name, projectPath) {
     await window.ace.addProject(name, projectPath)
     await refreshProjects()
-    setNewProjectParent(null)
+    setNewProjectOpen(false)
     setAdding(false)
   }
 
@@ -178,19 +171,17 @@ export default function Sidebar() {
               <button onClick={handlePickFolder} className="btn-primary flex-1 text-xs" title="Connect to an existing folder">
                 📁 Existing
               </button>
-              <button onClick={pickNewProjectParent} className="btn-primary flex-1 text-xs" title="Create a new project folder">
+              <button onClick={() => setNewProjectOpen(true)} className="btn-primary flex-1 text-xs" title="Create a new project folder">
                 ✨ New
               </button>
             </div>
           </div>
         )}
 
-        {newProjectParent && (
+        {newProjectOpen && (
           <NewProjectWizard
-            parentDir={newProjectParent}
-            onChangeFolder={pickNewProjectParent}
             onCreated={handleNewProjectCreated}
-            onClose={() => setNewProjectParent(null)}
+            onClose={() => setNewProjectOpen(false)}
           />
         )}
 

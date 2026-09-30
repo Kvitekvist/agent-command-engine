@@ -44,12 +44,16 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`document.querySelector('textarea').getAttribute('aria-label')`), 'Edit b.md')
     await evaluate(`document.querySelector('[aria-label="Close dialog"]').click()`)
     await until(`!document.querySelector('[role="dialog"]')`)
-    // TICKET-0164: folder first, then details; a collision keeps the form and
-    // a double click sends one request.
+    // TICKET-0164: the dialog opens first and asks for the location; a
+    // collision keeps the form and a double click sends one request.
     await evaluate(`document.querySelector('button[title="Add project"]').click()`)
     await click('✨ New')
-    await until(`document.body.textContent.includes('C:\\\\Smoke parent')`)
+    await until(`!!document.querySelector('[role="dialog"]') && document.body.textContent.includes('Choose project location')`)
     const setField = (selector, text) => evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(text)}); el.dispatchEvent(new Event('input', { bubbles: true })); })()`)
+    await click('Create project')
+    await until(`document.querySelector('[role="alert"]')?.textContent === 'Choose a project location first.'`)
+    await click('Choose project location')
+    await until(`document.body.textContent.includes('C:\\\\Smoke parent') && document.body.textContent.includes('Change location')`)
     await click('Create project')
     await until(`document.querySelector('[role="alert"]')?.textContent === 'Enter a folder name.'`)
     await setField('[role="dialog"] input', 'Wizard project')

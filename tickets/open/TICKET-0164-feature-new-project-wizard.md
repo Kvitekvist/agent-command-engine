@@ -61,6 +61,13 @@ Implemented and committed. Needs a manual run of the real native picker and a re
 
 ## Notes
 
+2026-09-30 follow-up from the user: opening the native picker straight from
+"✨ New" didn't make it clear a project location was being asked for. The
+dialog now opens first, with a "Choose project location" button (then
+"Change location"); Create explains "Choose a project location first." until
+one is picked. The picker call moved into `NewProjectWizard.jsx`; the smoke
+test checks the dialog-first order and the missing-location message.
+
 Depends on TICKET-0165 for seeded output. Coordinate the new IPC payload with that ticket. Existing Sidebar working-tree edits must be preserved.
 
 ## Closed

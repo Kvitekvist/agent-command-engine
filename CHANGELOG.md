@@ -10,8 +10,9 @@
   Claude only (TICKET-0169).
 - Memories panel: list and edit the project's `.claude/memory/*.md` files
   (TICKET-0169).
-- New-project wizard: pick the parent folder first, then give the folder name
-  and a required description, with the full destination shown before Create.
+- New-project wizard: "✨ New" opens a dialog with a "Choose project location"
+  button, a folder name and a required description, and shows the full
+  destination before Create.
   Errors appear in the dialog and keep what you typed, and a name collision
   can be retried without picking the folder again (TICKET-0164).
 

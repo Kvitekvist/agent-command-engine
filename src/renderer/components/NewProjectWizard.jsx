@@ -1,11 +1,13 @@
 import React, { useId, useRef, useState } from 'react'
 import Modal from './Modal'
 
-// TICKET-0164: installer-style new project. The parent folder comes first
-// (native picker, so main can authorize it), then the folder name and a
-// required description that seeds the project's memory (TICKET-0165). Main
-// validates everything again; its errors show inline and keep the form.
-export default function NewProjectWizard({ parentDir, onChangeFolder, onCreated, onClose }) {
+// TICKET-0164: installer-style new project. The dialog opens first and asks
+// for the location (native picker, so main can authorize the folder), the
+// folder name and a required description that seeds the project's memory
+// (TICKET-0165). Main validates everything again; its errors show inline and
+// keep the form.
+export default function NewProjectWizard({ onCreated, onClose }) {
+  const [parentDir, setParentDir] = useState(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState('')
@@ -15,11 +17,19 @@ export default function NewProjectWizard({ parentDir, onChangeFolder, onCreated,
   const nameId = useId()
   const descriptionId = useId()
 
-  const separator = parentDir.includes('\\') ? '\\' : '/'
-  const destination = `${parentDir.replace(/[\\/]+$/, '')}${separator}${name.trim() || '…'}`
+  // Defaults to ACE's own parent folder but is fully navigable. Cancelling
+  // keeps whichever location (and form) the wizard already had.
+  async function chooseLocation() {
+    const dir = await window.ace.pickFolder(await window.ace.getDefaultParentDir())
+    if (dir) { setParentDir(dir); setError('') }
+  }
+
+  const separator = parentDir?.includes('\\') ? '\\' : '/'
+  const destination = parentDir && `${parentDir.replace(/[\\/]+$/, '')}${separator}${name.trim() || '…'}`
 
   async function create() {
     if (inFlight.current) return
+    if (!parentDir) { setError('Choose a project location first.'); return }
     if (!name.trim()) { setError('Enter a folder name.'); return }
     if (!description.trim()) { setError('Describe the project.'); return }
     inFlight.current = true
@@ -40,10 +50,18 @@ export default function NewProjectWizard({ parentDir, onChangeFolder, onCreated,
   return (
     <Modal title="New project" onClose={() => { if (!creating) onClose() }} wide>
       <p className="text-xs text-muted">Location</p>
-      <div className="flex items-center gap-2 mt-1">
-        <code className="text-xs text-gray-300 truncate flex-1" title={parentDir}>{parentDir}</code>
-        <button className="btn-ghost text-xs" disabled={creating} onClick={onChangeFolder}>Back: choose another folder</button>
-      </div>
+      {!parentDir && (
+        <div className="mt-1">
+          <p className="text-xs text-gray-300">Pick the folder your new project folder will be created in.</p>
+          <button className="btn-primary text-xs mt-1.5" disabled={creating} onClick={chooseLocation}>Choose project location</button>
+        </div>
+      )}
+      {parentDir && (
+        <div className="flex items-center gap-2 mt-1">
+          <code className="text-xs text-gray-300 truncate flex-1" title={parentDir}>{parentDir}</code>
+          <button className="btn-ghost text-xs" disabled={creating} onClick={chooseLocation}>Change location</button>
+        </div>
+      )}
 
       <label htmlFor={nameId} className="block text-xs text-muted mt-3">Folder name</label>
       <input
@@ -53,7 +71,6 @@ export default function NewProjectWizard({ parentDir, onChangeFolder, onCreated,
         maxLength={100}
         disabled={creating}
         onChange={(e) => { setName(e.target.value); setError('') }}
-        autoFocus
       />
 
       <label htmlFor={descriptionId} className="block text-xs text-muted mt-3">Description</label>
@@ -67,8 +84,12 @@ export default function NewProjectWizard({ parentDir, onChangeFolder, onCreated,
         onChange={(e) => { setDescription(e.target.value); setError('') }}
       />
 
-      <p className="text-xs text-muted mt-3">Will be created at</p>
-      <code className="block text-xs text-gray-300 break-all">{destination}</code>
+      {destination && (
+        <>
+          <p className="text-xs text-muted mt-3">Will be created at</p>
+          <code className="block text-xs text-gray-300 break-all">{destination}</code>
+        </>
+      )}
 
       {error && <p role="alert" className="text-xs text-danger mt-2">{error}</p>}
       <div className="flex justify-end gap-1.5 mt-3">
