@@ -2,7 +2,7 @@
 
 **Status**
 
-Awaiting verification
+Closed
 
 **Type**
 
@@ -58,11 +58,13 @@ CI was red on every platform, hiding any real regression.
 
 - Local Windows: `smoke-renderer.js` passes, `smoke-main.js` exits 0,
   `scripts/run_tests.sh` passes.
-- Pending: green `Tests` run on all three CI platforms.
+- CI `Tests` run 36390242552: ubuntu, macOS and Windows all green.
 
 ---
 
 ## Result
+
+CI green again on all three platforms.
 
 ---
 
@@ -74,3 +76,5 @@ on every tag; that is the missing signing secrets, not code.
 ---
 
 ## Closed
+
+2026-09-28
