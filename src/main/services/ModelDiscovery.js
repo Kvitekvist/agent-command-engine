@@ -40,8 +40,30 @@ function codexModels(home) {
     .map(m => ({ id: m.slug, label: m.display_name || m.slug, description: m.description || '' }))
 }
 
-function discoverModels(home = os.homedir()) {
-  return { claude: claudeModels(home), codex: codexModels(home) }
+// Enterprise-gateway and API logins never write the model-catalog cache;
+// their models are pinned with these variables instead, either in the
+// environment or in the `env` block of ~/.claude/settings.json (which
+// Claude Code applies to every session). Read both so the Models button
+// finds them.
+const PINNED_MODEL_VARS = ['ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL']
+
+function pinnedClaudeModels(home, env) {
+  const settingsEnv = readJson(path.join(home, '.claude', 'settings.json'))?.env || {}
+  const models = []
+  for (const key of PINNED_MODEL_VARS) {
+    for (const value of [env[key], settingsEnv[key]]) {
+      if (typeof value !== 'string' || !value.trim()) continue
+      models.push({ id: value.trim(), label: value.trim(), description: `Pinned in your Claude settings (${key})` })
+    }
+  }
+  return models
+}
+
+function discoverModels(home = os.homedir(), env = process.env) {
+  const seen = new Set()
+  const claude = [...claudeModels(home), ...pinnedClaudeModels(home, env)]
+    .filter(m => !seen.has(m.id) && seen.add(m.id))
+  return { claude, codex: codexModels(home) }
 }
 
 // Commands that make each CLI re-fetch its model list into the cache above
@@ -66,7 +88,7 @@ function refreshCliCaches({ resolve = providerExecutable, run = execFile, timeou
 
 async function refreshAndDiscoverModels(options) {
   await refreshCliCaches(options)
-  return discoverModels(options?.home)
+  return discoverModels(options?.home, options?.env)
 }
 
 module.exports = { discoverModels, refreshCliCaches, refreshAndDiscoverModels }

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.1.45] - 2026-09-30
+
+### Fixed
+
+- Models button: Claude logins through an enterprise gateway (SSO) never
+  write the model-catalog cache the button read, so it found nothing. It now
+  also picks up the models pinned with `ANTHROPIC_MODEL` and
+  `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, from the environment or from
+  `~/.claude/settings.json` (TICKET-0170).
+
 ## [0.1.44] - 2026-09-30
 
 ### Changed
