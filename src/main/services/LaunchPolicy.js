@@ -33,7 +33,10 @@ function resolveLaunchPolicy({ provider, model, projectId } = {}, deps = {}) {
     || (manualProvider && configuredProvider === resolvedProvider && configuredModel)
     || DEFAULT_MODEL_BY_PROVIDER[resolvedProvider]
 
-  if (typeof resolvedModel !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(resolvedModel)) {
+  // Allows the ids Claude Code's /model list uses: a Vertex-style `@date`
+  // (claude-haiku-4-5@20251001) and a context suffix (claude-opus-5-5[1m]).
+  // agentLaunch quotes every argument, so these reach the CLI verbatim.
+  if (typeof resolvedModel !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:@-]{0,127}(\[[a-z0-9]{1,8}\])?$/.test(resolvedModel)) {
     throw new Error('Invalid model ID')
   }
   return { provider: resolvedProvider, model: resolvedModel, automatic: !manualProvider }

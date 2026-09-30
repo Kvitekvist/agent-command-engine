@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.1.46] - 2026-09-30
+
+### Fixed
+
+- Models button: Claude models now come from Claude Code's own `/model`
+  list, whatever the login, so every model an enterprise gateway exposes
+  shows up (including `[1m]` long-context variants). ACE asks the CLI for the
+  list without starting a conversation, and falls back to the older cache and
+  pinned-variable sources when the CLI can't answer (TICKET-0170).
+- Launching an agent on a model id with `@date` or a `[1m]` suffix
+  (`claude-haiku-4-5@20251001`, `claude-opus-5-5[1m]`) no longer fails with
+  "Invalid model ID" (TICKET-0170).
+
 ## [0.1.45] - 2026-09-30
 
 ### Fixed

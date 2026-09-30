@@ -63,6 +63,69 @@ test('enterprise-gateway logins without a catalog cache still surface their pinn
   assert.deepEqual(getModelGroups('claude', found)[0].options.map(o => o.id), ['claude-haiku-4-5@20251001'])
 })
 
+// The work-PC /model menu behind an enterprise gateway (value -> resolvedModel).
+const GATEWAY_MODELS = [
+  { value: 'default', resolvedModel: 'claude-opus-4-8', displayName: 'Default (recommended)', description: 'Opus 4.8' },
+  { value: 'opus', resolvedModel: 'claude-opus-4-8', displayName: 'Opus', description: 'Opus 4.8' },
+  { value: 'opus[1m]', resolvedModel: 'claude-opus-5-5[1m]', displayName: 'Opus (1M context)', description: 'Opus 5.5' },
+  { value: 'sonnet', resolvedModel: 'claude-sonnet-5-5', displayName: 'Sonnet 5.5' },
+  { value: 'claude-sonnet-5', resolvedModel: 'claude-sonnet-5', displayName: 'Sonnet 5' },
+  { value: 'claude-sonnet-4-6[1m]', displayName: 'Sonnet 4.6 (1M context)' },
+  { value: 'haiku', resolvedModel: 'claude-haiku-4-5', displayName: 'Haiku 4.5' },
+  { value: 'claude-opus-5-5', displayName: 'Opus 5.5' },
+  { value: 'claude-haiku-4-5', displayName: 'Haiku 4.5' },
+]
+
+test('the /model list from the CLI initialize response becomes concrete, de-duplicated ids', () => {
+  const { modelsFromInitialize } = require('../main/services/ModelDiscovery')
+  const models = modelsFromInitialize(GATEWAY_MODELS)
+  assert.deepEqual(models.map(m => m.id), ['claude-opus-4-8', 'claude-opus-5-5[1m]', 'claude-sonnet-5-5', 'claude-sonnet-5', 'claude-sonnet-4-6[1m]', 'claude-haiku-4-5', 'claude-opus-5-5'])
+  assert.deepEqual(models[1], { id: 'claude-opus-5-5[1m]', label: 'Claude Opus (1M context)', description: 'Opus 5.5' })
+  // "Default" counts only when it points at a model nothing else lists.
+  assert.deepEqual(modelsFromInitialize([{ value: 'default', resolvedModel: 'claude-x-1', displayName: 'Default (recommended)' }]).map(m => m.id), ['claude-x-1'])
+  assert.deepEqual(modelsFromInitialize(null), [])
+})
+
+function fakeCli(lines, { exitWithoutAnswer = false } = {}) {
+  const { EventEmitter } = require('node:events')
+  const calls = []
+  const spawnFn = (cmd, args) => {
+    const child = new EventEmitter()
+    child.stdout = new EventEmitter()
+    child.kill = () => { child.killed = true }
+    child.stdin = { on() {}, end: (input) => {
+      calls.push({ cmd, args, input })
+      setImmediate(() => {
+        // Split mid-line to prove stdout is buffered by newline.
+        const text = lines.map(l => JSON.stringify(l)).join('\n') + '\n'
+        child.stdout.emit('data', text.slice(0, 25))
+        child.stdout.emit('data', text.slice(25))
+        if (exitWithoutAnswer) child.emit('close', 1)
+      })
+    } }
+    return child
+  }
+  return { spawnFn, calls }
+}
+
+test('listClaudeModels sends initialize and reads the matching control response', async () => {
+  const { listClaudeModels } = require('../main/services/ModelDiscovery')
+  const { spawnFn, calls } = fakeCli([
+    { type: 'system', subtype: 'hook_started' },
+    { type: 'control_response', response: { subtype: 'success', request_id: 'other', response: { models: [{ value: 'claude-wrong' }] } } },
+    { type: 'control_response', response: { subtype: 'success', request_id: 'ace-models', response: { models: GATEWAY_MODELS } } },
+  ])
+  const models = await listClaudeModels({ resolve: () => ['claude.exe'], spawnFn })
+  assert.equal(models.length, 7)
+  assert.deepEqual(calls[0].args, ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--no-session-persistence'])
+  assert.deepEqual(JSON.parse(calls[0].input), { type: 'control_request', request_id: 'ace-models', request: { subtype: 'initialize' } })
+
+  // No answer (older CLI, logged out) or no CLI at all: null, so callers fall back.
+  assert.equal(await listClaudeModels({ resolve: () => ['claude.exe'], spawnFn: fakeCli([{ type: 'result' }], { exitWithoutAnswer: true }).spawnFn }), null)
+  assert.equal(await listClaudeModels({ resolve: () => { throw new Error('missing') } }), null)
+  assert.equal(await listClaudeModels({ resolve: () => ['claude.exe'], spawnFn: fakeCli([]).spawnFn, timeoutMs: 20 }), null)
+})
+
 test('refresh runs each CLI silently and survives a missing one; newModels lists only dropdown additions', async () => {
   const { refreshCliCaches } = require('../main/services/ModelDiscovery')
   const calls = []

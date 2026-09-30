@@ -28,6 +28,15 @@ test('manual provider and selected model are preserved', () => {
   })
 })
 
+test('gateway /model ids with @date or a [1m] suffix are accepted; shell metacharacters are not', () => {
+  for (const model of ['claude-opus-5-5[1m]', 'claude-haiku-4-5@20251001', 'claude-sonnet-4-6[1m]']) {
+    assert.equal(resolve({ provider: 'claude', model }).model, model)
+  }
+  for (const model of ['claude; rm -rf /', 'claude-opus[1m]x', "claude'opus", 'claude opus', '[1m]', 'claude-$(x)']) {
+    assert.throws(() => resolve({ provider: 'claude', model }), /Invalid model ID/)
+  }
+})
+
 test('manual provider uses its saved default model when no model is supplied', () => {
   const result = resolve({ provider: 'claude' }, {
     settings: { default_provider: 'claude', default_model: 'claude-opus-5' },

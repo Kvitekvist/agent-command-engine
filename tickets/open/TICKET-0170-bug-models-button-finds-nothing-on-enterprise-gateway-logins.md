@@ -96,6 +96,34 @@ from the CLIs ACE spawns, which would also drop settings such as
 
 ---
 
+2026-09-30 follow-up (after v0.1.45): the pinned variables only held three
+of the fifteen models the gateway exposes in `/model`. The source of truth is
+Claude Code's own model list: the CLI answers an Agent SDK `initialize`
+control request (`claude -p --input-format stream-json --output-format
+stream-json --verbose --no-session-persistence`, stdin
+`{"type":"control_request","request_id":"ace-models","request":{"subtype":"initialize"}}`)
+with `response.response.models`, the exact `/model` menu, built from whatever
+login the CLI runs under. No prompt, no model call; about 0.7 s here.
+
+- `ModelDiscovery.listClaudeModels` runs that request and returns concrete
+  ids (`value` when it is a `claude-` id, else `resolvedModel`), de-duplicated,
+  with "Default" only when it points at an otherwise unlisted model.
+- `refreshAndDiscoverModels` uses it for Claude and only falls back to the
+  `/cost` cache refresh plus catalog and pinned variables when it returns null.
+- `LaunchPolicy` rejected `@` and `[1m]` in model ids ("Invalid model ID"),
+  so the 0.1.45 pinned `claude-haiku-4-5@20251001` could not have launched
+  either. It now allows `@` and one `[a-z0-9]{1,8}` suffix; `agentLaunch`
+  single-quotes every argument, and a test checks shell metacharacters are
+  still rejected.
+- Tests: the work PC's /model shape (aliases, `[1m]`, Default) mapped to 7
+  ids; the control response matched by request id across split stdout; null
+  on a CLI that exits without answering, a missing CLI, and a timeout.
+  Verified against the real CLI on the dev machine (11 models, 730 ms).
+  `npm test` 150/149 pass, 0 fail; build and renderer smoke pass.
+- Not verified: the work PC itself (needs the next Store build).
+
+---
+
 ## Closed
 
 Pending.
