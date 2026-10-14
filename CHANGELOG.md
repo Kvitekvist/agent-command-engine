@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [0.1.47] - 2026-10-14
+
+### Added
+
+- Agent terminal: a chat view toggle renders the parsed transcript instead
+  of the raw terminal, and still surfaces the CLI's approval/permission
+  prompts so they can be answered without switching back (TICKET-0171).
+- Plugins tab now lists plugins already installed for the Claude Code
+  account, read from Claude's own plugin/marketplace files, instead of
+  requiring every id to be typed in by hand (TICKET-0171).
+- Memories panel: Monaco editor (find/replace, Ctrl/Cmd+S) and a file
+  filter box, and a search box on each Skills/Plugins/MCP tab
+  (TICKET-0171).
+
+### Fixed
+
+- A restored agent (app reopened, or a CLI that died while the app stayed
+  open) resumes its last CLI session instead of starting a blank one
+  (TICKET-0171).
+- Notes and the first-prompt questionnaire no longer close on an
+  accidental click on the modal backdrop (TICKET-0171).
+
 ## [0.1.46] - 2026-09-30
 
 ### Fixed

@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 // cursor-anchored popover for right-click menus) -- this is the first
 // generic "ask the user something in a real dialog" primitive in the app,
 // needed because Electron doesn't implement window.prompt().
-export default function Modal({ title, children, onClose, wide, className = '' }) {
+export default function Modal({ title, children, onClose, wide, className = '', closeOnBackdrop = true }) {
   const titleId = useId()
   const dialogRef = useRef(null)
   const previousFocus = useRef(document.activeElement)
@@ -42,7 +42,7 @@ export default function Modal({ title, children, onClose, wide, className = '' }
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={onClose}
+      onClick={closeOnBackdrop ? onClose : undefined}
     >
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className={`card w-full relative max-h-[90vh] overflow-auto ${wide ? 'max-w-lg' : 'max-w-sm'} ${className}`} onClick={(e) => e.stopPropagation()}>
         <button

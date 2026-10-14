@@ -12,7 +12,7 @@ function Toggle({ on, onClick, disabled }) {
       aria-checked={on}
       disabled={disabled}
       onClick={onClick}
-      className={`shrink-0 w-9 h-5 rounded-full relative transition-colors ${on ? 'bg-accent' : 'bg-border'}`}
+      className={`shrink-0 w-9 h-5 min-h-0 rounded-full relative transition-colors ${on ? 'bg-accent' : 'bg-border'}`}
     >
       <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${on ? 'translate-x-4' : ''}`} />
     </button>
@@ -27,11 +27,13 @@ const TABS = [
 
 export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
   const [tab, setTab] = useState('skills')
+  const [search, setSearch] = useState('')
   const [provider, setProvider] = useState('claude')
   const skillsDir = provider === 'claude' ? '.claude/skills' : '.agents/skills'
 
   const [skills, setSkills] = useState([])
   const [mcpServers, setMcpServers] = useState([])
+  const [installedPlugins, setInstalledPlugins] = useState([])
   // null while unreadable (TICKET-0166): toggles stay disabled rather than
   // writing over settings we couldn't parse.
   const [local, setLocal] = useState(null)
@@ -70,6 +72,10 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
       }
       if (cancelled) return
       setMcpServers(servers.sort())
+
+      const discovered = await window.ace.discoverPlugins().catch(() => ({ plugins: [] }))
+      if (cancelled) return
+      setInstalledPlugins(discovered?.plugins || [])
 
       setError(settingsError)
     })().catch((error) => { if (!cancelled) setError(error.message) })
@@ -129,16 +135,29 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
   const disabledMcp = new Set(settings.disabledMcpjsonServers || [])
   const enabledPlugins = settings.enabledPlugins || {}
 
+  const q = search.trim().toLowerCase()
+  const matches = (...fields) => !q || fields.some((f) => f.toLowerCase().includes(q))
+  const visibleSkills = skills.filter((s) => matches(s.name, s.key, s.description))
+  const visibleMcpServers = mcpServers.filter((name) => matches(name))
+  const allPluginIds = [...new Set([...installedPlugins, ...Object.keys(enabledPlugins)])].sort((a, b) => a.localeCompare(b))
+  const visiblePluginIds = allPluginIds.filter((id) => matches(id))
+
   return (
     <Modal title="🧩 Skills / Plugins / MCP" onClose={onClose} wide className="h-[32rem] flex flex-col">
       <div className="flex border border-border rounded overflow-hidden shrink-0 text-xs">
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => { setTab(t.id); setSearch('') }}
             className={'flex-1 px-3 py-1.5 transition-colors ' + (tab === t.id ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
             {t.label}
           </button>
         ))}
       </div>
+      <input
+        className="input text-xs mt-2 shrink-0"
+        placeholder={`Search ${TABS.find((t) => t.id === tab)?.label.toLowerCase()}…`}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
       {error && <p role="alert" className="text-danger">{error} <button onClick={() => setRetry((n) => n + 1)}>Retry</button></p>}
 
       {tab === 'skills' && (
@@ -148,7 +167,8 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 mt-1">
             {loading && <p className="text-xs text-muted">Loading…</p>}
             {!loading && skills.length === 0 && <p className="text-xs text-muted">No skills found in {skillsDir}.</p>}
-            {!loading && skills.map((skill) => {
+            {!loading && skills.length > 0 && visibleSkills.length === 0 && <p className="text-xs text-muted">No match.</p>}
+            {!loading && visibleSkills.map((skill) => {
               const off = skillOverrides[skill.key] === 'off'
               return (
                 <div key={skill.key} className="border border-border rounded p-2 flex items-start justify-between gap-2">
@@ -170,7 +190,8 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 mt-1">
             {loading && <p className="text-xs text-muted">Loading…</p>}
             {!loading && mcpServers.length === 0 && <p className="text-xs text-muted">No .mcp.json servers found in this project.</p>}
-            {!loading && mcpServers.map((name) => {
+            {!loading && mcpServers.length > 0 && visibleMcpServers.length === 0 && <p className="text-xs text-muted">No match.</p>}
+            {!loading && visibleMcpServers.map((name) => {
               const off = disabledMcp.has(name)
               return (
                 <div key={name} className="border border-border rounded p-2 flex items-center justify-between gap-2">
@@ -185,7 +206,7 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
 
       {tab === 'plugins' && (
         <>
-          <p className="text-sm text-muted mt-2 shrink-0">Plugins ACE knows about for this project. Claude Code only. New installs aren't auto-discovered -- add a plugin's id below once (name, or name@marketplace) to start toggling it.</p>
+          <p className="text-sm text-muted mt-2 shrink-0">Plugins installed for your Claude Code account, plus any added here. Claude Code only. A plugin from a teammate's settings that isn't installed on this machine yet won't show -- add its id below (name@marketplace) to track it anyway.</p>
           <div className="flex gap-1.5 mt-1 shrink-0">
             <input className="input text-xs flex-1" placeholder="plugin-name@marketplace" value={newPlugin} onChange={(e) => setNewPlugin(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && local && newPlugin.trim()) togglePlugin(newPlugin.trim(), true) }} />
@@ -193,13 +214,19 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 mt-2">
             {loading && <p className="text-xs text-muted">Loading…</p>}
-            {!loading && Object.keys(enabledPlugins).length === 0 && <p className="text-xs text-muted">No plugins registered yet.</p>}
-            {!loading && Object.entries(enabledPlugins).sort(([a], [b]) => a.localeCompare(b)).map(([id, on]) => (
-              <div key={id} className="border border-border rounded p-2 flex items-center justify-between gap-2">
-                <div className="text-xs font-semibold text-gray-100">{id}</div>
-                <Toggle on={!!on} disabled={!local} onClick={() => togglePlugin(id, !on)} />
-              </div>
-            ))}
+            {!loading && allPluginIds.length === 0 && <p className="text-xs text-muted">No plugins installed or registered.</p>}
+            {!loading && allPluginIds.length > 0 && visiblePluginIds.length === 0 && <p className="text-xs text-muted">No match.</p>}
+            {!loading && visiblePluginIds.map((id) => {
+              // Claude Code enables an installed plugin by default; enabledPlugins
+              // only needs an entry once something turns it off.
+              const on = enabledPlugins[id] !== false
+              return (
+                <div key={id} className="border border-border rounded p-2 flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-gray-100">{id}</div>
+                  <Toggle on={on} disabled={!local} onClick={() => togglePlugin(id, !on)} />
+                </div>
+              )
+            })}
           </div>
         </>
       )}

@@ -237,14 +237,19 @@ const DBService = {
     prepare('DELETE FROM agents WHERE id = ?').run(id),
 
   // Agent <-> CLI session mapping (TICKET-0044)
-  recordAgentSession: ({ session_id, agent_id, project_id, agent_name, session_title }) =>
+  recordAgentSession: ({ session_id, agent_id, project_id, agent_name, session_title }) => {
     prepare(`
       INSERT INTO agent_sessions (session_id, agent_id, project_id, agent_name, session_title)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         agent_id = excluded.agent_id, project_id = excluded.project_id,
         agent_name = excluded.agent_name, session_title = excluded.session_title
-    `).run(session_id, agent_id, project_id, agent_name, session_title || null),
+    `).run(session_id, agent_id, project_id, agent_name, session_title || null)
+    // Also stamp the owning agent row so a later restore (app reopened) can
+    // pass this session id back into AgentService.restore() and resume the
+    // same CLI session instead of starting blank.
+    prepare('UPDATE agents SET session_id = ? WHERE id = ?').run(session_id, agent_id)
+  },
 
   // sessionId -> owning agentId, for the Claude-hook status watcher (HookService).
   getAgentIdBySession: (sessionId) => {

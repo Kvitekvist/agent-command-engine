@@ -3,6 +3,8 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
+import ChatView from './ChatView'
+import { detectPrompt } from '../utils/promptDetect.mjs'
 import { feedLineCapture, deriveTitle } from '../utils/firstLineCapture.mjs'
 import { buildImageGenerationPrompt } from '../utils/imageGenerationPrompt.mjs'
 import { buildFirstPrompt } from '../utils/firstPromptQuestionnaire.mjs'
@@ -108,6 +110,29 @@ export default function AgentTerminal({ agent, onStatusChange }) {
   // Operation feedback state
   const [pasteStatus, setPasteStatus] = useState(null) // For large paste feedback
   const [showNotes, setShowNotes] = useState(false)
+  const [chatView, setChatView] = useState(() => {
+    try { return localStorage.getItem('ace.chatView') === '1' } catch { return false }
+  })
+  const toggleChatView = () => setChatView(v => {
+    try { localStorage.setItem('ace.chatView', v ? '0' : '1') } catch { /* private mode */ }
+    return !v
+  })
+  // The CLI's numbered approval menu, read off the xterm screen while chat view
+  // hides it, so it can be answered without switching back.
+  const [cliPrompt, setCliPrompt] = useState(null)
+  useEffect(() => {
+    if (!chatView || status !== 'ready') { setCliPrompt(null); return }
+    const t = setInterval(() => {
+      const term = terminalRef.current
+      if (!term) return
+      const buf = term.buffer.active
+      const rows = []
+      for (let y = 0; y < term.rows; y++) rows.push(buf.getLine(buf.viewportY + y)?.translateToString(true) ?? '')
+      const next = detectPrompt(rows)
+      setCliPrompt(prev => JSON.stringify(prev) === JSON.stringify(next) ? prev : next)
+    }, 500)
+    return () => clearInterval(t)
+  }, [chatView, status])
   const [skills, setSkills] = useState({})
   useEffect(() => {
     if (status !== 'ready' || agent.provider !== 'claude') return
@@ -589,6 +614,12 @@ export default function AgentTerminal({ agent, onStatusChange }) {
             </div>
           </details>
           <button
+            onClick={toggleChatView}
+            title="Switch between the raw terminal and a rendered chat view"
+            className={`text-xs py-0.5 px-2 rounded border transition-colors ${chatView ? 'border-accent/40 bg-accent/20 text-accent' : 'border-border text-muted hover:bg-border'}`}>
+            {chatView ? '💬 Chat view' : '⌨️ Terminal view'}
+          </button>
+          <button
             onClick={() => setShowNotes(true)}
             title="Shared project notes -- write reminders/summaries here, or send one into this terminal's chat"
             className="text-xs py-0.5 px-2 rounded border border-border text-muted hover:bg-border transition-colors">
@@ -615,7 +646,7 @@ export default function AgentTerminal({ agent, onStatusChange }) {
         </div>
       </Modal>}
       {questionnaireSource && !showBanner && (
-        <Modal title="What are we working on?" wide onClose={dismissQuestionnaire}>
+        <Modal title="What are we working on?" wide onClose={dismissQuestionnaire} closeOnBackdrop={false}>
           <p className="text-xs text-muted -mt-2 mb-3">
             Optional -- helps shape the first prompt. Fill in as much or as little as you like, or skip it.
           </p>
@@ -651,7 +682,7 @@ export default function AgentTerminal({ agent, onStatusChange }) {
       {/* TICKET-0052: feedback for large paste operations */}
       <OperationFeedback label="Pasting" status={pasteStatus} />
       <div
-        className="flex-1 min-h-0 [&_.xterm]:h-full"
+        className={`flex-1 min-h-0 [&_.xterm]:h-full ${chatView ? 'hidden' : ''}`}
         ref={containerRef}
         onClick={() => {
           // Refocus terminal when clicking anywhere in the terminal area
@@ -659,6 +690,20 @@ export default function AgentTerminal({ agent, onStatusChange }) {
           if (terminalRef.current) terminalRef.current.focus()
         }}
       />
+      {/* Reads the transcript file directly, so it has something to show even
+          while the terminal is still connecting/resuming or failed to start --
+          unlike the live PTY view, it isn't tied to `status`. */}
+      {chatView && (
+        <ChatView agentId={agent.agentId} onSend={(text) => {
+          const id = sessionIdRef.current
+          if (!id) return
+          terminalRef.current?.paste(text)
+          window.ace.terminal.write(id, '\r')
+        }}
+        prompt={cliPrompt}
+        onChoose={(n) => { if (sessionIdRef.current) { window.ace.terminal.write(sessionIdRef.current, String(n)); setCliPrompt(null) } }}
+        onCancel={() => { if (sessionIdRef.current) { window.ace.terminal.write(sessionIdRef.current, '\x1b'); setCliPrompt(null) } }} />
+      )}
       {showBanner && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface text-muted text-xs gap-1">
           <div className="text-lg">⚡</div>

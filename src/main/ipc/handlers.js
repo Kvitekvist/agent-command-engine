@@ -11,6 +11,8 @@ const { notesOperation } = require('../services/NotesService')
 const { detectBuild } = require('../services/ProjectBuild')
 const { providerExecutable } = require('../services/ProviderExecutable')
 const { refreshAndDiscoverModels } = require('../services/ModelDiscovery')
+const { discoverPlugins } = require('../services/PluginDiscovery')
+const { readTranscript, readCodexTranscript } = require('../services/TranscriptService')
 
 // TICKET-0075: the renderer hands main a filesystem path for every fs / git /
 // build / screenshot / agent-spawn call. Trusting that string verbatim lets a
@@ -65,7 +67,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   if (TerminalSvc) TerminalSvc.setWindow(getWindow())
   TerminalSvc.onState = (agentId, status) => {
     DB.updateAgentStatus(agentId, status)
-    if (status !== 'running') getWindow()?.webContents.send('agent:status', { agentId, status })
+    // Always forward, including the transition back to 'running' -- a
+    // restored agent's card loads with whatever status it had when the app
+    // last closed (e.g. 'error' from a crash); without this push the
+    // renderer never learns a resume succeeded and the badge stays stuck.
+    getWindow()?.webContents.send('agent:status', { agentId, status })
   }
 
   // Claude-hook-driven agent status badge (see HookService). Agents launch
@@ -526,6 +532,11 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // saves it as the discovered_models setting.
   handle('models:discover', () => refreshAndDiscoverModels())
 
+  // Plugins the Claude Code CLI already knows about machine-wide
+  // (PluginDiscovery.js), so the Plugins tab can list them instead of
+  // requiring every id to be typed in by hand.
+  handle('plugins:discover', () => discoverPlugins())
+
   // ── File explorer / editor (TICKET-0021) ────────────────────────────────────
   // `root` comes from the renderer but is only honoured if it matches one of
   // main's registered project paths (TICKET-0075); FileService then refuses
@@ -890,12 +901,27 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     } catch (_) {}
     const { buildLaunchCommand } = await import('../services/agentLaunch.mjs')
     if (AgentSvc.agents.get(opts.agentId) !== agent) throw new Error('Agent stopped during startup')
-    const sessionId = agent.meta.provider === 'claude' ? require('node:crypto').randomUUID() : null
+    // A restored agent (app reopened, or revisiting an already-launched one)
+    // carries the session id from its last run (see AgentService.restore) --
+    // resume that CLI session instead of starting a blank one. Only a
+    // genuinely new agent (agent.sessionId still null) gets a fresh uuid.
+    const resuming = agent.meta.provider === 'claude' && !!agent.sessionId
+    const sessionId = agent.meta.provider === 'claude' ? (agent.sessionId || require('node:crypto').randomUUID()) : null
     const launch = resolveLaunchPolicy({ provider: agent.meta.provider, model: agent.meta.model, projectId: agent.meta.projectId }, { getSetting: key => DB.getSetting(key) })
-    const command = buildLaunchCommand({ ...agent.meta, ...launch }, sessionId, hookSettingsPath, process.platform, providerExecutable(launch.provider))
+    const command = buildLaunchCommand({ ...agent.meta, ...launch }, sessionId, hookSettingsPath, process.platform, providerExecutable(launch.provider), resuming)
     const result = await TerminalSvc.spawn({ agentId: opts.agentId, cwd, shell, cols, rows, command })
-    if (result.success && !result.reconnected && sessionId) DB.recordAgentSession({ session_id: sessionId, agent_id: opts.agentId, project_id: agent.meta.projectId, agent_name: agent.meta.label })
+    if (result.success && !result.reconnected && sessionId) {
+      agent.sessionId = sessionId
+      DB.recordAgentSession({ session_id: sessionId, agent_id: opts.agentId, project_id: agent.meta.projectId, agent_name: agent.meta.label })
+    }
     return result
+  })
+  // Rich chat view: parsed Claude Code transcript for this agent's session.
+  handle('transcript:read', (_, agentId) => {
+    const agent = AgentSvc.agents.get(agentId)
+    if (!agent) return []
+    const { projectPath, provider, startedAt } = agent.meta
+    return provider === 'codex' ? readCodexTranscript(projectPath, startedAt) : readTranscript(projectPath, agent.sessionId)
   })
   on('terminal:write', (_, { id, data } = {}) => TerminalSvc.write(id, data))
   on('terminal:resize', (_, { id, cols, rows } = {}) => {

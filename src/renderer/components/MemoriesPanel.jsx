@@ -1,11 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react'
+import Editor, { loader } from '@monaco-editor/react'
+import * as monaco from 'monaco-editor'
 import Modal from './Modal'
 import useStore from '../store/useStore'
+import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker&inline'
 
 // Lists and edits the project's own memory files (.claude/memory/*.md --
 // project_memory.md, ticket_memory.md, architecture.md, etc., per the
-// project-template scaffold). Plain textarea, same pattern as NotesPanel --
-// no need for a Monaco instance just to edit a handful of markdown files.
+// project-template scaffold). Monaco, same local/offline setup as EditorView
+// -- markdown has no dedicated language worker, so the default editor worker
+// covers it without EditorView's json/css/html/ts workers.
+globalThis.MonacoEnvironment ??= { getWorker: () => new EditorWorker() }
+loader.config({ monaco })
+
 const MEMORY_DIR = '.claude/memory'
 
 export default function MemoriesPanel({ isOpen, onClose, projectPath }) {
@@ -18,9 +25,11 @@ export default function MemoriesPanel({ isOpen, onClose, projectPath }) {
   const [savedContent, setSavedContent] = useState('')
   const [saving, setSaving] = useState(false)
   const [opening, setOpening] = useState(null)
+  const [search, setSearch] = useState('')
   // TICKET-0167: bumped by every open, project change and unmount, so an
   // async read or save only lands if nothing superseded it meanwhile.
   const generation = useRef(0)
+  const editorRef = useRef(null)
 
   const dirty = content !== savedContent
   const setPanelDirty = useStore((s) => s.setPanelDirty)
@@ -85,17 +94,43 @@ export default function MemoriesPanel({ isOpen, onClose, projectPath }) {
     onClose()
   }
 
+  function runEditorAction(id) {
+    editorRef.current?.getAction(id)?.run()
+  }
+
+  useEffect(() => {
+    if (!isOpen) return
+    function onKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); save() }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, selected, content, savedContent, saving, opening])
+
   if (!isOpen) return null
+
+  const visibleFiles = search.trim()
+    ? files.filter((name) => name.toLowerCase().includes(search.trim().toLowerCase()))
+    : files
 
   return (
     <Modal title="🧠 Memories" onClose={close} wide className="h-[32rem] flex flex-col">
       <p className="text-sm text-muted shrink-0">Memory files in {MEMORY_DIR}.</p>
       {error && <p role="alert" className="text-danger">{error} <button onClick={() => setRetry((n) => n + 1)}>Retry</button></p>}
       <div className="flex-1 min-h-0 flex gap-3 mt-2">
-        <div className="w-40 shrink-0 overflow-y-auto border-r border-border pr-2">
+        <div className="w-40 shrink-0 flex flex-col border-r border-border pr-2">
+          <input
+            className="input text-xs mb-1.5 shrink-0"
+            placeholder="Filter files…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="flex-1 min-h-0 overflow-y-auto">
           {loading && <p className="text-xs text-muted">Loading…</p>}
           {!loading && files.length === 0 && <p className="text-xs text-muted">No memory files found.</p>}
-          {!loading && files.map((name) => (
+          {!loading && files.length > 0 && visibleFiles.length === 0 && <p className="text-xs text-muted">No match.</p>}
+          {!loading && visibleFiles.map((name) => (
             <button
               key={name}
               onClick={() => openFile(name)}
@@ -105,19 +140,30 @@ export default function MemoriesPanel({ isOpen, onClose, projectPath }) {
               {name}{selected === name && content !== savedContent ? ' •' : ''}
             </button>
           ))}
+          </div>
         </div>
         <div className="flex-1 min-h-0 flex flex-col">
           {opening && <p className="text-xs text-muted shrink-0">Opening {opening}…</p>}
           {!selected && !opening && <p className="text-xs text-muted">Select a memory file to view or edit it.</p>}
           {selected && (
             <>
-              <textarea
-                aria-label={`Edit ${selected}`}
-                className="input text-xs font-mono flex-1 min-h-0 resize-none"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                disabled={saving || !!opening}
-              />
+              <div className="flex justify-end gap-3 mb-1 shrink-0">
+                <button onClick={() => runEditorAction('actions.find')}
+                  className="text-xs text-muted hover:text-gray-100" title="Find (Ctrl/Cmd+F)">Find</button>
+                <button onClick={() => runEditorAction('editor.action.startFindReplaceAction')}
+                  className="text-xs text-muted hover:text-gray-100" title="Replace (Ctrl/Cmd+H)">Replace</button>
+              </div>
+              <div className="flex-1 min-h-0 border border-border rounded overflow-hidden">
+                <Editor
+                  path={selected}
+                  language="markdown"
+                  value={content}
+                  theme="vs-dark"
+                  onMount={(editor) => { editorRef.current = editor }}
+                  onChange={(value) => setContent(value ?? '')}
+                  options={{ fontSize: 13, minimap: { enabled: false }, automaticLayout: true, wordWrap: 'on', readOnly: saving || !!opening }}
+                />
+              </div>
               <div className="flex justify-end mt-1.5 shrink-0">
                 <button
                   onClick={save}

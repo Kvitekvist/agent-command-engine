@@ -12,7 +12,9 @@ import ContextMenu from './components/ContextMenu'
 import Modal from './components/Modal'
 import NotesPanel from './components/NotesPanel'
 import ProjectSkillsPanel from './components/ProjectSkillsPanel'
-import MemoriesPanel from './components/MemoriesPanel'
+// Pulls in Monaco (~9MB minified), same as EditorView -- lazy so every
+// session doesn't pay for it unless Memories is actually opened.
+const MemoriesPanel = lazy(() => import('./components/MemoriesPanel'))
 import { watchUsageActivity } from './utils/usageActivity.mjs'
 
 // TICKET-0022/0023: live subscription quota is whole-machine data (not
@@ -126,7 +128,11 @@ export default function App() {
 
   useEffect(() => {
     window.ace.onAgentStatus((data) => {
-      if (data.status === 'running') {
+      if (data.status === 'running' && data.meta) {
+        // AgentService.start() emits this (with meta) for a brand-new agent.
+        // TerminalSvc.onState's 'running' (an existing card's CLI reconnecting
+        // or resuming) carries no meta and falls through to the status-update
+        // branch below instead.
         // AgentService emits meta with 'label' field; map to agentName for UI.
         const { label, ...rest } = data.meta
         addAgent({
@@ -193,7 +199,7 @@ export default function App() {
       </Modal>}
       {activeProject && activeView === 'notes' && <NotesPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
       {activeProject && activeView === 'skills' && <ProjectSkillsPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
-      {activeProject && activeView === 'memories' && <MemoriesPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
+      {activeProject && activeView === 'memories' && <Suspense fallback={null}><MemoriesPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} /></Suspense>}
       <main className="flex-1 overflow-auto">
         {!activeProject && ['notes', 'skills'].includes(activeView) && <p className="p-5 text-muted">Select a project to open {activeView}.</p>}
         {/* TICKET-0027: unlike the other views, AgentView stays mounted at

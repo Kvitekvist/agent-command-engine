@@ -70,7 +70,7 @@ export default function NotesPanel({ isOpen, onClose, projectPath, onSend }) {
   if (!isOpen) return null
 
   return (
-    <Modal title="Notes: shared by every agent in this project" onClose={close} wide className="h-[32rem] flex flex-col">
+    <Modal title="Notes: shared by every agent in this project" onClose={close} wide className="h-[32rem] flex flex-col" closeOnBackdrop={false}>
       {confirmClose && <Modal title="Discard unsaved note?" onClose={() => setConfirmClose(false)}>
         <p className="text-sm">Your draft has not been saved.</p>
         <div className="flex gap-2 mt-3">

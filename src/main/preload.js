@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld('ace', {
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
   discoverModels: () => ipcRenderer.invoke('models:discover'),
+  discoverPlugins: () => ipcRenderer.invoke('plugins:discover'),
 
   // File explorer / editor (TICKET-0021)
   fs: {
@@ -129,6 +130,7 @@ contextBridge.exposeInMainWorld('ace', {
   // Terminal
   terminal: {
     spawn: (opts) => ipcRenderer.invoke('terminal:spawn', opts),
+    readTranscript: (agentId) => ipcRenderer.invoke('transcript:read', agentId),
     write: (id, data) => ipcRenderer.send('terminal:write', { id, data }),
     resize: (id, cols, rows) => ipcRenderer.send('terminal:resize', { id, cols, rows }),
     dispose: (id) => ipcRenderer.send('terminal:dispose', { id }),

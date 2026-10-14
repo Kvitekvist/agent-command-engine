@@ -170,10 +170,10 @@ export default function AgentView() {
 
   // Restore agent cards the first time a project is selected this session
   // — e.g. right after the app opens, or the first switch to a project not
-  // visited yet. Every persisted agent is restored here, running or
-  // stopped. A restored 'running' agent gets a brand-new terminal
-  // session (AgentTerminal always starts fresh on mount) since there's no
-  // live PTY process to reconnect to yet — see AgentTerminal.jsx.
+  // visited yet. Every persisted agent is restored here, 'stopped' or not.
+  // A restored non-'stopped' agent's card mounts a fresh AgentTerminal,
+  // which resumes its last CLI session via `--resume` (see AgentTerminal.jsx
+  // / agentLaunch.mjs) rather than starting blank.
   //
   // This effect reruns on every activeProject change, including switching
   // back to a project already visited this session — but `agents` (Zustand
@@ -195,8 +195,13 @@ export default function AgentView() {
         if (cancelled) return
         if (useStore.getState().agents.some((a) => a.agentId === row.id)) continue
         let meta
-        if (row.status === 'running') {
-          // Re-register with AgentService so it can accept new prompts.
+        if (row.status !== 'stopped') {
+          // Re-register with AgentService so it can accept new prompts. Not
+          // just for a cleanly-'running' row -- 'error'/'lost'/'exited' mean
+          // the CLI process died (crash, force-quit) before the app closed;
+          // those get a resume attempt too, same as 'running' ones, since
+          // the session itself (and its --resume-able transcript) usually
+          // still exists. Only a user-initiated Stop is left alone.
           const restored = await window.ace.restoreAgent({ ...row, projectPath: activeProject.path })
           if (cancelled) return
           // AgentService.restore() returns meta with 'label' field; map it to
@@ -460,7 +465,7 @@ function AgentPane({ agent, onClose, focused, onFocus }) {
         <div className="text-xs text-muted mb-1.5 shrink-0 truncate select-none" title="Not the path itself -- selecting/copying this line overwrites the clipboard the button just set">{screenshotMsg}</div>
       )}
 
-      {agent.status === 'running' && (
+      {agent.status !== 'stopped' && (
         <AgentTerminal agent={agent} onStatusChange={setTerminalStatus} />
       )}
     </div>
