@@ -256,12 +256,24 @@ function watchAgentStatus(DB, getWindow) {
   }
 }
 
+// TICKET-0172: a scheduled autonomous run (SchedulerService) has no
+// renderer/AgentTerminal mounted to answer the questionnaire popup, so it
+// registers its prompt here before the agent even boots. The SessionStart
+// signal below is the one reliable "the CLI is actually ready for input"
+// event; when it fires for a registered agent, write the prompt straight
+// into the PTY instead of notifying the renderer.
+const autoPrompts = new Map() // agentId -> prompt text
+
+function registerAutoPrompt(agentId, text) {
+  autoPrompts.set(agentId, text)
+}
+
 // Tail <questionnaireDir> and push { agentId, source } to the renderer
 // whenever the SessionStart hook drops a one-shot request file. Unlike
 // status files (repeatedly overwritten, one per session for its whole
 // life), a questionnaire request is consumed once -- delete it right after
 // forwarding so a stray extra fs.watch event doesn't re-fire it.
-function watchQuestionnaireRequests(DB, getWindow) {
+function watchQuestionnaireRequests(DB, getWindow, TerminalSvc) {
   const { questionnaireDir } = ensureHookFiles()
   for (const f of safeReaddir(questionnaireDir)) {
     try { fs.unlinkSync(path.join(questionnaireDir, f)) } catch (_) {}
@@ -277,6 +289,13 @@ function watchQuestionnaireRequests(DB, getWindow) {
     try { fs.unlinkSync(filePath) } catch (_) {}
     const agentId = DB.getAgentIdBySession(sessionId)
     if (!agentId) return
+    const autoPrompt = autoPrompts.get(agentId)
+    if (autoPrompt !== undefined) {
+      autoPrompts.delete(agentId)
+      const session = TerminalSvc?.sessions.get(agentId)
+      if (session) TerminalSvc.write(session.id, '\x1b[200~' + autoPrompt + '\x1b[201~\r')
+      return
+    }
     const win = getWindow()
     if (win && !win.isDestroyed()) win.webContents.send('agent:questionnaireRequest', { agentId, source })
   }
@@ -291,4 +310,4 @@ function safeReaddir(dir) {
   try { return fs.readdirSync(dir) } catch (_) { return [] }
 }
 
-module.exports = { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents }
+module.exports = { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents, registerAutoPrompt }

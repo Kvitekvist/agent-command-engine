@@ -12,6 +12,16 @@ contextBridge.exposeInMainWorld('ace', {
     read: root => ipcRenderer.invoke('notes:read', root),
     mutate: (root, mutation) => ipcRenderer.invoke('notes:mutate', root, mutation),
   },
+  tasks: {
+    read: root => ipcRenderer.invoke('tasks:read', root),
+    mutate: (root, mutation) => ipcRenderer.invoke('tasks:mutate', root, mutation),
+  },
+  // TICKET-0172: project-level "run the open tasks automatically" trigger.
+  schedule: {
+    read: root => ipcRenderer.invoke('schedule:read', root),
+    set: (root, projectId, options) => ipcRenderer.invoke('schedule:set', { root, projectId, options }),
+    cancel: root => ipcRenderer.invoke('schedule:cancel', root),
+  },
 
   // Projects
   getProjects: () => ipcRenderer.invoke('projects:getAll'),

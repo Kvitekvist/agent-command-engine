@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Project Tasks panel alongside Notes: a per-project checklist, plus a
+  trigger that fires at a scheduled delay (optionally repeating) and spawns
+  a new autonomous agent to work through whatever's still open — no app
+  interaction needed once it's armed (TICKET-0172).
+
 ## [0.1.47] - 2026-10-14
 
 ### Added

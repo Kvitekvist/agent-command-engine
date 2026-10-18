@@ -11,6 +11,7 @@ import SetupView from './views/SetupView'
 import ContextMenu from './components/ContextMenu'
 import Modal from './components/Modal'
 import NotesPanel from './components/NotesPanel'
+import TasksPanel from './components/TasksPanel'
 import ProjectSkillsPanel from './components/ProjectSkillsPanel'
 // Pulls in Monaco (~9MB minified), same as EditorView -- lazy so every
 // session doesn't pay for it unless Memories is actually opened.
@@ -198,10 +199,11 @@ export default function App() {
         </div>
       </Modal>}
       {activeProject && activeView === 'notes' && <NotesPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
+      {activeProject && activeView === 'tasks' && <TasksPanel isOpen projectPath={activeProject.path} projectId={activeProject.id} onClose={() => setActiveView('agents')} />}
       {activeProject && activeView === 'skills' && <ProjectSkillsPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} />}
       {activeProject && activeView === 'memories' && <Suspense fallback={null}><MemoriesPanel isOpen projectPath={activeProject.path} onClose={() => setActiveView('agents')} /></Suspense>}
       <main className="flex-1 overflow-auto">
-        {!activeProject && ['notes', 'skills'].includes(activeView) && <p className="p-5 text-muted">Select a project to open {activeView}.</p>}
+        {!activeProject && ['notes', 'tasks', 'skills'].includes(activeView) && <p className="p-5 text-muted">Select a project to open {activeView}.</p>}
         {/* TICKET-0027: unlike the other views, AgentView stays mounted at
             all times -- toggled with a CSS class instead of conditional
             rendering -- because each running agent's card owns a real

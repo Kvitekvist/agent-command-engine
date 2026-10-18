@@ -8,6 +8,8 @@ const { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromp
 const fs = require('node:fs')
 const { resolveWithinRoot } = require('../services/ProjectPath')
 const { notesOperation } = require('../services/NotesService')
+const { tasksOperation } = require('../services/TasksService')
+const { SchedulerService } = require('../services/SchedulerService')
 const { detectBuild } = require('../services/ProjectBuild')
 const { providerExecutable } = require('../services/ProviderExecutable')
 const { refreshAndDiscoverModels } = require('../services/ModelDiscovery')
@@ -19,6 +21,8 @@ const { readTranscript, readCodexTranscript } = require('../services/TranscriptS
 // compromised renderer aim those operations anywhere on disk. Resolve it
 // against main's own project records instead, and hand callers back the
 // canonical stored path rather than the renderer-supplied one.
+const lastGoodQuota = {}
+
 function resolveProjectRoot(DB, candidate) {
   const path = require('path')
   if (typeof candidate !== 'string' || !candidate.trim()) {
@@ -80,7 +84,15 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   const { dir: hookDir, settingsPath: hookSettingsPath } = ensureHookFiles()
   watchAgentStatus(DB, getWindow)
   // TICKET-0150: SessionStart-hook-driven first-prompt questionnaire popup.
-  watchQuestionnaireRequests(DB, getWindow)
+  // TICKET-0172: also where a scheduled run's registered auto-prompt gets
+  // written in, so this needs TerminalSvc now too.
+  watchQuestionnaireRequests(DB, getWindow, TerminalSvc)
+
+  // TICKET-0172: project-level "run the open tasks automatically" trigger.
+  // Armed from every known project on launch so a schedule survives ACE
+  // being closed and reopened before it fires.
+  const SchedulerSvc = new SchedulerService({ DB, AgentSvc, TerminalSvc, hookSettingsPath })
+  try { SchedulerSvc.armAll(DB.getProjects()) } catch (_) {}
 
   // TICKET-0075: every invoke/send below goes through a sender check.
   const handle = (channel, fn) =>
@@ -163,6 +175,28 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
   handle('notes:mutate', async (_, root, mutation) => {
     try { return await notesOperation(resolveProjectRoot(DB, root), mutation) }
+    catch (error) { return { ok: false, error: error.message } }
+  })
+  handle('tasks:read', async (_, root) => {
+    try { return await tasksOperation(resolveProjectRoot(DB, root)) }
+    catch (error) { return { ok: false, error: error.message } }
+  })
+  handle('tasks:mutate', async (_, root, mutation) => {
+    try { return await tasksOperation(resolveProjectRoot(DB, root), mutation) }
+    catch (error) { return { ok: false, error: error.message } }
+  })
+  handle('schedule:read', (_, root) => {
+    try { return { ok: true, schedule: SchedulerSvc.read(resolveProjectRoot(DB, root)) } }
+    catch (error) { return { ok: false, error: error.message } }
+  })
+  handle('schedule:set', (_, { root, projectId, options } = {}) => {
+    try {
+      const project = projectFor(projectId, root)
+      return { ok: true, schedule: SchedulerSvc.set(fs.realpathSync.native(project.path), projectId, options) }
+    } catch (error) { return { ok: false, error: error.message } }
+  })
+  handle('schedule:cancel', (_, root) => {
+    try { SchedulerSvc.cancel(resolveProjectRoot(DB, root)); return { ok: true } }
     catch (error) { return { ok: false, error: error.message } }
   })
 
@@ -430,6 +464,20 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
       }
     } catch (error) {
       for (const c of clients) result[c].quotaError = error.message
+    }
+
+    // The quota endpoints are rate-limited and intermittently return no
+    // entry (or no metrics) for a provider. The UI reads that as an
+    // unlimited plan and drops the % bars to a tokens-only view, so reuse the
+    // last good quota instead. Resets in the past are dropped by formatReset.
+    for (const c of clients) {
+      const r = result[c]
+      if (r.quota.some((m) => m.used_percent != null)) lastGoodQuota[c] = { plan: r.plan, quota: r.quota }
+      else if (lastGoodQuota[c]) {
+        r.plan = lastGoodQuota[c].plan
+        r.quota = lastGoodQuota[c].quota
+        delete r.quotaError
+      }
     }
 
     try {
