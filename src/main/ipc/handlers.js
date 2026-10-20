@@ -4,7 +4,7 @@ const { FileService } = require('../services/FileService')
 const { TokscaleService, pathToWorkspaceKey } = require('../services/TokscaleService')
 const { ScreenshotService } = require('../services/ScreenshotService')
 const { createProjectFromScaffold, ensureBundledSkills, getScaffoldDir, validateNewProject } = require('../services/ProjectScaffoldService')
-const { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents } = require('../services/HookService')
+const { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents, readClaudeQuota } = require('../services/HookService')
 const fs = require('node:fs')
 const { resolveWithinRoot } = require('../services/ProjectPath')
 const { notesOperation } = require('../services/NotesService')
@@ -21,7 +21,10 @@ const { readTranscript, readCodexTranscript } = require('../services/TranscriptS
 // compromised renderer aim those operations anywhere on disk. Resolve it
 // against main's own project records instead, and hand callers back the
 // canonical stored path rather than the renderer-supplied one.
-const lastGoodQuota = {}
+// Lazy-loaded from the settings DB on first use inside registerHandlers (DB
+// isn't available at module load) so the cache survives app restarts, not
+// just this process.
+let lastGoodQuota = null
 
 function resolveProjectRoot(DB, candidate) {
   const path = require('path')
@@ -443,7 +446,9 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   })
 
   // Live usage dashboard (TICKET-0022) -- sourced straight from tokscale
-  // (real subscription quota + today's session transcripts), independent
+  // (today's session transcripts) and, for quota, each provider's own
+  // channel (TICKET-0173): Claude's comes from Claude Code's own statusLine
+  // hook, Codex's from tokscale's Codex-scoped `codex status`. Independent
   // of ACE's own `prompts` table, which the embedded terminal (TICKET-0019)
   // no longer populates. Quota and today's breakdown are fetched
   // independently so one provider being logged out, or one call failing,
@@ -453,32 +458,59 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
     const result = {}
     for (const c of clients) result[c] = { plan: null, quota: [], models: [], projects: [], totalTokens: 0, totalCost: 0 }
 
-    try {
-      const quota = await TokscaleService.getQuota()
-      for (const entry of quota || []) {
-        const key = (entry.provider || '').toLowerCase()
-        if (result[key]) {
-          result[key].plan = entry.plan || null
-          result[key].quota = entry.metrics || []
-        }
-      }
-    } catch (error) {
-      for (const c of clients) result[c].quotaError = error.message
+    if (lastGoodQuota === null) {
+      try { lastGoodQuota = JSON.parse(DB.getSetting('tokscale:lastGoodQuota') || '{}') } catch { lastGoodQuota = {} }
     }
 
-    // The quota endpoints are rate-limited and intermittently return no
-    // entry (or no metrics) for a provider. The UI reads that as an
-    // unlimited plan and drops the % bars to a tokens-only view, so reuse the
-    // last good quota instead. Resets in the past are dropped by formatReset.
+    const hasValidQuota = (q) => q && q.quota.some((m) => m.used_percent != null)
+
+    // Claude: a local-file read of what the CLI's own statusLine hook last
+    // wrote -- nothing to retry, it's either there (the CLI already ran a
+    // turn this session) or not yet.
+    const rateLimits = readClaudeQuota()
+    if (rateLimits) {
+      const quota = []
+      if (rateLimits.five_hour) quota.push({ label: 'Session', used_percent: rateLimits.five_hour.used_percentage, resets_at: rateLimits.five_hour.resets_at })
+      if (rateLimits.seven_day) quota.push({ label: 'Weekly', used_percent: rateLimits.seven_day.used_percentage, resets_at: rateLimits.seven_day.resets_at })
+      result.claude.quota = quota
+    }
+
+    // Codex: tokscale's own endpoint is rate-limited and intermittently
+    // drops the quota entirely -- one retry after a short delay clears most
+    // of these without the user needing to hit Refresh by hand. Only fires
+    // when nothing is already cached to fall back on.
+    const fetchCodexQuota = async () => {
+      const data = await TokscaleService.getCodexQuota()
+      const usage = data?.usage
+      return usage ? { plan: usage.plan || null, quota: usage.metrics || [] } : null
+    }
+    try {
+      let fetched = await fetchCodexQuota()
+      if (!hasValidQuota(fetched) && !lastGoodQuota.codex) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        const retry = await fetchCodexQuota()
+        if (hasValidQuota(retry)) fetched = retry
+      }
+      if (fetched) { result.codex.plan = fetched.plan; result.codex.quota = fetched.quota }
+    } catch (error) {
+      result.codex.quotaError = error.message
+    }
+
+    // Reuse the last good quota when a provider still came back empty after
+    // the retry above. Resets in the past are dropped by formatReset.
+    let lastGoodQuotaChanged = false
     for (const c of clients) {
       const r = result[c]
-      if (r.quota.some((m) => m.used_percent != null)) lastGoodQuota[c] = { plan: r.plan, quota: r.quota }
-      else if (lastGoodQuota[c]) {
+      if (r.quota.some((m) => m.used_percent != null)) {
+        lastGoodQuota[c] = { plan: r.plan, quota: r.quota }
+        lastGoodQuotaChanged = true
+      } else if (lastGoodQuota[c]) {
         r.plan = lastGoodQuota[c].plan
         r.quota = lastGoodQuota[c].quota
         delete r.quotaError
       }
     }
+    if (lastGoodQuotaChanged) DB.setSetting('tokscale:lastGoodQuota', JSON.stringify(lastGoodQuota))
 
     try {
       const breakdown = await TokscaleService.getTodayBreakdown(clients)
@@ -583,7 +615,7 @@ function registerHandlers(ipcMain, mainWindow, DB, AgentSvc, TerminalSvc) {
   // Plugins the Claude Code CLI already knows about machine-wide
   // (PluginDiscovery.js), so the Plugins tab can list them instead of
   // requiring every id to be typed in by hand.
-  handle('plugins:discover', () => discoverPlugins())
+  handle('plugins:discover', (_, projectPath) => discoverPlugins(undefined, projectPath))
 
   // ── File explorer / editor (TICKET-0021) ────────────────────────────────────
   // `root` comes from the renderer but is only honoured if it matches one of

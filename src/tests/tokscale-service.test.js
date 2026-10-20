@@ -117,7 +117,7 @@ test('usage launches only the hidden native executable and fails without spawnin
     }
     const context = { require: mockRequire, module: { exports: {} }, process: { platform: 'win32', arch: 'x64' }, setTimeout, clearTimeout }
     vm.runInNewContext(source, context)
-    const result = context.module.exports.TokscaleService.getQuota()
+    const result = context.module.exports.TokscaleService.getCodexQuota()
     if (missing) {
       await assert.rejects(result, /native usage tool is missing/)
       assert.equal(calls.length, 0)

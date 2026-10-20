@@ -39,7 +39,7 @@ const { DBService } = require('../dist/main/services/DBService')
 const init = DBService.init.bind(DBService)
 DBService.init = async () => { await init(); DBService.setSetting('prereqs_setup_dismissed', 'true') }
 const { TokscaleService } = require('../dist/main/services/TokscaleService')
-TokscaleService.getQuota = async () => []
+TokscaleService.getCodexQuota = async () => ({ usage: null })
 TokscaleService.getTodayBreakdown = async () => ({})
 TokscaleService.getWorkspaceReport = async () => []
 const fixture = path.join(root, 'provider fixture.cjs')

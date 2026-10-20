@@ -126,6 +126,55 @@ process.stdin.on('end', () => {
 })
 `
 
+// TICKET-0173: Claude's real subscription quota, read straight out of Claude
+// Code's own statusLine hook input (`rate_limits.five_hour` /
+// `.seven_day`, each `{ used_percentage, resets_at }`) -- never touching
+// `~/.claude/.credentials.json` or calling Anthropic's API directly the way
+// the bundled tokscale binary's `usage` subcommand does (see
+// TokscaleService.js). Only present for subscription logins, and only after
+// the CLI's first response in a session; both windows can be missing before
+// then, which readClaudeQuota() below surfaces as null.
+//
+// Installing a statusLine via --settings replaces whatever statusLine the
+// user configured themselves, so this script also looks for one in the
+// project's or the user's own Claude settings and, if found, runs it and
+// passes its output through untouched -- the quota file write is a pure
+// side effect the visible status line never reflects.
+const STATUS_LINE_SCRIPT = `const fs = require('fs')
+const path = require('path')
+const os = require('os')
+const { spawnSync } = require('child_process')
+const [, , quotaPath] = process.argv
+let input = ''
+process.stdin.on('data', (d) => { input += d })
+process.stdin.on('end', () => {
+  let parsed
+  try { parsed = JSON.parse(input) } catch (_) { parsed = null }
+  if (parsed && parsed.rate_limits && quotaPath) {
+    try {
+      fs.mkdirSync(path.dirname(quotaPath), { recursive: true })
+      fs.writeFileSync(quotaPath, JSON.stringify({ rate_limits: parsed.rate_limits, ts: Date.now() }))
+    } catch (_) {}
+  }
+  const cwd = (parsed && parsed.workspace && parsed.workspace.current_dir) || (parsed && parsed.cwd) || process.cwd()
+  const settingsFiles = [
+    path.join(cwd, '.claude', 'settings.local.json'),
+    path.join(cwd, '.claude', 'settings.json'),
+    path.join(os.homedir(), '.claude', 'settings.json'),
+  ]
+  for (const file of settingsFiles) {
+    let userLine
+    try { userLine = JSON.parse(fs.readFileSync(file, 'utf8')).statusLine } catch (_) { continue }
+    if (userLine && userLine.type === 'command' && typeof userLine.command === 'string') {
+      const result = spawnSync(userLine.command, { input, shell: true, encoding: 'utf8', cwd, timeout: 5000 })
+      if (!result.error && typeof result.stdout === 'string') process.stdout.write(result.stdout)
+      break
+    }
+  }
+  process.exit(0)
+})
+`
+
 let cached = null
 
 // MSIX packages virtualize AppData writes — ACE sees one path, Claude sees
@@ -147,6 +196,8 @@ function ensureHookFiles() {
   const sessionStartScriptPath = path.join(dir, 'session-start.js')
   const promptLengthScriptPath = path.join(dir, 'prompt-length.js')
   const promptEventsPath = path.join(dir, 'prompt-events.jsonl')
+  const statusLineScriptPath = path.join(dir, 'status-line.js')
+  const quotaPath = path.join(dir, 'quota.json')
   const audioPath = path.join(dir, 'notification.wav')
   const muteMarker = path.join(dir, '.muted')
   const questionnaireDisabledMarker = path.join(dir, '.questionnaire-disabled')
@@ -157,6 +208,7 @@ function ensureHookFiles() {
   fs.writeFileSync(soundScriptPath, SOUND_SCRIPT)
   fs.writeFileSync(sessionStartScriptPath, SESSION_START_SCRIPT)
   fs.writeFileSync(promptLengthScriptPath, PROMPT_LENGTH_SCRIPT)
+  fs.writeFileSync(statusLineScriptPath, STATUS_LINE_SCRIPT)
 
   // Bundled via electron-builder extraResources (packaged) or read straight
   // from the repo (dev). Missing audio just makes the sound hook a silent
@@ -191,6 +243,7 @@ function ensureHookFiles() {
     command: `node "${fwd(promptLengthScriptPath)}" "${fwd(promptEventsPath)}"`,
   }
   fs.writeFileSync(settingsPath, JSON.stringify({
+    statusLine: { type: 'command', command: `node "${fwd(statusLineScriptPath)}" "${fwd(quotaPath)}"` },
     hooks: {
       UserPromptSubmit: [{ hooks: [statusCmd('working'), promptLengthCmd] }],
       PreToolUse: entry('working'),
@@ -203,9 +256,20 @@ function ensureHookFiles() {
   cached = {
     dir, statusDir, scriptPath, settingsPath, soundScriptPath, audioPath, muteMarker,
     questionnaireDir, sessionStartScriptPath, questionnaireDisabledMarker,
-    promptLengthScriptPath, promptEventsPath,
+    promptLengthScriptPath, promptEventsPath, statusLineScriptPath, quotaPath,
   }
   return cached
+}
+
+// TICKET-0173: reads the quota file the statusLine script above writes.
+// Returns null before the first statusLine run of a session, on a
+// non-subscription login, or on a Claude Code version that doesn't report
+// rate_limits yet -- callers treat that the same as "no quota data".
+function readClaudeQuota() {
+  const { quotaPath } = ensureHookFiles()
+  try {
+    return JSON.parse(fs.readFileSync(quotaPath, 'utf8')).rate_limits || null
+  } catch (_) { return null }
 }
 
 // TICKET-0151: reads the prompt-length JSONL file for the Prompt Behavior
@@ -310,4 +374,4 @@ function safeReaddir(dir) {
   try { return fs.readdirSync(dir) } catch (_) { return [] }
 }
 
-module.exports = { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents, registerAutoPrompt }
+module.exports = { ensureHookFiles, watchAgentStatus, watchQuestionnaireRequests, readPromptEvents, registerAutoPrompt, readClaudeQuota }

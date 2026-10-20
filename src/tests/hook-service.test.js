@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 
-const { ensureHookFiles, readPromptEvents } = require('../main/services/HookService')
+const { ensureHookFiles, readPromptEvents, readClaudeQuota } = require('../main/services/HookService')
 
 // ensureHookFiles() caches, so this whole file exercises one generation.
 const h = ensureHookFiles()
@@ -77,6 +77,45 @@ test('TICKET-0151: prompt-length hook records char/word counts, never the prompt
   assert.equal(forSession[0].chars, 'fix the bug'.length)
   assert.equal(forSession[0].words, 3)
   assert.equal(forSession[1].words, 10)
+})
+
+test('TICKET-0173: statusLine hook extracts quota without touching Claude credentials, and passes a pre-existing user statusLine through untouched', () => {
+  assert.ok(fs.existsSync(h.statusLineScriptPath), 'status-line.js')
+  const script = fs.readFileSync(h.statusLineScriptPath, 'utf8')
+  assert.ok(!script.includes('.credentials.json'), 'must never read Claude Code\'s own credential file')
+  assert.ok(!script.includes('api.anthropic.com'), 'must never call Anthropic\'s API directly')
+  assert.ok(settings.statusLine.command.includes('status-line.js'))
+
+  const run = (payload) => spawnSync(process.execPath, [h.statusLineScriptPath, h.quotaPath], {
+    input: JSON.stringify(payload), encoding: 'utf8',
+  })
+
+  const tmpCwd = fs.mkdtempSync(path.join(require('os').tmpdir(), 'ace-statusline-'))
+  const rateLimits = {
+    five_hour: { used_percentage: 6, resets_at: '2026-10-20T11:59:59Z' },
+    seven_day: { used_percentage: 84, resets_at: '2026-10-22T17:59:59Z' },
+  }
+
+  // No user-configured statusLine anywhere on this cwd -- quota is still
+  // extracted, but nothing is printed, so no new line appears in a
+  // terminal that never asked for one.
+  const bare = run({ cwd: tmpCwd, rate_limits: rateLimits })
+  assert.equal(bare.status, 0, bare.stderr)
+  assert.equal(bare.stdout, '')
+  assert.deepEqual(readClaudeQuota(), rateLimits)
+
+  // A project that already configured its own statusLine command must see
+  // that command's own output, unchanged, even though ACE's --settings
+  // file would otherwise silently replace it.
+  fs.mkdirSync(path.join(tmpCwd, '.claude'))
+  const userScript = path.join(tmpCwd, 'user-status.js')
+  fs.writeFileSync(userScript, "process.stdout.write('user status line')")
+  fs.writeFileSync(path.join(tmpCwd, '.claude', 'settings.json'), JSON.stringify({
+    statusLine: { type: 'command', command: `node "${userScript.replace(/\\/g, '/')}"` },
+  }))
+  const withUserLine = run({ cwd: tmpCwd, rate_limits: rateLimits })
+  assert.equal(withUserLine.status, 0, withUserLine.stderr)
+  assert.equal(withUserLine.stdout, 'user status line')
 })
 
 test('the bundled audio is copied in beside the script', () => {

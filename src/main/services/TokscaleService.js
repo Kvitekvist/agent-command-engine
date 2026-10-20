@@ -191,14 +191,19 @@ const TokscaleService = {
     return toUsageMap(json)
   },
 
-  // TICKET-0022: real subscription quota (5-hour rolling / weekly limits +
-  // reset times) straight from tokscale's own `usage` subcommand, which
-  // reads the same local OAuth credentials Claude Code/Codex already use --
-  // ACE never touches auth tokens itself. Returns tokscale's array as-is
-  // (one entry per provider); callers key it by `provider` (case-varies,
-  // e.g. "Claude"/"Codex").
-  async getQuota() {
-    return runTokscale(['usage', '--json'])
+  // TICKET-0173: Codex-only subscription quota (5-hour rolling / weekly
+  // limits + reset times), via tokscale's provider-scoped `codex status`
+  // subcommand. Unlike the combined `usage` subcommand this replaces --
+  // which reads the user's Claude OAuth token straight out of
+  // ~/.claude/.credentials.json (or the OS keychain) and calls
+  // api.anthropic.com/api/oauth/usage itself on every poll, regardless of
+  // which provider's result a caller actually wants -- `codex status` only
+  // ever touches the Codex account tokscale already tracks. Claude's own
+  // quota now comes from Claude Code's own statusLine hook instead (see
+  // HookService.readClaudeQuota); tokscale makes no Anthropic-side call at
+  // all. Returns `{ usage: { provider, plan, metrics, ... } }`.
+  async getCodexQuota() {
+    return runTokscale(['codex', 'status', '--json'])
   },
 
   // TICKET-0022: today's usage, broken down by project and by model in one

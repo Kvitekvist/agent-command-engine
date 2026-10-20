@@ -9,6 +9,15 @@
   a new autonomous agent to work through whatever's still open — no app
   interaction needed once it's armed (TICKET-0172).
 
+### Fixed
+
+- Claude's quota bar no longer runs the bundled tokscale binary's combined
+  `usage` command, which read the Claude OAuth token directly out of
+  `~/.claude/.credentials.json` (or the OS keychain) and called Anthropic's
+  API with it. Claude's quota now comes from a statusLine hook on Claude
+  Code's own CLI instead; Codex's quota still goes through tokscale, scoped
+  to the Codex account only (TICKET-0173).
+
 ## [0.1.47] - 2026-10-14
 
 ### Added

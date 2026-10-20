@@ -1,6 +1,6 @@
 # Agent Command Engine — Privacy Policy
 
-_Last updated: 2026-09-03_
+_Last updated: 2026-10-20_
 
 Agent Command Engine ("ACE", "the app") is a desktop application for managing
 Claude Code and OpenAI Codex agent sessions across local projects. This policy
@@ -44,6 +44,14 @@ services and are governed by their own terms and privacy policies:
 
 ACE does not add to, intercept, or forward what those tools send. Any API keys
 or credentials they use are managed by those tools, not by ACE.
+
+ACE also bundles **tokscale**, a local usage-analytics tool, to read token
+counts and quota from data already on your machine. It reads Codex's own
+saved account token to show Codex's subscription quota (governed by
+OpenAI's terms above) and your local session transcript files for token
+totals; it never reads Claude Code's credentials. Claude's quota comes
+instead from a small script ACE adds to Claude Code's own status line,
+which only reads numbers Claude Code already computes for itself.
 
 ## Children
 
