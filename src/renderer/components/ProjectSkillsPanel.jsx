@@ -68,13 +68,12 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
       const mcpFile = await window.ace.fs.readFile(projectPath, '.mcp.json')
       let servers = []
       if (mcpFile?.ok) {
-        try { servers = Object.keys(JSON.parse(mcpFile.content)?.mcpServers || {}) } catch (_) {}
+        try { servers = Object.keys(JSON.parse(mcpFile.content)?.mcpServers || {}).map((name) => ({ name, scope: 'project' })) } catch (_) {}
       }
-      if (cancelled) return
-      setMcpServers(servers.sort())
 
-      const discovered = await window.ace.discoverPlugins().catch(() => ({ plugins: [] }))
+      const discovered = await window.ace.discoverPlugins(projectPath).catch(() => ({ plugins: [] }))
       if (cancelled) return
+      setMcpServers([...servers, ...(discovered?.mcpServers || [])].sort((a, b) => a.name.localeCompare(b.name)))
       setInstalledPlugins(discovered?.plugins || [])
 
       setError(settingsError)
@@ -138,7 +137,7 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
   const q = search.trim().toLowerCase()
   const matches = (...fields) => !q || fields.some((f) => f.toLowerCase().includes(q))
   const visibleSkills = skills.filter((s) => matches(s.name, s.key, s.description))
-  const visibleMcpServers = mcpServers.filter((name) => matches(name))
+  const visibleMcpServers = mcpServers.filter((s) => matches(s.name, s.scope))
   const allPluginIds = [...new Set([...installedPlugins, ...Object.keys(enabledPlugins)])].sort((a, b) => a.localeCompare(b))
   const visiblePluginIds = allPluginIds.filter((id) => matches(id))
 
@@ -186,17 +185,17 @@ export default function ProjectSkillsPanel({ isOpen, onClose, projectPath }) {
 
       {tab === 'mcp' && (
         <>
-          <p className="text-sm text-muted mt-2 shrink-0">MCP servers defined in .mcp.json. Claude Code only -- Codex has no per-server enable/disable.</p>
+          <p className="text-sm text-muted mt-2 shrink-0">MCP servers from this project's .mcp.json plus your user, local and IT-managed Claude Code config. Only .mcp.json servers can be toggled here; manage the rest with `claude mcp`. Servers from plugins or claude.ai connectors aren't listed. Claude Code only.</p>
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 mt-1">
             {loading && <p className="text-xs text-muted">Loading…</p>}
-            {!loading && mcpServers.length === 0 && <p className="text-xs text-muted">No .mcp.json servers found in this project.</p>}
+            {!loading && mcpServers.length === 0 && <p className="text-xs text-muted">No MCP servers found.</p>}
             {!loading && mcpServers.length > 0 && visibleMcpServers.length === 0 && <p className="text-xs text-muted">No match.</p>}
-            {!loading && visibleMcpServers.map((name) => {
+            {!loading && visibleMcpServers.map(({ name, scope }) => {
               const off = disabledMcp.has(name)
               return (
-                <div key={name} className="border border-border rounded p-2 flex items-center justify-between gap-2">
-                  <div className="text-xs font-semibold text-gray-100">{name}</div>
-                  <Toggle on={!off} disabled={!local} onClick={() => toggleMcp(name, off)} />
+                <div key={`${scope}:${name}`} className="border border-border rounded p-2 flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-gray-100">{name} <span className="font-normal text-muted">{scope}</span></div>
+                  {scope === 'project' && <Toggle on={!off} disabled={!local} onClick={() => toggleMcp(name, off)} />}
                 </div>
               )
             })}

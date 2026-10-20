@@ -20,14 +20,33 @@ test('reads installed plugin ids and marketplace names', () => {
     'installed_plugins.json': JSON.stringify({ plugins: { 'ponytail@ponytail': [{ scope: 'user' }], 'code-review@claude-plugins-official': [] } }),
     'known_marketplaces.json': JSON.stringify({ ponytail: {}, 'claude-plugins-official': {} }),
   })
-  assert.deepEqual(discoverPlugins(dir), {
+  const { plugins, marketplaces } = discoverPlugins(dir)
+  assert.deepEqual({ plugins, marketplaces }, {
     plugins: ['code-review@claude-plugins-official', 'ponytail@ponytail'],
     marketplaces: ['claude-plugins-official', 'ponytail'],
   })
 })
 
 test('missing or malformed files yield empty lists, not an error', () => {
-  assert.deepEqual(discoverPlugins(home()), { plugins: [], marketplaces: [] })
+  const none = path.join(home(), 'no-managed.json')
+  assert.deepEqual(discoverPlugins(home(), null, none), { plugins: [], marketplaces: [], mcpServers: [] })
   const dir = home({ 'installed_plugins.json': 'not json', 'known_marketplaces.json': '[]' })
-  assert.deepEqual(discoverPlugins(dir), { plugins: [], marketplaces: [] })
+  fs.writeFileSync(path.join(dir, '.claude.json'), 'not json')
+  assert.deepEqual(discoverPlugins(dir, null, none), { plugins: [], marketplaces: [], mcpServers: [] })
+})
+
+test('lists managed, user and local-scope MCP servers', () => {
+  const dir = home()
+  const project = path.join(dir, 'proj')
+  const managed = path.join(dir, 'managed-mcp.json')
+  fs.writeFileSync(managed, JSON.stringify({ mcpServers: { corp: {} } }))
+  fs.writeFileSync(path.join(dir, '.claude.json'), JSON.stringify({
+    mcpServers: { github: {} },
+    projects: { [project.replace(/\\/g, '/')]: { mcpServers: { db: {} } }, '/other': { mcpServers: { nope: {} } } },
+  }))
+  assert.deepEqual(discoverPlugins(dir, project, managed).mcpServers, [
+    { name: 'corp', scope: 'managed' },
+    { name: 'db', scope: 'local' },
+    { name: 'github', scope: 'user' },
+  ])
 })

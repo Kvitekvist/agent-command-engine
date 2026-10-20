@@ -25,8 +25,33 @@ function knownMarketplaces(home) {
   return Object.keys(marketplaces).sort()
 }
 
-function discoverPlugins(home = os.homedir()) {
-  return { plugins: installedPlugins(home), marketplaces: knownMarketplaces(home) }
+// MCP servers configured outside the project's .mcp.json, which the MCP tab
+// would otherwise never see: user scope and local scope (`claude mcp add`,
+// both in ~/.claude.json, local keyed by forward-slash project path) and the
+// IT-deployed managed-mcp.json. Plugin- and claude.ai-provided servers aren't
+// on disk in a stable place, so they're not listed.
+const MANAGED_MCP = process.platform === 'win32' ? 'C:\\Program Files\\ClaudeCode\\managed-mcp.json'
+  : process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode/managed-mcp.json'
+  : '/etc/claude-code/managed-mcp.json'
+
+function serverNames(config) {
+  const servers = config?.mcpServers
+  return servers && typeof servers === 'object' ? Object.keys(servers) : []
+}
+
+function mcpServers(home, projectPath, managedFile = MANAGED_MCP) {
+  const userConfig = readJson(path.join(home, '.claude.json'))
+  const key = projectPath && path.resolve(projectPath).replace(/\\/g, '/')
+  const rows = [
+    ...serverNames(readJson(managedFile)).map((name) => ({ name, scope: 'managed' })),
+    ...serverNames(userConfig).map((name) => ({ name, scope: 'user' })),
+    ...(key ? serverNames(userConfig?.projects?.[key]).map((name) => ({ name, scope: 'local' })) : []),
+  ]
+  return rows.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function discoverPlugins(home = os.homedir(), projectPath = null, managedFile) {
+  return { plugins: installedPlugins(home), marketplaces: knownMarketplaces(home), mcpServers: mcpServers(home, projectPath, managedFile) }
 }
 
 module.exports = { discoverPlugins }

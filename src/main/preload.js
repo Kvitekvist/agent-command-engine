@@ -92,7 +92,7 @@ contextBridge.exposeInMainWorld('ace', {
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
   discoverModels: () => ipcRenderer.invoke('models:discover'),
-  discoverPlugins: () => ipcRenderer.invoke('plugins:discover'),
+  discoverPlugins: (projectPath) => ipcRenderer.invoke('plugins:discover', projectPath),
 
   // File explorer / editor (TICKET-0021)
   fs: {

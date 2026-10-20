@@ -1,65 +1,86 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { parseBlocks, INLINE, classifyInline } from '../utils/markdown.mjs'
 
-// Minimal markdown built as React elements (no innerHTML): fenced code,
-// headings, bullet/numbered lists, `code`, **bold**, [text](http-url).
-// ponytail: no tables, nesting or italics; add marked + DOMPurify if needed.
-const INLINE = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g
-
+// Markdown built as React elements (no innerHTML); parsing lives in utils/markdown.mjs.
 function Inline({ text }) {
   return text.split(INLINE).map((p, i) => {
-    if (p.length > 2 && p.startsWith('`') && p.endsWith('`')) return <code key={i} className="px-1 rounded bg-border font-mono text-[0.85em]">{p.slice(1, -1)}</code>
-    if (p.length > 4 && p.startsWith('**') && p.endsWith('**')) return <strong key={i}>{p.slice(2, -2)}</strong>
-    const link = p.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/)
-    if (link) return <a key={i} href={link[2]} className="text-accent underline" onClick={e => { e.preventDefault(); window.ace.shell.openUrl(link[2]) }}>{link[1]}</a>
-    return p
+    if (i % 2 === 0) return p
+    const s = classifyInline(p)
+    if (s.t === 'code') return <code key={i} className="px-1 rounded bg-border font-mono text-[0.85em] break-words">{s.text}</code>
+    if (s.t === 'link') return <a key={i} href={s.href} title={s.href} className="text-accent underline break-all" onClick={e => { e.preventDefault(); window.ace.shell.openUrl(s.href) }}>{s.text}</a>
+    if (s.t === 'strong') return <strong key={i}><Inline text={s.text} /></strong>
+    if (s.t === 'em') return <em key={i}><Inline text={s.text} /></em>
+    if (s.t === 'del') return <del key={i} className="text-muted"><Inline text={s.text} /></del>
+    return s.text
+  })
+}
+
+function CodeBlock({ lang, text }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200) }).catch(() => {})
+  return (
+    <div className="my-2 rounded border border-border bg-border/40 overflow-hidden">
+      <div className="flex items-center justify-between px-2 py-0.5 text-[10px] text-muted border-b border-border">
+        <span className="font-mono">{lang || 'text'}</span>
+        <button onClick={copy} className="hover:text-white transition-colors">{copied ? 'Copied' : 'Copy'}</button>
+      </div>
+      <pre className="p-2 overflow-x-auto font-mono text-xs leading-relaxed">{text}</pre>
+    </div>
+  )
+}
+
+const H_SIZE = ['text-base', 'text-[15px]', 'text-sm', 'text-sm', 'text-xs', 'text-xs']
+
+function Blocks({ blocks, tight }) {
+  return blocks.map((b, i) => {
+    if (b.t === 'code') return <CodeBlock key={i} lang={b.lang} text={b.text} />
+    if (b.t === 'h') return <div key={i} className={`font-semibold mt-3 mb-1 first:mt-0 ${H_SIZE[b.level - 1]} ${b.level <= 2 ? 'pb-0.5 border-b border-border' : ''}`}><Inline text={b.text} /></div>
+    if (b.t === 'hr') return <hr key={i} className="my-3 border-border" />
+    if (b.t === 'quote') return <blockquote key={i} className="my-2 pl-3 border-l-2 border-accent/50 text-muted"><Blocks blocks={b.blocks} /></blockquote>
+    if (b.t === 'table') return (
+      <div key={i} className="my-2 overflow-x-auto">
+        <table className="text-xs border-collapse">
+          <thead><tr>{b.head.map((c, k) => <th key={k} style={{ textAlign: b.align[k] || 'left' }} className="px-2 py-1 border border-border bg-border/50 font-semibold"><Inline text={c} /></th>)}</tr></thead>
+          <tbody>{b.rows.map((r, j) => <tr key={j} className="even:bg-border/20">{r.map((c, k) => <td key={k} style={{ textAlign: b.align[k] || 'left' }} className="px-2 py-1 border border-border align-top"><Inline text={c} /></td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    )
+    if (b.t === 'list') {
+      const L = b.ordered ? 'ol' : 'ul'
+      return (
+        <L key={i} start={b.ordered ? b.start : undefined} className={`${tight ? '' : 'my-1'} pl-5 ${b.ordered ? 'list-decimal' : 'list-disc'}`}>
+          {b.items.map((it, j) => (
+            <li key={j} className={it.check == null ? '' : 'list-none -ml-5'}>
+              {it.check != null && <input type="checkbox" checked={it.check} readOnly className="mr-1.5 align-middle accent-current" />}
+              {it.check != null ? <span className="inline-block align-top"><Blocks blocks={it.blocks} tight /></span> : <Blocks blocks={it.blocks} tight />}
+            </li>
+          ))}
+        </L>
+      )
+    }
+    return <div key={i} className={`whitespace-pre-wrap break-words ${tight ? '' : 'my-1'}`}><Inline text={b.text} /></div>
   })
 }
 
 function Markdown({ text }) {
-  const blocks = []
-  let para = [], list = null
-  const flush = () => {
-    if (para.length) blocks.push({ t: 'p', text: para.join('\n') })
-    if (list) blocks.push(list)
-    para = []; list = null
-  }
-  const lines = text.split('\n')
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    let m
-    if (/^```/.test(line)) {
-      flush()
-      const code = []
-      while (++i < lines.length && !/^```/.test(lines[i])) code.push(lines[i])
-      blocks.push({ t: 'code', text: code.join('\n') })
-    } else if ((m = line.match(/^(#{1,4})\s+(.*)/))) { flush(); blocks.push({ t: 'h', text: m[2] }) }
-    else if ((m = line.match(/^\s*([-*]|\d+\.)\s+(.*)/))) {
-      const ordered = m[1] !== '-' && m[1] !== '*'
-      if (list && list.ordered !== ordered) flush()
-      if (para.length) { blocks.push({ t: 'p', text: para.join('\n') }); para = [] }
-      list = list || { t: 'list', ordered, items: [] }
-      list.items.push(m[2])
-    } else if (!line.trim()) flush()
-    else { if (list) flush(); para.push(line) }
-  }
-  flush()
-  return blocks.map((b, i) => {
-    if (b.t === 'code') return <pre key={i} className="my-2 p-2 rounded bg-border/60 overflow-x-auto font-mono text-xs">{b.text}</pre>
-    if (b.t === 'h') return <div key={i} className="font-semibold mt-2"><Inline text={b.text} /></div>
-    if (b.t === 'list') {
-      const L = b.ordered ? 'ol' : 'ul'
-      return <L key={i} className={`my-1 pl-5 ${b.ordered ? 'list-decimal' : 'list-disc'}`}>{b.items.map((it, j) => <li key={j}><Inline text={it} /></li>)}</L>
-    }
-    return <div key={i} className="whitespace-pre-wrap my-1"><Inline text={b.text} /></div>
-  })
+  return <Blocks blocks={parseBlocks(text)} />
+}
+
+// The input is JSON cut at 300 chars, so pull the telling field by regex
+// rather than JSON.parse.
+const TOOL_ARG = /"(?:command|file_path|notebook_path|path|pattern|url|query|description|prompt|skill)"\s*:\s*"((?:[^"\\]|\\.)*)/
+const toolSummary = input => {
+  const m = String(input || '').match(TOOL_ARG)
+  if (!m) return input
+  try { return JSON.parse(`"${m[1]}"`) } catch { return m[1] }
 }
 
 function Message({ m }) {
-  if (m.kind === 'tool') return <div className="text-xs text-muted font-mono truncate">⚙ {m.name} {m.input}</div>
+  if (m.kind === 'tool') return <div className="text-xs text-muted font-mono truncate" title={m.input}>⚙ <span className="text-white/80">{m.name}</span> {toolSummary(m.input)}</div>
   if (m.kind === 'result') return (
     <details className="text-xs text-muted">
       <summary className={`cursor-pointer ${m.error ? 'text-red-400' : ''}`}>{m.error ? 'Tool error' : 'Tool result'}</summary>
-      <pre className="whitespace-pre-wrap font-mono mt-1">{m.text}</pre>
+      <pre className="whitespace-pre-wrap break-words font-mono mt-1 max-h-64 overflow-y-auto">{m.text}</pre>
     </details>
   )
   return m.role === 'user'
