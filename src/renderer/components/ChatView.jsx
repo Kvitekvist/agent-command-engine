@@ -77,6 +77,7 @@ const toolSummary = input => {
 
 function Message({ m }) {
   if (m.kind === 'tool') return <div className="text-xs text-muted font-mono truncate" title={m.input}>⚙ <span className="text-white/80">{m.name}</span> {toolSummary(m.input)}</div>
+  if (m.kind === 'image') return <img src={m.src} alt="pasted screenshot" className={`max-w-[85%] max-h-80 rounded border border-border object-contain ${m.role === 'user' ? 'self-end' : ''}`} />
   if (m.kind === 'result') return (
     <details className="text-xs text-muted">
       <summary className={`cursor-pointer ${m.error ? 'text-red-400' : ''}`}>{m.error ? 'Tool error' : 'Tool result'}</summary>

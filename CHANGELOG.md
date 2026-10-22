@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.48] - 2026-10-22
+
 ### Added
 
+- Chat view renders images: screenshots pasted into the terminal show
+  inline, whether the transcript carries them as attached image blocks or
+  only as a project file path in the message text (TICKET-0171).
 - Project Tasks panel alongside Notes: a per-project checklist, plus a
   trigger that fires at a scheduled delay (optionally repeating) and spawns
   a new autonomous agent to work through whatever's still open — no app

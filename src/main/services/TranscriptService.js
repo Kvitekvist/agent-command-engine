@@ -9,7 +9,28 @@ const os = require('node:os')
 
 const text = c => typeof c === 'string' ? c : Array.isArray(c) ? c.map(b => b?.text || '').join('') : ''
 
-function parseTranscript(raw) {
+// Screenshots pasted into the terminal arrive as a file path in the text (and
+// as a base64 image block once the CLI attaches them). Show both as images.
+const IMG_PATH = /(?:[A-Za-z]:)?[^\s"'`<>|*?()[\]]+\.(?:png|jpe?g|gif|webp)(?![\w])/gi
+const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' }
+const MAX_IMG = 8 * 1024 * 1024
+
+function pathImages(texts, cwd) {
+  const root = path.resolve(cwd || '')
+  const seen = new Set()
+  for (const t of texts) for (const p of t.match(IMG_PATH) || []) {
+    const file = path.resolve(root, p)
+    if (seen.size >= 4 || !cwd || path.relative(root, file).startsWith('..') || path.isAbsolute(path.relative(root, file))) continue
+    try {
+      if (fs.statSync(file).size > MAX_IMG) continue
+      seen.add(`data:${MIME[path.extname(file).slice(1).toLowerCase()]};base64,${fs.readFileSync(file).toString('base64')}`)
+    } catch { /* not a file we can read */ }
+  }
+  return [...seen]
+}
+
+// ponytail: images are re-sent on every 1s poll; cache by path/size if big pastes make the chat view lag.
+function parseTranscript(raw, cwd) {
   const out = []
   for (const line of raw.split('\n')) {
     let m
@@ -17,11 +38,14 @@ function parseTranscript(raw) {
     const content = m.message?.content
     if (m.isSidechain || (m.type !== 'user' && m.type !== 'assistant') || content == null) continue
     if (typeof content === 'string') { out.push({ role: m.type, kind: 'text', text: content }); continue }
+    const texts = [], b64 = []
     for (const b of content) {
-      if (b.type === 'text' && b.text) out.push({ role: m.type, kind: 'text', text: b.text })
+      if (b.type === 'text' && b.text) { out.push({ role: m.type, kind: 'text', text: b.text }); texts.push(b.text) }
+      else if (b.type === 'image' && b.source?.type === 'base64') b64.push(`data:${b.source.media_type};base64,${b.source.data}`)
       else if (b.type === 'tool_use') out.push({ role: 'assistant', kind: 'tool', name: b.name, input: JSON.stringify(b.input ?? {}).slice(0, 300) })
       else if (b.type === 'tool_result') out.push({ role: 'user', kind: 'result', text: text(b.content).slice(0, 600), error: !!b.is_error })
     }
+    for (const src of b64.length ? b64 : pathImages(texts, cwd)) out.push({ role: m.type, kind: 'image', src })
   }
   return out
 }
@@ -29,7 +53,7 @@ function parseTranscript(raw) {
 function readTranscript(cwd, sessionId, home = os.homedir()) {
   if (!/^[a-zA-Z0-9-]{1,128}$/.test(sessionId || '')) return []
   const file = path.join(home, '.claude', 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'), `${sessionId}.jsonl`)
-  try { return parseTranscript(fs.readFileSync(file, 'utf8')) } catch { return [] }
+  try { return parseTranscript(fs.readFileSync(file, 'utf8'), cwd) } catch { return [] }
 }
 
 // Codex writes ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl, but ACE never
