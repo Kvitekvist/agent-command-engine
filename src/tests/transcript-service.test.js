@@ -20,6 +20,7 @@ test('parseTranscript shows base64 image blocks and project image paths', () => 
   const line = content => JSON.stringify({ type: 'user', message: { content } })
   const kinds = raw => parseTranscript(raw, dir).map(m => m.kind)
   assert.deepStrictEqual(kinds(line([{ type: 'text', text: 'see a.png' }])), ['text', 'image'])
+  assert.deepStrictEqual(kinds(line('see a.png')), ['text', 'image']) // terminal prompts are plain strings
   assert.deepStrictEqual(kinds(line([{ type: 'text', text: 'see ../../etc/a.png' }])), ['text'])
   assert.deepStrictEqual(kinds(line([{ type: 'text', text: 'a.png' }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'eA==' } }])), ['text', 'image'])
 })

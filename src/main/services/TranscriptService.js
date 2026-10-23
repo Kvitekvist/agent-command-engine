@@ -37,7 +37,11 @@ function parseTranscript(raw, cwd) {
     try { m = JSON.parse(line) } catch { continue }
     const content = m.message?.content
     if (m.isSidechain || (m.type !== 'user' && m.type !== 'assistant') || content == null) continue
-    if (typeof content === 'string') { out.push({ role: m.type, kind: 'text', text: content }); continue }
+    if (typeof content === 'string') {
+      out.push({ role: m.type, kind: 'text', text: content })
+      for (const src of pathImages([content], cwd)) out.push({ role: m.type, kind: 'image', src })
+      continue
+    }
     const texts = [], b64 = []
     for (const b of content) {
       if (b.type === 'text' && b.text) { out.push({ role: m.type, kind: 'text', text: b.text }); texts.push(b.text) }

@@ -8,6 +8,23 @@ import {
   getAllModelIds,
   filterGroupsByEnabled,
 } from '../utils/modelCatalog'
+import claudeIcon from '../assets/icons/claude.svg?raw'
+import codexIcon from '../assets/icons/codex.svg?raw'
+
+// Same brand colors as UsageBar.jsx's PROVIDERS list.
+const PROVIDER_ICON = { claude: claudeIcon, codex: codexIcon }
+const PROVIDER_COLOR = { claude: '#d97757', codex: '#3b82f6' }
+const PROVIDER_NAME  = { claude: 'Claude', codex: 'Codex' }
+
+function ProviderIcon({ provider }) {
+  return (
+    <span
+      className="inline-flex shrink-0 w-3.5 h-3.5 [&_svg]:w-full [&_svg]:h-full"
+      style={{ color: PROVIDER_COLOR[provider] }}
+      dangerouslySetInnerHTML={{ __html: PROVIDER_ICON[provider] }}
+    />
+  )
+}
 
 const TABS = [
   { id: 'general', label: 'General' },
@@ -155,9 +172,9 @@ export default function SettingsView() {
                       setProvider(p)
                       if (p !== 'auto') setDefaultModel(DEFAULT_MODEL_BY_PROVIDER[p])
                     }}
-                    className={`btn text-xs ${provider === p ? 'bg-accent text-white' : 'btn-ghost'}`}
+                    className={`btn text-xs flex items-center gap-1.5 ${provider === p ? 'bg-accent text-white' : 'btn-ghost'}`}
                   >
-                    {p === 'auto' ? '⚖ Auto' : p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
+                    {p === 'auto' ? '⚖ Auto' : <><ProviderIcon provider={p} /> {PROVIDER_NAME[p]}</>}
                   </button>
                 ))}
               </div>
@@ -223,8 +240,8 @@ export default function SettingsView() {
             const enabled = prov === 'claude' ? enabledClaude : enabledCodex
             return (
               <div key={prov}>
-                <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
-                  {prov === 'claude' ? '🟣 Claude' : '🟢 Codex'}
+                <h3 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                  <ProviderIcon provider={prov} /> {PROVIDER_NAME[prov]}
                 </h3>
                 <div className="space-y-3">
                   {getModelGroups(prov, discovered).map(group => (

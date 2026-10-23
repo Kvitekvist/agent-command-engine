@@ -14,6 +14,23 @@ import {
   filterGroupsByEnabled,
   newModels,
 } from '../utils/modelCatalog'
+import claudeIcon from '../assets/icons/claude.svg?raw'
+import codexIcon from '../assets/icons/codex.svg?raw'
+
+// Same brand colors as UsageBar.jsx's PROVIDERS list.
+const PROVIDER_ICON = { claude: claudeIcon, codex: codexIcon }
+const PROVIDER_COLOR = { claude: '#d97757', codex: '#3b82f6' }
+const PROVIDER_NAME  = { claude: 'Claude', codex: 'Codex' }
+
+function ProviderIcon({ provider, className = 'w-3.5 h-3.5' }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 [&_svg]:w-full [&_svg]:h-full ${className}`}
+      style={{ color: PROVIDER_COLOR[provider] }}
+      dangerouslySetInnerHTML={{ __html: PROVIDER_ICON[provider] }}
+    />
+  )
+}
 
 // TICKET-0039: the Safe/Guarded/Auto selector was removed from the launch
 // bar now that auto-answer permission prompts (see AgentTerminal.jsx) works
@@ -262,7 +279,7 @@ export default function AgentView() {
               <p className="text-sm">Added to the model dropdown:</p>
               {['claude', 'codex'].filter(p => refreshResult[p].length).map(p => (
                 <div key={p}>
-                  <div className="text-xs text-muted mb-1">{p === 'claude' ? '🟣 Claude' : '🟢 Codex'}</div>
+                  <div className="text-xs text-muted mb-1 flex items-center gap-1.5"><ProviderIcon provider={p} /> {PROVIDER_NAME[p]}</div>
                   <ul className="text-sm space-y-0.5">
                     {refreshResult[p].map(m => <li key={m.id}>{m.label} <span className="text-xs text-muted">{m.id}</span></li>)}
                   </ul>
@@ -286,8 +303,8 @@ export default function AgentView() {
                 setProvider(p)
                 setModel(DEFAULT_MODEL_BY_PROVIDER[p])
               }}
-                className={'px-3 py-1.5 transition-colors ' + (provider === p ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
-                {p === 'claude' ? '🟣 Claude' : '🟢 Codex'}
+                className={'px-3 py-1.5 transition-colors flex items-center gap-1.5 ' + (provider === p ? 'bg-accent text-white' : 'text-muted hover:bg-border')}>
+                <ProviderIcon provider={p} /> {PROVIDER_NAME[p]}
               </button>
             ))}
           </div>
@@ -435,7 +452,11 @@ function AgentPane({ agent, onClose, focused, onFocus }) {
   }
 
   return (
-    <div className="card flex flex-col min-w-0" style={{ height: focused ? 'calc(100vh - 13rem)' : '32rem', minHeight: '20rem' }}>
+    <div className="card flex flex-col min-w-0" style={{
+      height: focused ? 'calc(100vh - 13rem)' : '32rem',
+      minHeight: '20rem',
+      backgroundColor: `${PROVIDER_COLOR[agent.provider] || PROVIDER_COLOR.claude}0d`,
+    }}>
       <div className="flex items-center justify-between mb-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0 overflow-hidden">
           {statusBadge}

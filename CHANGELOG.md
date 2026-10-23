@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.1.49] - 2026-10-23
+
+### Fixed
+
+- Chat view now shows screenshots pasted into the terminal. Terminal prompts
+  are stored as plain strings, which skipped the project image-path lookup
+  (TICKET-0171).
+
+### Changed
+
+- Claude and Codex show their brand icons instead of emoji in the agent launch
+  bar, agent panes and Settings.
+
 ## [0.1.48] - 2026-10-22
 
 ### Added
