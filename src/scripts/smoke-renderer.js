@@ -4,7 +4,7 @@ const os = require('node:os')
 const path = require('node:path')
 const assert = require('node:assert/strict')
 app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'ace-renderer-smoke-')))
-const timeout = setTimeout(() => { console.error('Renderer smoke timed out'); app.exit(1) }, 30000)
+const timeout = setTimeout(() => { console.error('Renderer smoke timed out'); app.exit(2) }, 30000)
 app.whenReady().then(async () => {
   const win = new BrowserWindow({ show: false, width: 1400, height: 900, webPreferences: {
     preload: path.join(__dirname, 'smoke-renderer-preload.js'), sandbox: true, contextIsolation: true, nodeIntegration: false,
@@ -187,6 +187,6 @@ app.whenReady().then(async () => {
   } catch (error) {
     console.error(error.stack)
     clearTimeout(timeout)
-    app.exit(1)
+    app.exit(2)
   }
 })

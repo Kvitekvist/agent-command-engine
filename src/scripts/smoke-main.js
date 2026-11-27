@@ -54,7 +54,7 @@ async function until(check) {
   for (let i = 0; i < 200; i++) { if (await check()) return; await pause() }
   throw new Error('Main smoke state timed out: ' + check.toString())
 }
-const timeout = setTimeout(() => { console.error('Main smoke timed out'); TerminalService.shutdown().finally(() => app.exit(1)) }, 45000)
+const timeout = setTimeout(() => { console.error('Main smoke timed out'); TerminalService.shutdown().finally(() => app.exit(2)) }, 45000)
 app.whenReady().then(async () => {
   let failed = false
   try {
@@ -99,5 +99,5 @@ app.whenReady().then(async () => {
     assert.deepEqual(errors, [])
     console.log('Real ACE main: navigation/window IPC, native-selection authorization, PTY launch/reload/reconnect/stop passed')
   } catch (error) { failed = true; console.error(error.stack, errors) }
-  finally { clearTimeout(timeout); await TerminalService.shutdown(); app.exit(failed ? 1 : 0) }
+  finally { clearTimeout(timeout); await TerminalService.shutdown(); app.exit(failed ? 2 : 0) }
 })
