@@ -77,4 +77,4 @@ try {
     $result | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $RunDirectory 'result.json') -Encoding UTF8
     Stop-Transcript | Out-Null
 }
-if (-not $result.passed) { exit 1 }
+if (-not $result.passed) { [Console]::Error.WriteLine($result.error); exit 2 }

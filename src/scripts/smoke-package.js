@@ -17,7 +17,7 @@
 // It reuses TokscaleService's own nativePackageFor mapping so the test looks
 // for exactly the package the app resolves at runtime; a drift there fails here.
 //
-// Exit codes: 0 pass / skipped (unshipped platform); 1 failure.
+// Exit codes: 0 pass / skipped (unshipped platform); 2 failure.
 
 const { spawnSync } = require('child_process')
 const fs = require('fs')
@@ -33,7 +33,7 @@ const RELEASES_DIR = process.env.ACE_RELEASES_DIR
 
 function fail(message) {
   console.error(`[smoke-package] FAIL: ${message}`)
-  process.exit(1)
+  process.exit(2)
 }
 
 // Walk the releases tree for every packaged app's unpacked sibling. Named
@@ -155,4 +155,4 @@ function main() {
   console.log(`[smoke-package] PASS: every bundle carries its tokscale binary; ${spawned} spawned it from app.asar.unpacked.`)
 }
 
-main()
+try { main() } catch (error) { fail(error.stack) }

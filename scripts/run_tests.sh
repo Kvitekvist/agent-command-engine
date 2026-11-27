@@ -5,6 +5,7 @@
 # service logic whose third-party imports are absent at load time or stubbed
 # (electron), so it runs WITHOUT `npm install` and without launching Electron.
 set -e
+trap 'exit 2' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/../src"
@@ -12,16 +13,10 @@ cd "$SCRIPT_DIR/../src"
 echo "Running Agent Command Engine test suite..."
 echo ""
 
-# node --test discovers and runs every *.test.js under tests/. A non-zero exit
-# from a failing test propagates out (via set -e) as this script's exit code.
-node --test tests/*.test.js
-STATUS=$?
-
-echo ""
-if [ "$STATUS" -eq 0 ]; then
-  echo "✅ All tests passed."
-else
-  echo "❌ Some tests failed."
+# Failures exit 2 with the output on stderr: Claude Code hooks only feed an
+# error back to Claude in that case.
+if ! node --test tests/*.test.js >&2; then
+  echo "❌ Some tests failed." >&2
+  exit 2
 fi
-
-exit "$STATUS"
+echo "✅ All tests passed."

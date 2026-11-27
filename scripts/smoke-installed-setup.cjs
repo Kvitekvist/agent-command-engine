@@ -117,5 +117,5 @@ async function main(configFile) {
   console.log('Installed ACE setup passed: Node, npm, Git, Claude and Codex ready without restart')
 }
 
-if (require.main === module) main(process.argv[2]).catch(error => { console.error(error); process.exitCode = 1 })
+if (require.main === module) main(process.argv[2]).catch(error => { console.error(error); process.exitCode = 2 })
 module.exports = { waitForSetup }

@@ -20,6 +20,7 @@ param(
     [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\releases\install-tests')
 )
 $ErrorActionPreference = 'Stop'
+trap { [Console]::Error.WriteLine($_); exit 2 }
 $Package = (Resolve-Path -LiteralPath $Package).Path
 $Certificate = (Resolve-Path -LiteralPath $Certificate).Path
 if ([IO.Path]::GetExtension($Package) -notin @('.appx', '.msix')) { throw 'Supply a sealed .appx or .msix package' }

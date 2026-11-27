@@ -14,7 +14,7 @@ function finish(error) {
   if (finished) return
   finished = true
   clearTimeout(timer)
-  process.exitCode = error ? 1 : 0
+  process.exitCode = error ? 2 : 0
   if (error) console.error(error.message)
   else console.log('Real PTY startup and I/O passed')
   if (host.connected) host.send({ channel: 'shutdown' })
